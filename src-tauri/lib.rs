@@ -22,6 +22,7 @@ fn launch_external_tool(tool_path: String, asset_path: Option<String>) -> Result
 
 fn resolve_tool_path(tool_path: &str) -> String {
     let candidate = Path::new(tool_path);
+
     if candidate.is_file() {
         return tool_path.to_string();
     }
