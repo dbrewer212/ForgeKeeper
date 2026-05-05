@@ -3,6 +3,7 @@ import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
+import { ExternalToolsPanel } from "./ExternalToolsPanel";
 
 export function SettingsView({ state }: { state: ForgekeeperState }) {
   return (
@@ -56,6 +57,8 @@ export function SettingsView({ state }: { state: ForgekeeperState }) {
           </div>
         </div>
       </Card>
+
+      <ExternalToolsPanel state={state} />
 
       <Card title="Backup Controls">
         <div className="flex flex-wrap gap-2">

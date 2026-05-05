@@ -12,68 +12,54 @@ export type PrototypeStatus =
   | "In Progress"
   | "Refining"
   | "Modeled"
-  | "On Hold"
-  | "Approved";
+  | "On Hold";
 
 export type PrototypePriority = "High" | "Medium" | "Low";
-export type PlanningTier = "Hero" | "Utility";
-export type MaterialFamily = "Stone" | "Wood" | "Heat" | "Light" | "Forge" | "Organic";
 
-export type PrototypeRecord = {
+export type PlannedPrototype = {
   id: string;
   productName: string;
   family: string;
   collection: string;
-  tier: PlanningTier;
+  tier: "Hero" | "Utility";
   realm?: string;
-  sharedChassis: boolean;
-  realmSupport: boolean;
   status: PrototypeStatus;
   priority: PrototypePriority;
   printerFit: string;
-  baseModule?: string;
-  pillarModule?: string;
-  topModule?: string;
-  addOns?: string;
-  coinIntegration?: string;
   nextStep: string;
   notes: string;
 };
 
-export type PlannedFilamentRecord = {
+export type PlannedFilament = {
   id: string;
   name: string;
   brand: string;
-  materialFamily: MaterialFamily;
-  realmUses: string[];
+  materialFamily: "Stone" | "Wood" | "Heat" | "Light" | "Forge" | "Other";
+  realms: string[];
+  batchGroup: string;
   status: PlanningStatus;
   priority: PrototypePriority;
-  batchGroup: string;
   finishDirection: string;
   notes: string;
 };
 
-export type RealmMaterialProfile = {
+export type RealmMaterialReference = {
   realm: string;
-  shorthand: string;
-  mood: string;
   baseCandidates: string[];
-  materialFeel: string;
+  whyTheyFit: string;
   finishDirection: string;
   batchGroup: string;
-  bestFits: string;
 };
 
 export type ProductPlanningRecord = {
   id: string;
-  status: PlanningStatus;
   productFamily: string;
   baseProduct: string;
   collection: string;
-  tier: PlanningTier;
-  sharedChassis: boolean;
+  tier: "Hero" | "Utility";
+  sharedChassis: "Yes" | "No" | "Partial";
   coreFunction: string;
-  realmVariantSupport: boolean;
+  realmVariantSupport: "Yes" | "No" | "Optional";
   coreParts: string;
   variantParts: string;
   baseAddOns: string;

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { defaultSettings, seedCollections, seedConcepts, seedFilament, seedOrders, seedPrinters, seedProducts, seedReleases, seedStls, seedVariants } from "../data/seed";
+import { seedPlannedFilament, seedProductPlanning, seedPrototypes, seedRealmMaterials } from "../data/planningSeed";
 import { directCost, getOrderCostBreakdown } from "../lib/cost";
 import { calculateProductionMetrics, orderMaterialGrams } from "../lib/production";
 import { downloadCsv } from "../lib/csv";
 import { uid } from "../lib/ids";
 import { clearStoredData, downloadJson, loadStoredData, saveStoredData } from "../lib/storage";
+import { defaultExternalTools, slicerForPrinter } from "../lib/externalTools";
 import type {
   AppData,
   AppSettings,
@@ -23,6 +25,7 @@ import type {
   STLRecord,
   ViewKey,
 } from "../types/domain";
+import type { PlannedFilament, PlannedPrototype, ProductPlanningRecord, RealmMaterialReference } from "../types/planning";
 
 const seedData: AppData = {
   products: seedProducts,
@@ -35,7 +38,11 @@ const seedData: AppData = {
   filament: seedFilament,
   printers: seedPrinters,
   maintenance: [],
-  settings: defaultSettings,
+  settings: { ...defaultExternalTools, ...defaultSettings },
+  prototypes: seedPrototypes,
+  plannedFilament: seedPlannedFilament,
+  productPlanning: seedProductPlanning,
+  realmMaterials: seedRealmMaterials,
 };
 
 function hydrateData(): AppData {
@@ -76,7 +83,11 @@ function hydrateData(): AppData {
       watts: printer.watts ?? defaultSettings.machineWatts,
     })),
     maintenance: stored.maintenance ?? [],
-    settings: { ...defaultSettings, ...(stored.settings ?? {}) },
+    settings: { ...defaultExternalTools, ...defaultSettings, ...(stored.settings ?? {}) },
+    prototypes: stored.prototypes ?? seedData.prototypes,
+    plannedFilament: stored.plannedFilament ?? seedData.plannedFilament,
+    productPlanning: stored.productPlanning ?? seedData.productPlanning,
+    realmMaterials: stored.realmMaterials ?? seedData.realmMaterials,
   };
 }
 
@@ -110,6 +121,10 @@ export function useForgekeeperState() {
   const [printers, setPrinters] = useState<PrinterRecord[]>(initial.printers);
   const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>(initial.maintenance);
   const [settings, setSettings] = useState<AppSettings>(initial.settings);
+  const [prototypes, setPrototypes] = useState<PlannedPrototype[]>(initial.prototypes);
+  const [plannedFilament, setPlannedFilament] = useState<PlannedFilament[]>(initial.plannedFilament);
+  const [productPlanning, setProductPlanning] = useState<ProductPlanningRecord[]>(initial.productPlanning);
+  const [realmMaterials, setRealmMaterials] = useState<RealmMaterialReference[]>(initial.realmMaterials);
 
   const [selectedProductId, setSelectedProductId] = useState(initial.products[0]?.id ?? "");
   const [productTab, setProductTab] = useState<ProductTab>("overview");
@@ -124,11 +139,27 @@ export function useForgekeeperState() {
   const [searchTerm, setSearchTerm] = useState("");
   const [quickAction, setQuickAction] = useState<QuickActionKey | null>(null);
 
-  const appData: AppData = { products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings };
+  const appData: AppData = {
+    products,
+    stls,
+    concepts,
+    variants,
+    collections,
+    releases,
+    orders,
+    filament,
+    printers,
+    maintenance,
+    settings,
+    prototypes,
+    plannedFilament,
+    productPlanning,
+    realmMaterials,
+  };
 
   useEffect(() => {
     saveStoredData(appData);
-  }, [products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings]);
+  }, [products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
 
   useEffect(() => {
     setPrinters((prev) => prev.map((printer) => printerStatusFromOrders(printer, orders, products)));
@@ -582,6 +613,43 @@ export function useForgekeeperState() {
     setMaintenance((prev) => prev.filter((entry) => entry.id !== id));
   }
 
+  function updatePrototype(id: string, patch: Partial<PlannedPrototype>) {
+    setPrototypes((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
+  function updatePlannedFilament(id: string, patch: Partial<PlannedFilament>) {
+    setPlannedFilament((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
+  function removePlannedFilament(id: string) {
+    setPlannedFilament((prev) => prev.filter((item) => item.id !== id));
+  }
+
+  function movePlannedFilamentToInventory(id: string) {
+    const planned = plannedFilament.find((item) => item.id === id);
+    if (!planned) return;
+    setFilament((prev) => [
+      {
+        id: uid("FIL"),
+        brand: planned.brand || "Amolen",
+        material: "PLA",
+        colorName: planned.name,
+        colorFamily: planned.materialFamily,
+        gramsAvailable: 1000,
+        reorderPointGrams: 250,
+        spoolPrice: 22,
+        spoolWeightGrams: 1000,
+        notes: `${planned.batchGroup}. ${planned.finishDirection} ${planned.notes}`,
+      },
+      ...prev,
+    ]);
+    setPlannedFilament((prev) => prev.map((item) => (item.id === id ? { ...item, status: "Active" } : item)));
+  }
+
+  function getDefaultSlicerForPrinter(printerName?: string) {
+    return slicerForPrinter(printerName) || settings.defaultSlicer || "orca";
+  }
+
   function updateSettings(patch: Partial<AppSettings>) {
     setSettings((prev) => ({ ...prev, ...patch }));
   }
@@ -630,7 +698,11 @@ export function useForgekeeperState() {
         setFilament(parsed.filament ?? []);
         setPrinters(parsed.printers ?? []);
         setMaintenance(parsed.maintenance ?? []);
-        setSettings({ ...defaultSettings, ...(parsed.settings ?? {}) });
+        setSettings({ ...defaultExternalTools, ...defaultSettings, ...(parsed.settings ?? {}) });
+        setPrototypes(parsed.prototypes ?? seedPrototypes);
+        setPlannedFilament(parsed.plannedFilament ?? seedPlannedFilament);
+        setProductPlanning(parsed.productPlanning ?? seedProductPlanning);
+        setRealmMaterials(parsed.realmMaterials ?? seedRealmMaterials);
         setSelectedProductId(parsed.products?.[0]?.id ?? "");
         window.alert("Forgekeeper backup restored.");
       } catch (error) {
@@ -650,6 +722,7 @@ export function useForgekeeperState() {
   return {
     view, setView,
     products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings,
+    prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
     selectedProductId, setSelectedProductId, productTab, setProductTab,
     newProductName, setNewProductName, newStlName, setNewStlName, newConceptTitle, setNewConceptTitle,
     newCollectionName, setNewCollectionName, newReleaseName, setNewReleaseName, newOrderCustomer, setNewOrderCustomer,
@@ -666,7 +739,7 @@ export function useForgekeeperState() {
     addFilament, updateFilament, adjustFilament, removeFilament,
     addPrinter, updatePrinter, removePrinter,
     addMaintenance, updateMaintenance, removeMaintenance,
-    updateSettings,
+    updateSettings, updatePrototype, updatePlannedFilament, removePlannedFilament, movePlannedFilamentToInventory, getDefaultSlicerForPrinter,
     exportProductsCsv, exportStlsCsv, exportConceptsCsv, exportVariantsCsv, exportCollectionsCsv, exportReleasesCsv, exportOrdersCsv,
     exportFilamentCsv, exportPrintersCsv, exportMaintenanceCsv, exportBackupJson, importBackupFile, resetWorkspace,
   };

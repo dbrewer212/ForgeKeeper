@@ -1,3 +1,5 @@
+import type { PlannedFilament, PlannedPrototype, ProductPlanningRecord, RealmMaterialReference } from "./planning";
+
 export type ProductTier = "Hero" | "Utility";
 export type ProductLine = "ForgeTech" | "Foundry" | "Relics of the Nine Realms" | "Runehallow Relics";
 export type ProductStatus = "Concept" | "Prototype" | "Active" | "Production" | "Archived";
@@ -7,7 +9,7 @@ export type ReleaseStatus = "Planning" | "Scheduled" | "Live";
 export type FilamentMaterial = "PLA" | "PLA+" | "PETG" | "ABS" | "TPU";
 export type PrinterStatus = "Available" | "Printing" | "Maintenance" | "Offline";
 export type ProductTab = "overview" | "stls" | "concepts" | "variants" | "orders";
-export type ViewKey = "dashboard" | "catalog" | "collections" | "releases" | "orders" | "filament" | "printers" | "reports" | "settings";
+export type ViewKey = "dashboard" | "catalog" | "collections" | "releases" | "orders" | "filament" | "printers" | "planning" | "reports" | "settings";
 export type QuickActionKey = "newProduct" | "newOrder" | "newFilament" | "newPrinter";
 
 export type RealmVariant =
@@ -164,6 +166,12 @@ export type AppSettings = {
   targetMarginPercent: number;
   assetRootPath: string;
   productionHoursPerDay: number;
+  forgekeeperLibraryPath?: string;
+  orcaSlicerPath?: string;
+  anycubicSlicerPath?: string;
+  blenderPath?: string;
+  meshyUrl?: string;
+  defaultSlicer?: "orca" | "anycubic";
 };
 
 export type AppData = {
@@ -178,6 +186,10 @@ export type AppData = {
   printers: PrinterRecord[];
   maintenance: MaintenanceRecord[];
   settings: AppSettings;
+  prototypes: PlannedPrototype[];
+  plannedFilament: PlannedFilament[];
+  productPlanning: ProductPlanningRecord[];
+  realmMaterials: RealmMaterialReference[];
 };
 
 
