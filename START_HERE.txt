@@ -1,0 +1,46 @@
+FORGEKEEPER INTEGRATED SYSTEMS UPDATE
+
+This package combines the previous pending Production Intelligence update with the smart cost engine, product assets, realm variants, CRUD cohesion, JSON backup/import, and material tracking groundwork.
+
+INSTALL / APPLY
+
+Option A - Full project:
+1. Stop the running dev server with Ctrl+C.
+2. Extract the forgekeeper folder from the full zip.
+3. Open PowerShell or terminal inside the forgekeeper folder.
+4. Run:
+   npm install
+   npm run dev
+
+Option B - Files-only package:
+1. Stop the running dev server with Ctrl+C.
+2. Extract files-only into your existing forgekeeper project root and overwrite matching files.
+3. Run:
+   npm run dev
+
+IMPORTANT
+If the app looks stale or new fields are missing, browser localStorage is still holding older saved data.
+Go to Reports > Reset Demo Data.
+Use Reports > Full JSON Backup before resetting if you want to preserve current data.
+
+INCLUDED IN THIS UPDATE
+- Production Intelligence engine
+- Queue hours and completion estimates
+- Printer load and bottleneck detection
+- Filament demand forecast
+- Material consumption tracking per order
+- Manual filament deduction button per order
+- Settings field for production hours per day
+- JSON backup import and export
+- Dashboard production intelligence card
+- Reports production intelligence and material demand sections
+- Smart cost engine retained
+- Product image / concept image system retained
+- Realm variant system retained
+- Catalog command center retained
+- CRUD cohesion retained
+
+NOTES
+- The app is still browser/localStorage based.
+- Tauri/local desktop file access should come after this integrated app layer is stable.
+- File upload/linking for STL and concept art is prepared structurally, but full native file-picker integration belongs in the desktop/Tauri phase.
