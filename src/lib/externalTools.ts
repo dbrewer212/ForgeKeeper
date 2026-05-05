@@ -40,7 +40,30 @@ export function getToolPath(settings: Partial<ExternalToolSettings>, key: Extern
   return settings.meshyUrl || defaultExternalTools.meshyUrl;
 }
 
+export async function copyText(value: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function openWebUrl(url: string) {
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+export function openLocalPathBestEffort(path: string) {
+  if (!path) {
+    window.alert("No local path has been linked yet.");
+    return;
+  }
+
+  const fileUrl = path.startsWith("file://") ? path : `file:///${path.replace(/\\/g, "/")}`;
+  window.open(fileUrl, "_blank");
+}
+
 export function describeLaunchTarget(tool: ExternalToolKey | SlicerKey, filePath?: string): string {
   const label = toolLabel(tool);
-  return filePath ? `${label} to ${filePath}` : label;
+  return filePath ? `${label} -> ${filePath}` : label;
 }

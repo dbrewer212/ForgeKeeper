@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "Forgekeeper",
-        "width": 1500,
-        "height": 950,
+        "width": 800,
+        "height": 600,
         "resizable": true,
         "fullscreen": false
       }
