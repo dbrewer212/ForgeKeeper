@@ -6,7 +6,8 @@ import { calculateProductionMetrics, orderMaterialGrams } from "../lib/productio
 import { downloadCsv } from "../lib/csv";
 import { uid } from "../lib/ids";
 import { clearStoredData, downloadJson, loadStoredData, saveStoredData } from "../lib/storage";
-import { defaultExternalTools, slicerForPrinter } from "../lib/externalTools";
+import { defaultExternalTools, getToolPath, openLocalPathBestEffort, openWebUrl, slicerForPrinter } from "../lib/externalTools";
+import { filenameFromPath, folderFromPath, suggestedLibraryPath } from "../lib/assetLibrary";
 import type {
   AppData,
   AppSettings,
@@ -55,8 +56,23 @@ function hydrateData(): AppData {
       conceptImagePath: product.conceptImagePath ?? "",
       supportedRealmVariants: product.supportedRealmVariants ?? [],
     })),
-    stls: stored.stls ?? seedData.stls,
-    concepts: stored.concepts ?? seedData.concepts,
+    stls: (stored.stls ?? seedData.stls).map((stl) => ({
+      ...stl,
+      filePath: stl.filePath ?? stl.fileName ?? "",
+      folderPath: stl.folderPath ?? folderFromPath(stl.filePath ?? stl.fileName ?? ""),
+      libraryPath: stl.libraryPath ?? "",
+      defaultPrinterId: stl.defaultPrinterId ?? undefined,
+      defaultSlicer: stl.defaultSlicer ?? undefined,
+      linkedConceptId: stl.linkedConceptId ?? undefined,
+      assetStatus: stl.assetStatus ?? (stl.fileName || stl.filePath ? "Linked" : "Planned"),
+    })),
+    concepts: (stored.concepts ?? seedData.concepts).map((concept) => ({
+      ...concept,
+      imagePath: concept.imagePath ?? concept.imageName ?? "",
+      measurementImagePath: concept.measurementImagePath ?? "",
+      referenceFolderPath: concept.referenceFolderPath ?? "",
+      linkedStlIds: concept.linkedStlIds ?? (concept.linkedStlId ? [concept.linkedStlId] : []),
+    })),
     variants: (stored.variants ?? seedData.variants).map((variant) => ({
       ...variant,
       productImagePath: variant.productImagePath ?? "",
@@ -194,7 +210,7 @@ export function useForgekeeperState() {
 
   function getProductDisplayImage(product?: Product) {
     if (!product) return "";
-    return product.productImagePath || product.conceptImagePath || getLatestConceptForProduct(product.id)?.imageName || "";
+    return product.productImagePath || product.conceptImagePath || getLatestConceptForProduct(product.id)?.imagePath || getLatestConceptForProduct(product.id)?.imageName || "";
   }
 
   function getVariantDisplayImage(variant?: ProductVariant) {
@@ -337,8 +353,15 @@ export function useForgekeeperState() {
       productId: selectedProductId,
       name: newStlName.trim(),
       fileName: `${newStlName.trim()}.stl`,
+      filePath: "",
+      folderPath: suggestedLibraryPath(settings.forgekeeperLibraryPath, selectedProduct?.name || "Unassigned", "stl", `v${String(productStls.length + 1).padStart(3, "0")}`),
+      libraryPath: suggestedLibraryPath(settings.forgekeeperLibraryPath, selectedProduct?.name || "Unassigned", "stl", `v${String(productStls.length + 1).padStart(3, "0")}`),
       version: `v${productStls.length + 1}`,
       isPrimary: productStls.length === 0,
+      defaultPrinterId: printers[0]?.id,
+      defaultSlicer: printers[0] ? slicerForPrinter(printers[0].name) : settings.defaultSlicer,
+      linkedConceptId: productConcepts[0]?.id,
+      assetStatus: "Planned",
       notes: "",
     }, ...prev]);
     setNewStlName("");
@@ -354,7 +377,7 @@ export function useForgekeeperState() {
 
   function removeStl(id: string) {
     setStls((prev) => prev.filter((stl) => stl.id !== id));
-    setConcepts((prev) => prev.map((concept) => (concept.linkedStlId === id ? { ...concept, linkedStlId: undefined } : concept)));
+    setConcepts((prev) => prev.map((concept) => (concept.linkedStlId === id || concept.linkedStlIds?.includes(id) ? { ...concept, linkedStlId: concept.linkedStlId === id ? undefined : concept.linkedStlId, linkedStlIds: (concept.linkedStlIds ?? []).filter((stlId) => stlId !== id) } : concept)));
     setVariants((prev) => prev.map((variant) => (variant.stlId === id ? { ...variant, stlId: undefined } : variant)));
   }
 
@@ -365,10 +388,14 @@ export function useForgekeeperState() {
       productId: selectedProductId,
       title: newConceptTitle.trim(),
       imageName: `${newConceptTitle.trim()}.png`,
+      imagePath: "",
+      measurementImagePath: "",
+      referenceFolderPath: suggestedLibraryPath(settings.forgekeeperLibraryPath, selectedProduct?.name || "Unassigned", "reference"),
       measurements: "",
       description: "",
       notes: "",
       linkedStlId: productStls[0]?.id,
+      linkedStlIds: productStls[0]?.id ? [productStls[0].id] : [],
     }, ...prev]);
     setNewConceptTitle("");
   }
@@ -650,6 +677,51 @@ export function useForgekeeperState() {
     return slicerForPrinter(printerName) || settings.defaultSlicer || "orca";
   }
 
+  function getPreferredSlicerForStl(stl: STLRecord) {
+    const printer = printers.find((item) => item.id === stl.defaultPrinterId);
+    return stl.defaultSlicer || slicerForPrinter(printer?.name || "") || settings.defaultSlicer || "orca";
+  }
+
+  function suggestStlLibraryFolder(productId: string, version = "v001") {
+    const product = products.find((item) => item.id === productId);
+    return suggestedLibraryPath(settings.forgekeeperLibraryPath, product?.name || "Unassigned", "stl", version);
+  }
+
+  function suggestConceptLibraryFolder(productId: string) {
+    const product = products.find((item) => item.id === productId);
+    return suggestedLibraryPath(settings.forgekeeperLibraryPath, product?.name || "Unassigned", "concept");
+  }
+
+  function linkStlPath(id: string, path: string) {
+    const folder = folderFromPath(path);
+    setStls((prev) => prev.map((stl) => (stl.id === id ? { ...stl, filePath: path, fileName: filenameFromPath(path), folderPath: folder || stl.folderPath, assetStatus: "Linked" } : stl)));
+  }
+
+  function setStlSuggestedFolder(id: string) {
+    const stl = stls.find((item) => item.id === id);
+    if (!stl) return;
+    const folder = suggestStlLibraryFolder(stl.productId, stl.version?.startsWith("v") ? stl.version.replace("v", "v00").slice(0, 4) : "v001");
+    updateStl(id, { folderPath: folder, libraryPath: folder });
+  }
+
+  function openStlAsset(id: string, mode: "file" | "folder" | "slicer" | "blender") {
+    const stl = stls.find((item) => item.id === id);
+    if (!stl) return;
+    const slicer = getPreferredSlicerForStl(stl);
+    if (mode === "file") return openLocalPathBestEffort(stl.filePath || stl.fileName);
+    if (mode === "folder") return openLocalPathBestEffort(stl.folderPath || stl.libraryPath || folderFromPath(stl.filePath));
+    if (mode === "blender") {
+      window.alert(`Blender path:\n${settings.blenderPath || "Not configured"}\n\nLinked STL:\n${stl.filePath || "No STL linked yet."}`);
+      return;
+    }
+    window.alert(`${slicer === "anycubic" ? "Anycubic Slicer Next" : "OrcaSlicer"} path:\n${getToolPath(settings, slicer)}\n\nLinked STL:\n${stl.filePath || "No STL linked yet."}\n\nDirect launch with file arguments will be enabled in the next Tauri shell-permissions pass.`);
+  }
+
+  function openExternalTool(tool: "orca" | "anycubic" | "blender" | "meshy") {
+    if (tool === "meshy") return openWebUrl(settings.meshyUrl || "https://www.meshy.ai/");
+    return openLocalPathBestEffort(getToolPath(settings, tool));
+  }
+
   function updateSettings(patch: Partial<AppSettings>) {
     setSettings((prev) => ({ ...prev, ...patch }));
   }
@@ -739,7 +811,7 @@ export function useForgekeeperState() {
     addFilament, updateFilament, adjustFilament, removeFilament,
     addPrinter, updatePrinter, removePrinter,
     addMaintenance, updateMaintenance, removeMaintenance,
-    updateSettings, updatePrototype, updatePlannedFilament, removePlannedFilament, movePlannedFilamentToInventory, getDefaultSlicerForPrinter,
+    updateSettings, updatePrototype, updatePlannedFilament, removePlannedFilament, movePlannedFilamentToInventory, getDefaultSlicerForPrinter, getPreferredSlicerForStl, suggestStlLibraryFolder, suggestConceptLibraryFolder, linkStlPath, setStlSuggestedFolder, openStlAsset, openExternalTool,
     exportProductsCsv, exportStlsCsv, exportConceptsCsv, exportVariantsCsv, exportCollectionsCsv, exportReleasesCsv, exportOrdersCsv,
     exportFilamentCsv, exportPrintersCsv, exportMaintenanceCsv, exportBackupJson, importBackupFile, resetWorkspace,
   };

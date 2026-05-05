@@ -9,6 +9,8 @@ export type ReleaseStatus = "Planning" | "Scheduled" | "Live";
 export type FilamentMaterial = "PLA" | "PLA+" | "PETG" | "ABS" | "TPU";
 export type PrinterStatus = "Available" | "Printing" | "Maintenance" | "Offline";
 export type ProductTab = "overview" | "stls" | "concepts" | "variants" | "orders";
+export type AssetStatus = "Planned" | "Linked" | "Needs Update" | "Archived";
+export type SlicerKey = "orca" | "anycubic";
 export type ViewKey = "dashboard" | "catalog" | "collections" | "releases" | "orders" | "filament" | "printers" | "planning" | "reports" | "settings";
 export type QuickActionKey = "newProduct" | "newOrder" | "newFilament" | "newPrinter";
 
@@ -47,8 +49,15 @@ export type STLRecord = {
   productId: string;
   name: string;
   fileName: string;
+  filePath?: string;
+  folderPath?: string;
+  libraryPath?: string;
   version: string;
   isPrimary: boolean;
+  defaultPrinterId?: string;
+  defaultSlicer?: SlicerKey;
+  linkedConceptId?: string;
+  assetStatus?: AssetStatus;
   notes: string;
 };
 
@@ -57,10 +66,14 @@ export type ConceptSpec = {
   productId: string;
   title: string;
   imageName: string;
+  imagePath?: string;
+  measurementImagePath?: string;
+  referenceFolderPath?: string;
   measurements: string;
   description: string;
   notes: string;
   linkedStlId?: string;
+  linkedStlIds?: string[];
 };
 
 export type ProductVariant = {

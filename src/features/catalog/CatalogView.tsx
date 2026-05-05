@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AssetLaunchpad } from "../../components/assets/AssetLaunchpad";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
@@ -146,7 +147,7 @@ function ProductWorkspace({ state, product }: { state: ForgekeeperState; product
             <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Connected Assets</div>
             <div className="mt-4 space-y-3 text-sm">
               <AssetLine label="Primary STL" value={primaryStl?.name || "None assigned"} />
-              <AssetLine label="STL File" value={primaryStl?.fileName || "No STL file path"} />
+              <AssetLine label="STL File" value={primaryStl?.filePath || primaryStl?.fileName || "No STL file path"} />
               <AssetLine label="Latest Concept" value={latestConcept?.title || "No concept spec"} />
               <AssetLine label="Variants" value={`${state.productVariants.length} configured`} />
               <AssetLine label="Release" value={state.productRelease?.name || "Unassigned"} />
@@ -340,7 +341,7 @@ function StlPanel({ state }: { state: ForgekeeperState }) {
       }
     >
       <div className="mb-4 rounded-2xl border border-white/10 bg-[#0d131c] p-4 text-sm text-slate-400">
-        Use this section for printable files. For now, enter file names or local paths manually. Later this becomes the upload/link system for your STL library.
+        Use this section for printable files. Link the STL path, assign the preferred printer/slicer, and keep version notes tied to the product.
       </div>
 
       <div className="space-y-4">
@@ -352,7 +353,7 @@ function StlPanel({ state }: { state: ForgekeeperState }) {
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <div className="font-semibold text-slate-100">{stl.name}</div>
-                  <div className="mt-1 text-xs text-slate-500">{stl.fileName || "No file path"} · {stl.version || "No version"}</div>
+                  <div className="mt-1 text-xs text-slate-500">{stl.filePath || stl.fileName || "No file path"} · {stl.version || "No version"}</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {stl.isPrimary ? <span className="rounded-full border border-amber-500/25 bg-amber-500/15 px-3 py-1 text-xs text-amber-100">Primary</span> : null}
@@ -361,15 +362,73 @@ function StlPanel({ state }: { state: ForgekeeperState }) {
                 </div>
               </div>
 
+              <div className="mb-4">
+                <AssetLaunchpad
+                  stlPath={stl.filePath || stl.fileName}
+                  folderPath={stl.folderPath || stl.libraryPath}
+                  printerName={state.printers.find((printer) => printer.id === stl.defaultPrinterId)?.name}
+                  slicer={stl.defaultSlicer || state.getPreferredSlicerForStl(stl)}
+                  settings={state.settings}
+                />
+              </div>
+
               <div className="grid gap-3 md:grid-cols-3">
                 <Field label="Display Name">
                   <Input value={stl.name} onChange={(e) => state.updateStl(stl.id, { name: e.target.value })} />
                 </Field>
-                <Field label="File Name / Path">
-                  <Input value={stl.fileName} onChange={(e) => state.updateStl(stl.id, { fileName: e.target.value })} placeholder="assets/stls/product-v1.stl" />
+                <Field label="File Name">
+                  <Input value={stl.fileName} onChange={(e) => state.updateStl(stl.id, { fileName: e.target.value })} placeholder="product-v001.stl" />
                 </Field>
                 <Field label="Version">
-                  <Input value={stl.version} onChange={(e) => state.updateStl(stl.id, { version: e.target.value })} placeholder="v1" />
+                  <Input value={stl.version} onChange={(e) => state.updateStl(stl.id, { version: e.target.value })} placeholder="v001" />
+                </Field>
+                <Field label="Full STL Path" className="md:col-span-2">
+                  <Input value={stl.filePath || ""} onChange={(e) => state.linkStlPath(stl.id, e.target.value)} placeholder="C:\ForgekeeperLibrary\STLs\Product\v001\part.stl" />
+                </Field>
+                <Field label="Asset Status">
+                  <Select value={stl.assetStatus || "Planned"} onChange={(e) => state.updateStl(stl.id, { assetStatus: e.target.value as any })}>
+                    <option value="Planned">Planned</option>
+                    <option value="Linked">Linked</option>
+                    <option value="Needs Update">Needs Update</option>
+                    <option value="Archived">Archived</option>
+                  </Select>
+                </Field>
+                <Field label="Library Folder" className="md:col-span-2">
+                  <Input value={stl.folderPath || stl.libraryPath || ""} onChange={(e) => state.updateStl(stl.id, { folderPath: e.target.value, libraryPath: e.target.value })} placeholder="C:\ForgekeeperLibrary\STLs\Product\v001" />
+                </Field>
+                <Field label="Suggested Folder">
+                  <Button variant="ghost" onClick={() => state.setStlSuggestedFolder(stl.id)}>Use Library Path</Button>
+                </Field>
+                <Field label="Default Printer">
+                  <Select value={stl.defaultPrinterId || ""} onChange={(e) => state.updateStl(stl.id, { defaultPrinterId: e.target.value || undefined, defaultSlicer: state.getDefaultSlicerForPrinter(state.printers.find((printer) => printer.id === e.target.value)?.name) })}>
+                    <option value="">No printer route</option>
+                    {state.printers.map((printer) => (
+                      <option key={printer.id} value={printer.id}>{printer.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Default Slicer">
+                  <Select value={stl.defaultSlicer || state.getPreferredSlicerForStl(stl)} onChange={(e) => state.updateStl(stl.id, { defaultSlicer: e.target.value as any })}>
+                    <option value="orca">OrcaSlicer</option>
+                    <option value="anycubic">Anycubic Slicer Next</option>
+                  </Select>
+                </Field>
+                <Field label="Linked Concept">
+                  <Select value={stl.linkedConceptId || ""} onChange={(e) => state.updateStl(stl.id, { linkedConceptId: e.target.value || undefined })}>
+                    <option value="">No linked concept</option>
+                    {state.productConcepts.map((concept) => (
+                      <option key={concept.id} value={concept.id}>{concept.title}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Launch Actions" className="md:col-span-3">
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="ghost" onClick={() => state.openStlAsset(stl.id, "file")}>Open STL</Button>
+                    <Button variant="ghost" onClick={() => state.openStlAsset(stl.id, "folder")}>Open Folder</Button>
+                    <Button variant="ghost" onClick={() => state.openStlAsset(stl.id, "slicer")}>Open Preferred Slicer</Button>
+                    <Button variant="ghost" onClick={() => state.openStlAsset(stl.id, "blender")}>Open Blender</Button>
+                    <Button onClick={() => state.openExternalTool("meshy")}>Open Meshy.ai</Button>
+                  </div>
                 </Field>
                 <Field label="STL Notes" className="md:col-span-3">
                   <Textarea value={stl.notes} onChange={(e) => state.updateStl(stl.id, { notes: e.target.value })} placeholder="Print orientation, supports, slicer notes, repair notes..." className="min-h-[90px] w-full" />
@@ -421,7 +480,7 @@ function ConceptPanel({ state }: { state: ForgekeeperState }) {
               </div>
 
               <div className="mb-4 grid gap-4 xl:grid-cols-[260px,1fr]">
-                <ProductImagePanel product={state.selectedProduct} imageSrc={concept.imageName || state.selectedProduct?.conceptImagePath || ""} label="Concept Art" />
+                <ProductImagePanel product={state.selectedProduct} imageSrc={concept.imagePath || concept.imageName || state.selectedProduct?.conceptImagePath || ""} label="Concept Art" />
                 <div className="rounded-2xl border border-white/10 bg-[#111722] p-4 text-sm text-slate-400">
                   Use Concept Specs for measurements, listing content, visual identity, variant notes, and STL association. This is the product intelligence layer.
                 </div>
@@ -431,8 +490,17 @@ function ConceptPanel({ state }: { state: ForgekeeperState }) {
                 <Field label="Concept Title">
                   <Input value={concept.title} onChange={(e) => state.updateConcept(concept.id, { title: e.target.value })} />
                 </Field>
-                <Field label="Image File / Path">
-                  <Input value={concept.imageName} onChange={(e) => state.updateConcept(concept.id, { imageName: e.target.value })} placeholder="assets/concepts/product-front.png" />
+                <Field label="Image Name">
+                  <Input value={concept.imageName} onChange={(e) => state.updateConcept(concept.id, { imageName: e.target.value })} placeholder="product-front.png" />
+                </Field>
+                <Field label="Concept Image Path">
+                  <Input value={concept.imagePath || ""} onChange={(e) => state.updateConcept(concept.id, { imagePath: e.target.value })} placeholder="C:\ForgekeeperLibrary\Concepts\Product\concept-art\front.png" />
+                </Field>
+                <Field label="Measurement Image Path">
+                  <Input value={concept.measurementImagePath || ""} onChange={(e) => state.updateConcept(concept.id, { measurementImagePath: e.target.value })} placeholder="C:\ForgekeeperLibrary\Concepts\Product\measurements\dims.png" />
+                </Field>
+                <Field label="Reference Folder">
+                  <Input value={concept.referenceFolderPath || ""} onChange={(e) => state.updateConcept(concept.id, { referenceFolderPath: e.target.value })} placeholder="C:\ForgekeeperLibrary\Concepts\Product\reference" />
                 </Field>
                 <Field label="Measurements">
                   <Textarea value={concept.measurements} onChange={(e) => state.updateConcept(concept.id, { measurements: e.target.value })} placeholder="Width, height, depth, tolerances, insert sizes..." className="min-h-[100px] w-full" />
@@ -440,8 +508,8 @@ function ConceptPanel({ state }: { state: ForgekeeperState }) {
                 <Field label="Product Details / Listing Content">
                   <Textarea value={concept.description} onChange={(e) => state.updateConcept(concept.id, { description: e.target.value })} placeholder="Customer-facing description, features, design intent..." className="min-h-[100px] w-full" />
                 </Field>
-                <Field label="Associated STL" className="lg:col-span-2">
-                  <Select value={concept.linkedStlId || ""} onChange={(e) => state.updateConcept(concept.id, { linkedStlId: e.target.value || undefined })}>
+                <Field label="Primary Associated STL" className="lg:col-span-2">
+                  <Select value={concept.linkedStlId || ""} onChange={(e) => state.updateConcept(concept.id, { linkedStlId: e.target.value || undefined, linkedStlIds: e.target.value ? Array.from(new Set([...(concept.linkedStlIds || []), e.target.value])) : concept.linkedStlIds })}>
                     <option value="">No linked STL</option>
                     {state.productStls.map((stl) => (
                       <option key={stl.id} value={stl.id}>{stl.name} · {stl.version}</option>
