@@ -1,58 +1,107 @@
 import type { KeeperAlert } from "./keeperAlerts";
 
-export type KeeperActionStatus = "suggested" | "needs_confirmation" | "ready" | "blocked";
+export type KeeperActionType =
+  | "open-record"
+  | "review-record"
+  | "add-media"
+  | "set-price"
+  | "assign-printer"
+  | "reorder-filament";
 
 export type KeeperAction = {
   id: string;
+  alertId: string;
+  type: KeeperActionType;
   title: string;
   description: string;
-  status: KeeperActionStatus;
-  section: KeeperAlert["section"];
-  relatedAlertId?: string;
-  relatedRecordId?: string;
+  priority: "Low" | "Normal" | "High" | "Critical";
+  targetView?: string;
+  targetId?: string;
 };
 
+function priorityFromAlert(type: KeeperAlert["type"]): KeeperAction["priority"] {
+  if (type === "critical") return "Critical";
+  if (type === "warning") return "High";
+  if (type === "opportunity") return "Normal";
+  return "Low";
+}
+
 export function getKeeperActions(alerts: KeeperAlert[]): KeeperAction[] {
-  return alerts.map((alert) => ({
-    id: `action-${alert.id}`,
-    title: actionTitleForAlert(alert.suggestedActionId),
-    description: actionDescriptionForAlert(alert),
-    status: "suggested",
-    section: alert.section,
-    relatedAlertId: alert.id,
-    relatedRecordId: alert.relatedRecordId,
-  }));
-}
+  return alerts.map((alert) => {
+    const priority = priorityFromAlert(alert.type);
 
-function actionTitleForAlert(actionId?: string): string {
-  switch (actionId) {
-    case "set-product-price":
-      return "Set product price";
-    case "add-print-estimate":
-      return "Add print time estimate";
-    case "add-material-estimate":
-      return "Add material estimate";
-    case "clean-product-notes":
-      return "Clean product notes";
-    case "add-product-media":
-      return "Attach product media";
-    case "add-stl-record":
-      return "Add STL record";
-    case "link-variant-stl":
-      return "Link variant STL";
-    case "add-variant-media":
-      return "Attach variant media";
-    case "reorder-filament":
-      return "Review filament reorder";
-    case "assign-printer":
-      return "Assign printer";
-    case "assign-filament":
-      return "Assign filament";
-    default:
-      return "Review item";
-  }
-}
+    if (alert.id.startsWith("price-")) {
+      return {
+        id: `action-${alert.id}`,
+        alertId: alert.id,
+        type: "set-price",
+        title: "Review product pricing",
+        description: "Open the related product and set a target price so cost/profit reporting becomes useful.",
+        priority,
+        targetView: "catalog",
+        targetId: alert.id.replace("price-", ""),
+      };
+    }
 
-function actionDescriptionForAlert(alert: KeeperAlert): string {
-  return `Suggested follow-up for: ${alert.message}`;
+    if (alert.id.startsWith("image-")) {
+      return {
+        id: `action-${alert.id}`,
+        alertId: alert.id,
+        type: "add-media",
+        title: "Add product media",
+        description: "Attach a concept image, product render, or prototype photo so the product is visually trackable.",
+        priority,
+        targetView: "catalog",
+        targetId: alert.id.replace("image-", ""),
+      };
+    }
+
+    if (alert.id.startsWith("notes-")) {
+      return {
+        id: `action-${alert.id}`,
+        alertId: alert.id,
+        type: "review-record",
+        title: "Clean product notes",
+        description: "Add internal notes, production context, or launch details for this product record.",
+        priority,
+        targetView: "catalog",
+        targetId: alert.id.replace("notes-", ""),
+      };
+    }
+
+    if (alert.id.startsWith("filament-")) {
+      return {
+        id: `action-${alert.id}`,
+        alertId: alert.id,
+        type: "reorder-filament",
+        title: "Review filament reorder",
+        description: "Check current stock, pending orders, and whether this material should be moved to the shopping list.",
+        priority,
+        targetView: "filament",
+        targetId: alert.id.replace("filament-", ""),
+      };
+    }
+
+    if (alert.id.startsWith("printer-")) {
+      return {
+        id: `action-${alert.id}`,
+        alertId: alert.id,
+        type: "assign-printer",
+        title: "Assign printer",
+        description: "Open the order board and assign a printer so production intelligence can calculate workload correctly.",
+        priority,
+        targetView: "orders",
+        targetId: alert.id.replace("printer-", ""),
+      };
+    }
+
+    return {
+      id: `action-${alert.id}`,
+      alertId: alert.id,
+      type: "review-record",
+      title: "Review alert",
+      description: alert.message,
+      priority,
+    };
+  });
 }

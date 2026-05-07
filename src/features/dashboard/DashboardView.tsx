@@ -1,5 +1,7 @@
 import { Card } from "../../components/ui/Card";
 import { StatCard } from "../../components/ui/StatCard";
+import { KeeperAlertPanel } from "../../components/keeper/KeeperAlertPanel";
+import { KeeperActionPanel } from "../../components/keeper/KeeperActionPanel";
 import { money } from "../../lib/format";
 import { inventoryState, pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
@@ -17,6 +19,11 @@ export function DashboardView({ state }: { state: ForgekeeperState }) {
           <QuickAction title="Add Printer" helper="Expand machine roster" onClick={() => state.triggerQuickAction("newPrinter")} />
         </div>
       </Card>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <KeeperAlertPanel state={state} title="Keeper System Alerts" />
+        <KeeperActionPanel state={state} title="Keeper Suggested Actions" />
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <StatCard label="Total Orders" value={state.metrics.orders} helper={`${state.queueCounts.Queued} queued`} />
