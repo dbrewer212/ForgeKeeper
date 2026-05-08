@@ -1,0 +1,55 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:system="clr-namespace:System;assembly=mscorlib">
+    <FontFamily x:Key="FontPrimary">Segoe UI, sans-serif</FontFamily>
+    <FontFamily x:Key="FontMono">Consolas, monospace</FontFamily>
+    <FontFamily x:Key="FontDisplay">Impact, sans-serif</FontFamily>
+    <system:Double x:Key="SizeMicro">10</system:Double>
+    <system:Double x:Key="SizeSmall">12</system:Double>
+    <system:Double x:Key="SizeBase">14</system:Double>
+    <system:Double x:Key="SizeMedium">16</system:Double>
+    <system:Double x:Key="SizeLarge">20</system:Double>
+    <system:Double x:Key="SizeXLarge">28</system:Double>
+    <system:Double x:Key="SizeHero">72</system:Double>
+    <Style x:Key="TextTemporal" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+        <Setter Property="FontSize" Value="{StaticResource SizeMedium}"/>
+        <Setter Property="Foreground" Value="{StaticResource BrushSteelLight}"/>
+        <Setter Property="Opacity" Value="0.8"/>
+    </Style>
+    <Style x:Key="TextVitalLabel" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontPrimary}"/>
+        <Setter Property="FontSize" Value="{StaticResource SizeSmall}"/>
+        <Setter Property="Foreground" Value="{StaticResource BrushSteelBase}"/>
+    </Style>
+    <Style x:Key="TextVitalValue" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
+        <Setter Property="FontSize" Value="{StaticResource SizeBase}"/>
+        <Setter Property="Foreground" Value="{StaticResource BrushFrostBase}"/>
+        <Setter Property="FontWeight" Value="Medium"/>
+    </Style>
+    <Style x:Key="TextModeTitle" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontDisplay}"/>
+        <Setter Property="FontSize" Value="{StaticResource SizeHero}"/>
+        <Setter Property="Foreground" Value="{StaticResource BrushFrostBase}"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect Color="{StaticResource FrostBase}" BlurRadius="20" ShadowDepth="0" Opacity="0.3"/>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="TextHeimdall" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontPrimary}"/>
+        <Setter Property="FontSize" Value="{StaticResource SizeSmall}"/>
+        <Setter Property="Foreground" Value="{StaticResource BrushSteelBase}"/>
+        <Setter Property="FontStyle" Value="Italic"/>
+        <Setter Property="Opacity" Value="0.7"/>
+    </Style>
+    <Style x:Key="TextAction" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource FontPrimary}"/>
+        <Setter Property="FontSize" Value="{StaticResource SizeMedium}"/>
+        <Setter Property="Foreground" Value="{StaticResource BrushSteelLight}"/>
+        <Setter Property="FontWeight" Value="Medium"/>
+    </Style>
+</ResourceDictionary>

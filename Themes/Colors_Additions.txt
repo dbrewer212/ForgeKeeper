@@ -1,0 +1,4 @@
+Add these lines to Themes/Colors.xaml if they do not already exist:
+
+<Color x:Key="IceWhite">#E8F7FF</Color>
+<SolidColorBrush x:Key="BrushIceWhite" Color="{StaticResource IceWhite}"/>

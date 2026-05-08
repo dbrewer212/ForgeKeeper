@@ -1,0 +1,56 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- BASE -->
+    <Color x:Key="VoidDeep">#02060B</Color>
+    <SolidColorBrush x:Key="BrushVoidDeep" Color="{StaticResource VoidDeep}"/>
+
+    <Color x:Key="IceWhite">#E8F7FF</Color>
+    <SolidColorBrush x:Key="BrushIceWhite" Color="{StaticResource IceWhite}"/>
+
+    <!-- FROST -->
+    <Color x:Key="FrostBase">#00D4FF</Color>
+    <SolidColorBrush x:Key="BrushFrostBase" Color="{StaticResource FrostBase}"/>
+
+    <LinearGradientBrush x:Key="GradientFrostActive" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#0099CC" Offset="0"/>
+        <GradientStop Color="#00D4FF" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- FORGE -->
+    <Color x:Key="ForgeBase">#FF7A1A</Color>
+    <SolidColorBrush x:Key="BrushForgeBase" Color="{StaticResource ForgeBase}"/>
+
+    <LinearGradientBrush x:Key="GradientForgeActive" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#B34700" Offset="0"/>
+        <GradientStop Color="#FF7A1A" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- STORM -->
+    <Color x:Key="StormBase">#9D7BFF</Color>
+    <SolidColorBrush x:Key="BrushStormBase" Color="{StaticResource StormBase}"/>
+
+    <LinearGradientBrush x:Key="GradientStormActive" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#6A4FD6" Offset="0"/>
+        <GradientStop Color="#9D7BFF" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- THUNDER -->
+    <Color x:Key="ThunderBase">#FFE15A</Color>
+    <SolidColorBrush x:Key="BrushThunderBase" Color="{StaticResource ThunderBase}"/>
+
+    <LinearGradientBrush x:Key="GradientThunderActive" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#C6A800" Offset="0"/>
+        <GradientStop Color="#FFE15A" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- ANVIL -->
+    <Color x:Key="AnvilBase">#FF5B5B</Color>
+    <SolidColorBrush x:Key="BrushAnvilBase" Color="{StaticResource AnvilBase}"/>
+
+    <LinearGradientBrush x:Key="GradientAnvilActive" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#A32E2E" Offset="0"/>
+        <GradientStop Color="#FF5B5B" Offset="1"/>
+    </LinearGradientBrush>
+
+</ResourceDictionary>

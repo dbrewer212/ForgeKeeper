@@ -1,0 +1,186 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- FENRIR FORGEWORKS / JOTUNN COMMAND CORE THEME -->
+
+    <Color x:Key="FenrirBlack">#080D10</Color>
+    <Color x:Key="FenrirIron">#0E1214</Color>
+    <Color x:Key="FenrirGraphite">#14181C</Color>
+    <Color x:Key="FenrirPanel">#E6111518</Color>
+    <Color x:Key="FenrirPanelDeep">#F20A0E10</Color>
+
+    <Color x:Key="FenrirBronze">#B06F1C</Color>
+    <Color x:Key="FenrirBronzeDim">#5A3616</Color>
+    <Color x:Key="FenrirGold">#E6B966</Color>
+    <Color x:Key="FenrirGoldSoft">#D9C08B</Color>
+
+    <Color x:Key="FenrirEmber">#FF6E24</Color>
+    <Color x:Key="FenrirRed">#FF4A21</Color>
+    <Color x:Key="FenrirWarning">#FFB022</Color>
+    <Color x:Key="FenrirSuccess">#5ED631</Color>
+    <Color x:Key="FenrirBlue">#4AA3FF</Color>
+    <Color x:Key="FenrirCyan">#00E5FF</Color>
+    <Color x:Key="FenrirPurple">#7E2FFF</Color>
+    <Color x:Key="FenrirViolet">#BC54FF</Color>
+
+    <Color x:Key="FenrirText">#E6ECEB</Color>
+    <Color x:Key="FenrirTextMuted">#849AA2</Color>
+    <Color x:Key="FenrirTextDim">#5C7078</Color>
+
+    <SolidColorBrush x:Key="FenrirBlackBrush" Color="{StaticResource FenrirBlack}"/>
+    <SolidColorBrush x:Key="FenrirIronBrush" Color="{StaticResource FenrirIron}"/>
+    <SolidColorBrush x:Key="FenrirGraphiteBrush" Color="{StaticResource FenrirGraphite}"/>
+    <SolidColorBrush x:Key="FenrirPanelBrush" Color="{StaticResource FenrirPanel}"/>
+    <SolidColorBrush x:Key="FenrirPanelDeepBrush" Color="{StaticResource FenrirPanelDeep}"/>
+
+    <SolidColorBrush x:Key="FenrirBronzeBrush" Color="{StaticResource FenrirBronze}"/>
+    <SolidColorBrush x:Key="FenrirBronzeDimBrush" Color="{StaticResource FenrirBronzeDim}"/>
+    <SolidColorBrush x:Key="FenrirGoldBrush" Color="{StaticResource FenrirGold}"/>
+    <SolidColorBrush x:Key="FenrirGoldSoftBrush" Color="{StaticResource FenrirGoldSoft}"/>
+
+    <SolidColorBrush x:Key="FenrirEmberBrush" Color="{StaticResource FenrirEmber}"/>
+    <SolidColorBrush x:Key="FenrirRedBrush" Color="{StaticResource FenrirRed}"/>
+    <SolidColorBrush x:Key="FenrirWarningBrush" Color="{StaticResource FenrirWarning}"/>
+    <SolidColorBrush x:Key="FenrirSuccessBrush" Color="{StaticResource FenrirSuccess}"/>
+    <SolidColorBrush x:Key="FenrirBlueBrush" Color="{StaticResource FenrirBlue}"/>
+    <SolidColorBrush x:Key="FenrirCyanBrush" Color="{StaticResource FenrirCyan}"/>
+    <SolidColorBrush x:Key="FenrirPurpleBrush" Color="{StaticResource FenrirPurple}"/>
+    <SolidColorBrush x:Key="FenrirVioletBrush" Color="{StaticResource FenrirViolet}"/>
+
+    <SolidColorBrush x:Key="FenrirTextBrush" Color="{StaticResource FenrirText}"/>
+    <SolidColorBrush x:Key="FenrirTextMutedBrush" Color="{StaticResource FenrirTextMuted}"/>
+    <SolidColorBrush x:Key="FenrirTextDimBrush" Color="{StaticResource FenrirTextDim}"/>
+
+    <BitmapImage x:Key="FenrirWolfCrestImage"
+                 UriSource="/Assets/FenrirForgeworks/Identity/fenrir_wolf_crest.png"/>
+
+    <BitmapImage x:Key="FenrirRuneImage"
+                 UriSource="/Assets/FenrirForgeworks/Identity/purple_command_rune.png"/>
+
+    <BitmapImage x:Key="FenrirWordmarkLockupImage"
+                 UriSource="/Assets/FenrirForgeworks/Identity/fenrir_wordmark_lockup.png"/>
+
+    <ImageBrush x:Key="FenrirBlackenedIronTexture"
+                ImageSource="/Assets/FenrirForgeworks/Textures/blackened_iron.png"
+                TileMode="Tile"
+                Viewport="0,0,320,320"
+                ViewportUnits="Absolute"
+                Stretch="None"
+                Opacity="0.55"/>
+
+    <ImageBrush x:Key="FenrirForgedGraphiteTexture"
+                ImageSource="/Assets/FenrirForgeworks/Textures/forged_graphite.png"
+                TileMode="Tile"
+                Viewport="0,0,320,320"
+                ViewportUnits="Absolute"
+                Stretch="None"
+                Opacity="0.42"/>
+
+    <ImageBrush x:Key="FenrirRunePanelTexture"
+                ImageSource="/Assets/FenrirForgeworks/Textures/rune_panel.png"
+                TileMode="Tile"
+                Viewport="0,0,360,360"
+                ViewportUnits="Absolute"
+                Stretch="None"
+                Opacity="0.28"/>
+
+    <Style x:Key="FenrirSectionHeaderText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource FenrirGoldSoftBrush}"/>
+        <Setter Property="FontFamily" Value="Georgia"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <Style x:Key="FenrirTitleText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource FenrirGoldBrush}"/>
+        <Setter Property="FontFamily" Value="Georgia"/>
+        <Setter Property="FontSize" Value="34"/>
+        <Setter Property="FontWeight" Value="Normal"/>
+    </Style>
+
+    <Style x:Key="FenrirSubtitleText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource FenrirGoldSoftBrush}"/>
+        <Setter Property="FontFamily" Value="Georgia"/>
+        <Setter Property="FontSize" Value="13"/>
+    </Style>
+
+    <Style x:Key="FenrirBodyText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource FenrirTextBrush}"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+
+    <Style x:Key="FenrirMutedText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource FenrirTextMutedBrush}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+
+    <Style x:Key="FenrirPanelStyle" TargetType="Border">
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#F10A0E10" Offset="0"/>
+                    <GradientStop Color="#E614181C" Offset="0.58"/>
+                    <GradientStop Color="#F0080D10" Offset="1"/>
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="BorderBrush" Value="{StaticResource FenrirBronzeDimBrush}"/>
+        <Setter Property="BorderThickness" Value="1.2"/>
+        <Setter Property="CornerRadius" Value="4"/>
+        <Setter Property="Padding" Value="16"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+    </Style>
+
+    <Style x:Key="FenrirFramedPanelStyle" TargetType="Border" BasedOn="{StaticResource FenrirPanelStyle}">
+        <Setter Property="BorderBrush" Value="{StaticResource FenrirBronzeBrush}"/>
+        <Setter Property="BorderThickness" Value="1.4"/>
+        <Setter Property="CornerRadius" Value="2"/>
+        <Setter Property="Padding" Value="18"/>
+    </Style>
+
+    <Style x:Key="FenrirSignalTileStyle" TargetType="Border">
+        <Setter Property="Background" Value="#E00C1115"/>
+        <Setter Property="BorderBrush" Value="{StaticResource FenrirBronzeDimBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="3"/>
+        <Setter Property="Padding" Value="12,8"/>
+    </Style>
+
+    <Style x:Key="FenrirSignalCardStyle" TargetType="Border">
+        <Setter Property="Background" Value="#B80B1013"/>
+        <Setter Property="BorderBrush" Value="{StaticResource FenrirBronzeDimBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="3"/>
+        <Setter Property="Padding" Value="10"/>
+        <Setter Property="Margin" Value="0,0,0,8"/>
+    </Style>
+
+    <Style x:Key="FenrirButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="#90110F0C"/>
+        <Setter Property="BorderBrush" Value="{StaticResource FenrirBronzeBrush}"/>
+        <Setter Property="BorderThickness" Value="1.2"/>
+        <Setter Property="Foreground" Value="{StaticResource FenrirGoldSoftBrush}"/>
+        <Setter Property="FontFamily" Value="Georgia"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Padding" Value="14,8"/>
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+
+    <Style x:Key="FenrirLaunchTileStyle" TargetType="Button" BasedOn="{StaticResource FenrirButtonStyle}">
+        <Setter Property="Background" Value="#A00B1013"/>
+        <Setter Property="BorderBrush" Value="{StaticResource FenrirBronzeDimBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource FenrirTextBrush}"/>
+        <Setter Property="Padding" Value="10"/>
+    </Style>
+
+    <Style x:Key="FenrirProgressBarStyle" TargetType="ProgressBar">
+        <Setter Property="Height" Value="8"/>
+        <Setter Property="Foreground" Value="{StaticResource FenrirBlueBrush}"/>
+        <Setter Property="Background" Value="#55232A2E"/>
+        <Setter Property="BorderBrush" Value="#442A3337"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+
+</ResourceDictionary>

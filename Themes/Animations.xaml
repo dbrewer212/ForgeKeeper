@@ -1,0 +1,25 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Storyboard x:Key="HeimdallPulseStoryboard" RepeatBehavior="Forever" AutoReverse="True">
+        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                         From="0.78"
+                         To="1.0"
+                         Duration="0:0:0.65"/>
+    </Storyboard>
+
+    <Storyboard x:Key="CoreGlowStoryboard" RepeatBehavior="Forever" AutoReverse="True">
+        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                         From="0.22"
+                         To="0.42"
+                         Duration="0:0:1.8"/>
+    </Storyboard>
+
+    <Storyboard x:Key="StatusRailPulseStoryboard" RepeatBehavior="Forever" AutoReverse="True">
+        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                         From="0.82"
+                         To="1.0"
+                         Duration="0:0:1.2"/>
+    </Storyboard>
+
+</ResourceDictionary>
