@@ -1,0 +1,20 @@
+{
+  "name": "Fenrir Forgeworks Production Asset Pack",
+  "description": "Individual PNG assets for WPF implementation, generated as separate usable files based on the locked Fenrir Forgeworks reference style.",
+  "colors": {
+    "bg": "#080D10",
+    "panel": "#0E1214",
+    "bronze": "#B06F1C",
+    "gold": "#E6B966",
+    "ember": "#FF6E24",
+    "blue": "#4AA3FF",
+    "cyan": "#00E5FF",
+    "purple": "#7E2FFF",
+    "violet": "#BC54FF",
+    "green": "#5ED631",
+    "red": "#FF4A21",
+    "warning": "#FFB022",
+    "white": "#E6ECEB",
+    "muted": "#849AA2"
+  }
+}
