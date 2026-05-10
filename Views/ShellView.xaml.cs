@@ -1,7 +1,5 @@
-using System;
+using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
-using System.Windows.Media.Animation;
 using JotunnSystem.ViewModels;
 
 namespace JotunnSystem.Views
@@ -14,24 +12,24 @@ namespace JotunnSystem.Views
         {
             InitializeComponent();
 
-            DataContext = App.Services.GetService(typeof(ViewModels.ShellViewModel));
+            DataContext = App.Services.GetService(typeof(ShellViewModel));
 
             Loaded += ShellView_Loaded;
             Unloaded += ShellView_Unloaded;
             DataContextChanged += ShellView_DataContextChanged;
         }
 
-        private void ShellView_Loaded(object sender, System.Windows.RoutedEventArgs e)
+        private void ShellView_Loaded(object sender, RoutedEventArgs e)
         {
             HookViewModel(DataContext as ShellViewModel);
         }
 
-        private void ShellView_Unloaded(object sender, System.Windows.RoutedEventArgs e)
+        private void ShellView_Unloaded(object sender, RoutedEventArgs e)
         {
             UnhookViewModel();
         }
 
-        private void ShellView_DataContextChanged(object sender, System.Windows.DependencyPropertyChangedEventArgs e)
+        private void ShellView_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
         {
             UnhookViewModel();
             HookViewModel(e.NewValue as ShellViewModel);
@@ -58,59 +56,8 @@ namespace JotunnSystem.Views
 
         private void OnPulseRequested()
         {
-            Dispatcher.Invoke(() =>
-            {
-                if (CorePulseContainer == null)
-                    return;
-
-                if (CorePulseContainer.RenderTransform is not ScaleTransform transform)
-                    return;
-
-                transform.BeginAnimation(ScaleTransform.ScaleXProperty, null);
-                transform.BeginAnimation(ScaleTransform.ScaleYProperty, null);
-
-                transform.ScaleX = 1.0;
-                transform.ScaleY = 1.0;
-
-                var expandX = new DoubleAnimation
-                {
-                    From = 1.0,
-                    To = 1.045,
-                    Duration = TimeSpan.FromMilliseconds(120),
-                    EasingFunction = new QuadraticEase()
-                };
-
-                var expandY = new DoubleAnimation
-                {
-                    From = 1.0,
-                    To = 1.045,
-                    Duration = TimeSpan.FromMilliseconds(120),
-                    EasingFunction = new QuadraticEase()
-                };
-
-                var contractX = new DoubleAnimation
-                {
-                    From = 1.045,
-                    To = 1.0,
-                    BeginTime = TimeSpan.FromMilliseconds(120),
-                    Duration = TimeSpan.FromMilliseconds(180),
-                    EasingFunction = new QuadraticEase()
-                };
-
-                var contractY = new DoubleAnimation
-                {
-                    From = 1.045,
-                    To = 1.0,
-                    BeginTime = TimeSpan.FromMilliseconds(120),
-                    Duration = TimeSpan.FromMilliseconds(180),
-                    EasingFunction = new QuadraticEase()
-                };
-
-                transform.BeginAnimation(ScaleTransform.ScaleXProperty, expandX);
-                transform.BeginAnimation(ScaleTransform.ScaleYProperty, expandY);
-                transform.BeginAnimation(ScaleTransform.ScaleXProperty, contractX);
-                transform.BeginAnimation(ScaleTransform.ScaleYProperty, contractY);
-            });
+            // The Fenrir full-overhaul ShellView no longer contains the old CorePulseContainer element.
+            // Keep the event hook alive so mode changes do not crash, but do not animate a removed element.
         }
     }
 }

@@ -70,6 +70,8 @@ C:\Users\dbrew\Documents\JotunnSystem_WORKING\obj\Release\net8.0-windows\JotunnS
 C:\Users\dbrew\Documents\JotunnSystem_WORKING\obj\Release\net8.0-windows\ref\JotunnSystem.dll
 C:\Users\dbrew\Documents\JotunnSystem_WORKING\bin\Release\net8.0-windows\Config\appsettings.json
 C:\Users\dbrew\Documents\JotunnSystem_WORKING\bin\Release\net8.0-windows\Assets\FenrirForgeworks\asset_manifest.json
+C:\Users\dbrew\Documents\JotunnSystem_WORKING\obj\Release\net8.0-windows\Themes\FenrirForgeTheme.baml
+C:\Users\dbrew\Documents\JotunnSystem_WORKING\obj\Release\net8.0-windows\JotunnSystem.sourcelink.json
 C:\Users\dbrew\Documents\JotunnSystem_WORKING\bin\Release\net8.0-windows\Assets\FenrirForgeworks\Dividers\bronze_divider_long.png
 C:\Users\dbrew\Documents\JotunnSystem_WORKING\bin\Release\net8.0-windows\Assets\FenrirForgeworks\Dividers\bronze_divider_short.png
 C:\Users\dbrew\Documents\JotunnSystem_WORKING\bin\Release\net8.0-windows\Assets\FenrirForgeworks\Dividers\rune_footer_line.png
@@ -106,5 +108,4 @@ C:\Users\dbrew\Documents\JotunnSystem_WORKING\bin\Release\net8.0-windows\Assets\
 C:\Users\dbrew\Documents\JotunnSystem_WORKING\bin\Release\net8.0-windows\Assets\FenrirForgeworks\Textures\forged_graphite.png
 C:\Users\dbrew\Documents\JotunnSystem_WORKING\bin\Release\net8.0-windows\Assets\FenrirForgeworks\Textures\forge_wallpaper.png
 C:\Users\dbrew\Documents\JotunnSystem_WORKING\bin\Release\net8.0-windows\Assets\FenrirForgeworks\Textures\rune_panel.png
-C:\Users\dbrew\Documents\JotunnSystem_WORKING\obj\Release\net8.0-windows\Themes\FenrirForgeTheme.baml
-C:\Users\dbrew\Documents\JotunnSystem_WORKING\obj\Release\net8.0-windows\JotunnSystem.sourcelink.json
+C:\Users\dbrew\Documents\JotunnSystem_WORKING\obj\Release\net8.0-windows\JotunnSystem_Content.g.cs

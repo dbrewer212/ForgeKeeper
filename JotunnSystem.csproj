@@ -13,13 +13,13 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
 
-    <None Update="Assets\FenrirForgeworks\**\*.png">
+    <Content Include="Assets\FenrirForgeworks\**\*.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    </Content>
 
-    <None Update="Assets\FenrirForgeworks\asset_manifest.json">
+    <Content Include="Assets\FenrirForgeworks\asset_manifest.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
