@@ -123,7 +123,7 @@
             <StackPanel Margin="12" MaxWidth="980">
 
                 <!-- GLOBAL HEADER -->
-                <Border Style="{StaticResource ForgePanel}" MinHeight="150" BorderBrush="#AAB06F1C">
+                <Border Style="{StaticResource ForgePanel}" MinHeight="132" BorderBrush="#AAB06F1C">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -192,7 +192,7 @@
                                 <ColumnDefinition Width="0.9*"/>
                             </Grid.ColumnDefinitions>
 
-                            <Border Grid.Column="0" Style="{StaticResource ForgePanel}" MinHeight="150" Margin="0,0,8,12">
+                            <Border Grid.Column="0" Style="{StaticResource ForgePanel}" MinHeight="132" Margin="0,0,8,12">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>
@@ -239,7 +239,7 @@
                                 </Grid>
                             </Border>
 
-                            <Border Grid.Column="1" Style="{StaticResource ForgePanel}" MinHeight="150" Margin="8,0,0,12">
+                            <Border Grid.Column="1" Style="{StaticResource ForgePanel}" MinHeight="132" Margin="8,0,0,12">
                                 <StackPanel>
                                     <TextBlock Text="ACTIVE DIRECTIVES" Style="{StaticResource HeaderText}" FontSize="15"/>
                                     <Border Style="{StaticResource ForgeInnerPanel}" Margin="0,12,0,8">
@@ -398,7 +398,147 @@
                                 </UniformGrid>
                             </StackPanel>
                         </Border>
-                    </StackPanel>
+                    
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.05*"/>
+                                <ColumnDefinition Width="0.95*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Style="{StaticResource ForgePanel}" MinHeight="330" Margin="0,0,8,0">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Text="ARMORY OPERATIONS" Style="{StaticResource HeaderText}" FontSize="13"/>
+
+                                    <Grid Grid.Row="1" Margin="0,14,0,0">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <Border Grid.Row="0" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,0,8">
+                                            <StackPanel>
+                                                <TextBlock Text="Launcher Relay" Foreground="#E6B966" FontWeight="Bold"/>
+                                                <TextBlock Text="Steam, Epic, GOG, and Battle.net launch paths remain staged through config." Style="{StaticResource BodyText}" Margin="0,5,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Grid.Row="1" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,0,8">
+                                            <StackPanel>
+                                                <TextBlock Text="Desktop Game Access" Foreground="#4AA3FF" FontWeight="Bold"/>
+                                                <TextBlock Text="Most-used games can remain desktop-launched while Armory controls platform readiness." Style="{StaticResource BodyText}" Margin="0,5,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Grid.Row="2" Style="{StaticResource ForgeInnerPanel}">
+                                            <StackPanel>
+                                                <TextBlock Text="Session Guard" Foreground="#5ED631" FontWeight="Bold"/>
+                                                <TextBlock Text="Balanced, precision, performance, and sustain directives remain available." Style="{StaticResource BodyText}" Margin="0,5,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+
+                            <Border Grid.Column="1" Style="{StaticResource ForgePanel}" MinHeight="330" Margin="8,0,0,0">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Text="SESSION READINESS MATRIX" Style="{StaticResource HeaderText}" FontSize="13"/>
+
+                                    <Grid Grid.Row="1" Margin="0,14,0,0">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <Border Grid.Row="0" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,0,8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                <TextBlock Text="Balanced directive" Style="{StaticResource BodyText}"/>
+                                                <TextBlock Grid.Column="1" Text="JOTUNN" Foreground="#E6B966" FontWeight="Bold"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Grid.Row="1" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,0,8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                <TextBlock Text="Precision directive" Style="{StaticResource BodyText}"/>
+                                                <TextBlock Grid.Column="1" Text="READY" Foreground="#4AA3FF" FontWeight="Bold"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Grid.Row="2" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,0,8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                <TextBlock Text="Performance directive" Style="{StaticResource BodyText}"/>
+                                                <TextBlock Grid.Column="1" Text="ARMED" Foreground="#FFB022" FontWeight="Bold"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Grid.Row="3" Style="{StaticResource ForgeInnerPanel}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                <TextBlock Text="Sustain directive" Style="{StaticResource BodyText}"/>
+                                                <TextBlock Grid.Column="1" Text="STABLE" Foreground="#BC54FF" FontWeight="Bold"/>
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <Border Style="{StaticResource ForgePanel}" MinHeight="250" Margin="0,10,0,0">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Text="ARMORY COMMAND NOTES" Style="{StaticResource HeaderText}" FontSize="13"/>
+
+                                <Grid Grid.Row="1" Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,8,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Primary Use" Foreground="#E6B966" FontWeight="Bold"/>
+                                            <TextBlock Text="Launch platform, set readiness, and keep gaming posture visible." Style="{StaticResource BodyText}" Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="1" Style="{StaticResource ForgeInnerPanel}" Margin="8,0,8,0">
+                                        <StackPanel>
+                                            <TextBlock Text="OpenClaw Future" Foreground="#5ED631" FontWeight="Bold"/>
+                                            <TextBlock Text="Later bridge actions can open launchers or prepare support scripts." Style="{StaticResource BodyText}" Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="2" Style="{StaticResource ForgeInnerPanel}" Margin="8,0,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Safe State" Foreground="#4AA3FF" FontWeight="Bold"/>
+                                            <TextBlock Text="Buttons launch configured apps only. No autonomous execution armed." Style="{StaticResource BodyText}" Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+</StackPanel>
                 </Grid>
 
                 <!-- SANCTUM -->
@@ -457,7 +597,147 @@
                                 </UniformGrid>
                             </StackPanel>
                         </Border>
-                    </StackPanel>
+                    
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.05*"/>
+                                <ColumnDefinition Width="0.95*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Style="{StaticResource ForgePanel}" MinHeight="330" Margin="0,0,8,0">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Text="SANCTUM RELAY STATE" Style="{StaticResource HeaderText}" FontSize="13"/>
+
+                                    <Grid Grid.Row="1" Margin="0,14,0,0">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <Border Grid.Row="0" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,0,8">
+                                            <StackPanel>
+                                                <TextBlock Text="Anime Relay" Foreground="#BC54FF" FontWeight="Bold"/>
+                                                <TextBlock Text="Crunchyroll and HIDIVE paths remain staged for anime-first sessions." Style="{StaticResource BodyText}" Margin="0,5,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Grid.Row="1" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,0,8">
+                                            <StackPanel>
+                                                <TextBlock Text="Streaming Vault" Foreground="#4AA3FF" FontWeight="Bold"/>
+                                                <TextBlock Text="Netflix, Disney+, and Prime Video remain available as media routes." Style="{StaticResource BodyText}" Margin="0,5,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Grid.Row="2" Style="{StaticResource ForgeInnerPanel}">
+                                            <StackPanel>
+                                                <TextBlock Text="Sanctum Mood" Foreground="#E6B966" FontWeight="Bold"/>
+                                                <TextBlock Text="Low-noise, balanced, and immersion directives shape the viewing state." Style="{StaticResource BodyText}" Margin="0,5,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+
+                            <Border Grid.Column="1" Style="{StaticResource ForgePanel}" MinHeight="330" Margin="8,0,0,0">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Text="VIEWING DIRECTIVE MATRIX" Style="{StaticResource HeaderText}" FontSize="13"/>
+
+                                    <Grid Grid.Row="1" Margin="0,14,0,0">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <Border Grid.Row="0" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,0,8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                <TextBlock Text="Quiet watch directive" Style="{StaticResource BodyText}"/>
+                                                <TextBlock Grid.Column="1" Text="LOW" Foreground="#4AA3FF" FontWeight="Bold"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Grid.Row="1" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,0,8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                <TextBlock Text="Balanced viewing directive" Style="{StaticResource BodyText}"/>
+                                                <TextBlock Grid.Column="1" Text="READY" Foreground="#E6B966" FontWeight="Bold"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Grid.Row="2" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,0,8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                <TextBlock Text="Immersion directive" Style="{StaticResource BodyText}"/>
+                                                <TextBlock Grid.Column="1" Text="DEEP" Foreground="#BC54FF" FontWeight="Bold"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <Border Grid.Row="3" Style="{StaticResource ForgeInnerPanel}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                <TextBlock Text="Long-form session state" Style="{StaticResource BodyText}"/>
+                                                <TextBlock Grid.Column="1" Text="STABLE" Foreground="#5ED631" FontWeight="Bold"/>
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <Border Style="{StaticResource ForgePanel}" MinHeight="250" Margin="0,10,0,0">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Text="SANCTUM WATCH NOTES" Style="{StaticResource HeaderText}" FontSize="13"/>
+
+                                <Grid Grid.Row="1" Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,8,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Primary Track" Foreground="#BC54FF" FontWeight="Bold"/>
+                                            <TextBlock Text="Solo Leveling, anime nights, and long-form comfort sessions." Style="{StaticResource BodyText}" Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="1" Style="{StaticResource ForgeInnerPanel}" Margin="8,0,8,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Media Apps" Foreground="#4AA3FF" FontWeight="Bold"/>
+                                            <TextBlock Text="Microsoft Store apps and web routes stay separated by service." Style="{StaticResource BodyText}" Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="2" Style="{StaticResource ForgeInnerPanel}" Margin="8,0,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Safe State" Foreground="#5ED631" FontWeight="Bold"/>
+                                            <TextBlock Text="Directives adjust UI state only. Media launches remain user-triggered." Style="{StaticResource BodyText}" Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+</StackPanel>
                 </Grid>
 
                 <!-- SYSTEM / CORE HEALTH -->
@@ -505,7 +785,129 @@
                                 </UniformGrid>
                             </StackPanel>
                         </Border>
-                    </StackPanel>
+                    
+                        <Grid Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1.05*"/>
+                                <ColumnDefinition Width="0.95*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Style="{StaticResource ForgePanel}" MinHeight="340" Margin="0,0,8,0">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Text="EXPANDED TELEMETRY" Style="{StaticResource HeaderText}" FontSize="13"/>
+
+                                    <Grid Grid.Row="1" Margin="0,14,0,0">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="84"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="70"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Row="0" Text="CPU" Style="{StaticResource MutedText}" VerticalAlignment="Center"/>
+                                        <ProgressBar Grid.Row="0" Grid.Column="1" Value="{Binding SystemMonitor.CpuUsage}" Maximum="100" Style="{StaticResource ForgeProgress}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding SystemMonitor.CpuUsageText}" Foreground="#E6ECEB" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+
+                                        <TextBlock Grid.Row="1" Text="GPU" Style="{StaticResource MutedText}" VerticalAlignment="Center"/>
+                                        <ProgressBar Grid.Row="1" Grid.Column="1" Value="{Binding SystemMonitor.GpuUsage}" Maximum="100" Style="{StaticResource ForgeProgress}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding SystemMonitor.GpuUsageText}" Foreground="#E6ECEB" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+
+                                        <TextBlock Grid.Row="2" Text="RAM" Style="{StaticResource MutedText}" VerticalAlignment="Center"/>
+                                        <ProgressBar Grid.Row="2" Grid.Column="1" Value="{Binding SystemMonitor.RamUsagePercent}" Maximum="100" Style="{StaticResource ForgeProgress}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding SystemMonitor.RamUsagePercent, StringFormat={}{0:F0}%}" Foreground="#E6ECEB" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+
+                                        <TextBlock Grid.Row="3" Text="INTENSITY" Style="{StaticResource MutedText}" VerticalAlignment="Center"/>
+                                        <ProgressBar Grid.Row="3" Grid.Column="1" Value="{Binding ModeIntensity}" Maximum="1" Style="{StaticResource ForgeProgress}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                        <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding ModeIntensity, StringFormat={}{0:P0}}" Foreground="#E6ECEB" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+
+                            <Border Grid.Column="1" Style="{StaticResource ForgePanel}" MinHeight="340" Margin="8,0,0,0">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Text="MACHINE CONDITION" Style="{StaticResource HeaderText}" FontSize="13"/>
+
+                                    <Grid Grid.Row="1" Margin="0,14,0,0">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <Border Grid.Row="0" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,0,8">
+                                            <TextBlock Text="Thermal state monitored through live CPU and GPU readings." Style="{StaticResource BodyText}"/>
+                                        </Border>
+                                        <Border Grid.Row="1" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,0,8">
+                                            <TextBlock Text="Power/load posture remains balanced for sustained command use." Style="{StaticResource BodyText}"/>
+                                        </Border>
+                                        <Border Grid.Row="2" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,0,8">
+                                            <TextBlock Text="Memory pressure remains visible through JOTUNN telemetry." Style="{StaticResource BodyText}"/>
+                                        </Border>
+                                        <Border Grid.Row="3" Style="{StaticResource ForgeInnerPanel}">
+                                            <TextBlock Text="Heimdall signals remain active for system observation." Style="{StaticResource BodyText}"/>
+                                        </Border>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </Grid>
+
+                        <Border Style="{StaticResource ForgePanel}" MinHeight="270" Margin="0,10,0,0">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Text="CORE HEALTH DIAGNOSTIC HISTORY" Style="{StaticResource HeaderText}" FontSize="13"/>
+
+                                <Grid Grid.Row="1" Margin="0,14,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,8,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Thermal Watch" Foreground="#E6B966" FontWeight="Bold"/>
+                                            <TextBlock Text="Temperature telemetry is active and ready for deeper alert routing." Style="{StaticResource BodyText}" Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="1" Style="{StaticResource ForgeInnerPanel}" Margin="8,0,8,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Usage Watch" Foreground="#4AA3FF" FontWeight="Bold"/>
+                                            <TextBlock Text="CPU, GPU, RAM, and intensity readings are visible in core health." Style="{StaticResource BodyText}" Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="2" Style="{StaticResource ForgeInnerPanel}" Margin="8,0,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="Next Expansion" Foreground="#5ED631" FontWeight="Bold"/>
+                                            <TextBlock Text="Future alerts can promote repeated thermal, power, or memory events." Style="{StaticResource BodyText}" Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+</StackPanel>
                 </Grid>
             
             <Border Style="{StaticResource ForgePanel}" MinHeight="320" Margin="0,10,0,0">
@@ -729,7 +1131,7 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Style="{StaticResource ForgePanel}" MinHeight="230" Margin="0,0,8,0">
+                <Border Grid.Column="0" Style="{StaticResource ForgePanel}" MinHeight="250" Margin="0,0,8,0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -753,7 +1155,7 @@
                     </Grid>
                 </Border>
 
-                <Border Grid.Column="1" Style="{StaticResource ForgePanel}" MinHeight="230" Margin="8,0,8,0">
+                <Border Grid.Column="1" Style="{StaticResource ForgePanel}" MinHeight="250" Margin="8,0,8,0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -779,7 +1181,7 @@
                     </Grid>
                 </Border>
 
-                <Border Grid.Column="2" Style="{StaticResource ForgePanel}" MinHeight="230" Margin="8,0,0,0">
+                <Border Grid.Column="2" Style="{StaticResource ForgePanel}" MinHeight="250" Margin="8,0,0,0">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -804,7 +1206,48 @@
                 </Border>
             </Grid>
 
-            <Border Style="{StaticResource ForgePanel}" MinHeight="72" Margin="0,10,0,0" Padding="16,10">
+            
+            <Border Style="{StaticResource ForgePanel}" MinHeight="240" Margin="0,10,0,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="FENRIR WATCH SUMMARY" Style="{StaticResource HeaderText}" FontSize="13"/>
+
+                    <Grid Grid.Row="1" Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1.1*"/>
+                            <ColumnDefinition Width="0.9*"/>
+                            <ColumnDefinition Width="1*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Style="{StaticResource ForgeInnerPanel}" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="Command Surface" Foreground="#E6B966" FontWeight="Bold"/>
+                                <TextBlock Text="Current wing remains under Fenrir Forgeworks command framing with JOTUNN oversight." Style="{StaticResource BodyText}" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="1" Style="{StaticResource ForgeInnerPanel}" Margin="8,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="Bridge Discipline" Foreground="#4AA3FF" FontWeight="Bold"/>
+                                <TextBlock Text="Heimdall observes. OpenClaw remains visible but dormant. User-triggered actions only." Style="{StaticResource BodyText}" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="2" Style="{StaticResource ForgeInnerPanel}" Margin="8,0,0,0">
+                            <StackPanel>
+                                <TextBlock Text="Next Forge Step" Foreground="#5ED631" FontWeight="Bold"/>
+                                <TextBlock Text="Polish spacing, commit stable shell, then wire real Forgekeeper intelligence surfaces over time." Style="{StaticResource BodyText}" Margin="0,8,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Border>
+
+<Border Style="{StaticResource ForgePanel}" MinHeight="96" Margin="0,10,0,0" Padding="18,14">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
