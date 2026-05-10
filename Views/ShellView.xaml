@@ -170,8 +170,8 @@
                     <Border Style="{StaticResource ForgeInnerPanel}" Margin="6,0">
                         <StackPanel>
                             <TextBlock Text="FORGEKEEPER" Style="{StaticResource HeaderText}" FontSize="11"/>
-                            <TextBlock Text="5" Foreground="#FFB022" FontSize="22" FontWeight="Bold"/>
-                            <TextBlock Text="Alerts active" Style="{StaticResource MutedText}" FontSize="10"/>
+                            <TextBlock Text="{Binding ForgekeeperBridgeStatus}" Foreground="#FFB022" FontSize="18" FontWeight="Bold"/>
+                            <TextBlock Text="{Binding ForgekeeperBridgeLastCheck, StringFormat=Checked {0}}" Style="{StaticResource MutedText}" FontSize="10"/>
                         </StackPanel>
                     </Border>
                     <Border Style="{StaticResource ForgeInnerPanel}" Margin="6,0,0,0">
@@ -306,8 +306,9 @@
                             <Border Grid.Column="2" Style="{StaticResource ForgePanel}" MinHeight="150" Margin="8,0,0,12">
                                 <StackPanel>
                                     <TextBlock Text="FORGEKEEPER LINK" Style="{StaticResource HeaderText}" HorizontalAlignment="Center"/>
-                                    <TextBlock Text="Production. Inventory. Intelligence." Style="{StaticResource MutedText}" TextAlignment="Center" Margin="0,2,0,8"/>
-                                    <Button Content="OPEN BRIDGE" Style="{StaticResource ForgeButton}"/>
+                                    <TextBlock Text="{Binding ForgekeeperBridgeStatus}" Foreground="#FFB022" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,2,0,2"/>
+                                    <TextBlock Text="{Binding ForgekeeperBridgeDetail}" Style="{StaticResource MutedText}" TextAlignment="Center" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                    <Button Content="OPEN BRIDGE" Command="{Binding OpenForgekeeperBridgeCommand}" Style="{StaticResource ForgeButton}"/>
                                 </StackPanel>
                             </Border>
                         </Grid>
@@ -943,7 +944,7 @@
                         <Border Grid.Column="2" Style="{StaticResource ForgeInnerPanel}" Margin="8,0,0,0">
                             <StackPanel>
                                 <TextBlock Text="FORGEKEEPER LINK" Style="{StaticResource MutedText}"/>
-                                <TextBlock Text="Production, inventory, and alert surfaces ready." Style="{StaticResource BodyText}" Margin="0,8,0,0"/>
+                                <TextBlock Text="{Binding ForgekeeperBridgeDetail}" Style="{StaticResource BodyText}" Margin="0,8,0,0" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
                     </Grid>

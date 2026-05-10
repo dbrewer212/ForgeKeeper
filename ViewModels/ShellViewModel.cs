@@ -14,6 +14,7 @@ namespace JotunnSystem.ViewModels
         private readonly HeimdallSpeechService _heimdallService;
         private readonly IConfigurationService _configurationService;
         private readonly ILaunchService _launchService;
+        private ForgekeeperBridgeService? _forgekeeperBridgeService;
 
         public event Action PulseRequested;
 
@@ -42,6 +43,9 @@ namespace JotunnSystem.ViewModels
 
         [ObservableProperty] private string _forgeWingStatus = "Forge wing online. Fenrir Forge systems awaiting command.";
         [ObservableProperty] private string _forgeWingRecommendation = "Prepare a maker session, design flow, or long-run production directive.";
+        [ObservableProperty] private string _forgekeeperBridgeStatus = "CHECKING";
+        [ObservableProperty] private string _forgekeeperBridgeDetail = "Forgekeeper bridge status has not been checked.";
+        [ObservableProperty] private string _forgekeeperBridgeLastCheck = "Never";
 
         public SystemMonitorViewModel SystemMonitor { get; }
         public ModeManagerViewModel ModeManager { get; }
@@ -78,6 +82,7 @@ namespace JotunnSystem.ViewModels
             else
             {
                 HeimdallStatus = "Fenrir Forgeworks command core established.";
+                InitializeForgekeeperBridge();
             }
         }
 
@@ -303,6 +308,61 @@ namespace JotunnSystem.ViewModels
             ForgeWingStatus = status;
             ForgeWingRecommendation = recommendation;
             HeimdallStatus = status;
+        }
+
+
+        private void InitializeForgekeeperBridge()
+        {
+            _forgekeeperBridgeService = new ForgekeeperBridgeService(_configurationService.Current);
+            ApplyForgekeeperBridgeResult(_forgekeeperBridgeService.Check());
+        }
+
+        [RelayCommand]
+        private void RefreshForgekeeperBridge()
+        {
+            if (!_configurationService.Reload(out var configError))
+            {
+                ForgekeeperBridgeStatus = "ERROR";
+                ForgekeeperBridgeDetail = string.IsNullOrWhiteSpace(configError)
+                    ? "Unable to reload Forgekeeper bridge config."
+                    : configError;
+                ForgekeeperBridgeLastCheck = DateTime.Now.ToString("HH:mm:ss");
+                HeimdallStatus = ForgekeeperBridgeDetail;
+                return;
+            }
+
+            InitializeForgekeeperBridge();
+            HeimdallStatus = ForgekeeperBridgeDetail;
+        }
+
+        [RelayCommand]
+        private void OpenForgekeeperBridge()
+        {
+            if (_forgekeeperBridgeService == null)
+            {
+                if (!_configurationService.Reload(out var configError))
+                {
+                    ForgekeeperBridgeStatus = "ERROR";
+                    ForgekeeperBridgeDetail = string.IsNullOrWhiteSpace(configError)
+                        ? "Unable to reload Forgekeeper bridge config."
+                        : configError;
+                    ForgekeeperBridgeLastCheck = DateTime.Now.ToString("HH:mm:ss");
+                    HeimdallStatus = ForgekeeperBridgeDetail;
+                    return;
+                }
+
+                _forgekeeperBridgeService = new ForgekeeperBridgeService(_configurationService.Current);
+            }
+
+            ApplyForgekeeperBridgeResult(_forgekeeperBridgeService.Open());
+            HeimdallStatus = ForgekeeperBridgeDetail;
+        }
+
+        private void ApplyForgekeeperBridgeResult(ForgekeeperBridgeResult result)
+        {
+            ForgekeeperBridgeStatus = result.Status;
+            ForgekeeperBridgeDetail = result.Detail;
+            ForgekeeperBridgeLastCheck = result.CheckedAt.ToString("HH:mm:ss");
         }
 
         private bool TryLaunchGamingPlatform(string platform, out string message)
