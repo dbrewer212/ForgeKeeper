@@ -413,8 +413,8 @@
 
             <Border Grid.Row="0"
                     CornerRadius="18"
-                    Background="#58060C14"
-                    BorderBrush="#24BEE9FF"
+                    Background="#660A0E10"
+                    BorderBrush="#5A3616"
                     BorderThickness="1"
                     Padding="18,12"
                     Margin="0,0,0,12">
@@ -448,19 +448,39 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <StackPanel Grid.Column="1"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Center">
-                            <TextBlock Text="ASHBORN"
-                                       FontSize="36"
-                                       FontWeight="Bold"
-                                       Foreground="{Binding CurrentMode, Converter={StaticResource ModeToBrushConverter}}"
-                                       HorizontalAlignment="Right"/>
-                            <TextBlock Text="THRONE // CASTLE NETWORK"
-                                       FontSize="10"
-                                       Foreground="#5E8192"
-                                       HorizontalAlignment="Right"/>
-                        </StackPanel>
+                        <Grid Grid.Column="1"
+                              HorizontalAlignment="Right"
+                              VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Image Grid.Column="0"
+                                   Source="/Assets/FenrirForgeworks/Identity/fenrir_wolf_crest.png"
+                                   Width="58"
+                                   Height="58"
+                                   Stretch="Uniform"
+                                   Margin="0,0,14,0"
+                                   RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                            <StackPanel Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        HorizontalAlignment="Right">
+                                <TextBlock Text="FENRIR FORGEWORKS"
+                                           FontSize="30"
+                                           FontFamily="Georgia"
+                                           FontWeight="SemiBold"
+                                           Foreground="#E6B966"
+                                           HorizontalAlignment="Right"/>
+                                <TextBlock Text="JOTUNN COMMAND CORE"
+                                           FontSize="11"
+                                           FontFamily="Georgia"
+                                           Foreground="#D9C08B"
+                                           HorizontalAlignment="Right"
+                                           Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Grid>
                     </Grid>
 
                     <UniformGrid Grid.Row="1"
@@ -684,7 +704,7 @@
 
                             <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="360">
                                 <Grid>
-                                    <TextBlock Text="BELLION" FontSize="50" FontWeight="Bold" Foreground="#F0FCFF" TextAlignment="Center" HorizontalAlignment="Center">
+                                    <TextBlock Text="JOTUNN CORE" FontSize="50" FontWeight="Bold" Foreground="#F0FCFF" TextAlignment="Center" HorizontalAlignment="Center">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Visibility" Value="Collapsed"/>
@@ -713,7 +733,7 @@
                                 </Grid>
 
                                 <Grid Margin="0,78,0,0">
-                                    <TextBlock Text="PRIMARY SHADOW: BELLION ACTIVE" FontSize="18" Foreground="#D0ECF6" TextAlignment="Center" HorizontalAlignment="Center">
+                                    <TextBlock Text="COMMAND CORE ONLINE" FontSize="18" Foreground="#D0ECF6" TextAlignment="Center" HorizontalAlignment="Center">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding CurrentMode, Converter={StaticResource ModeEqualsConverter}, ConverterParameter=Frost}" Value="Active"><Setter Property="Visibility" Value="Visible"/></DataTrigger><DataTrigger Binding="{Binding CurrentMode, Converter={StaticResource ModeEqualsConverter}, ConverterParameter=Forge}" Value="Active"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style>
                                         </TextBlock.Style>
@@ -745,7 +765,7 @@
                         <Border Width="92" Height="92" CornerRadius="22" Background="#240C1622" BorderBrush="{Binding CurrentMode, Converter={StaticResource ModeToBrushConverter}}" BorderThickness="1.4" VerticalAlignment="Center" HorizontalAlignment="Center"><TextBlock Text="{Binding CurrentMode, Converter={StaticResource ModeToAuthorityGlyphConverter}}" FontSize="40" Foreground="{Binding CurrentMode, Converter={StaticResource ModeToBrushConverter}}" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
                         <Grid Grid.Column="1" Margin="18,0,16,0">
                             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                            <TextBlock Grid.Row="0" Text="SYSTEM AUTHORITY" FontSize="12" Foreground="#7FA7B8"/>
+                            <TextBlock Grid.Row="0" Text="CORE AUTHORITY" FontSize="12" Foreground="#7FA7B8"/>
                             <TextBlock Grid.Row="1" Text="{Binding CurrentMode, Converter={StaticResource ModeToDisplayNameConverter}}" FontSize="32" FontWeight="Bold" Foreground="#F0FCFF" Margin="0,4,0,0"/>
                             <TextBlock Grid.Row="2" Text="{Binding CurrentMode, Converter={StaticResource ModeToAuthorityRoleConverter}}" FontSize="17" Foreground="#9BC4D7" Margin="0,4,0,0"/>
                             <Border Grid.Row="3" Margin="0,12,0,0" Padding="13,10" CornerRadius="14" Background="#180B1420" BorderBrush="#12BEE9FF" BorderThickness="1" MaxWidth="332" HorizontalAlignment="Left"><TextBlock Text="{Binding HeimdallStatus}" FontSize="15" Foreground="#D8F4FF" TextWrapping="Wrap"/></Border>
@@ -766,7 +786,7 @@
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                         <Button Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,8" Command="{Binding ModeManager.SetModeCommand}" CommandParameter="{x:Static models:OperationalMode.Frost}">
                             <Button.Style><Style TargetType="Button" BasedOn="{StaticResource ShadowTileStyle}"><Style.Triggers><DataTrigger Binding="{Binding CurrentMode, Converter={StaticResource ModeEqualsConverter}, ConverterParameter=Frost}" Value="Active"><Setter Property="Opacity" Value="1"/><Setter Property="RenderTransform"><Setter.Value><ScaleTransform ScaleX="1.03" ScaleY="1.03"/></Setter.Value></Setter><Setter Property="Background" Value="#3A111C28"/><Setter Property="Effect"><Setter.Value><DropShadowEffect BlurRadius="42" ShadowDepth="0" Color="#FF9D7BFF" Opacity="0.85"/></Setter.Value></Setter></DataTrigger></Style.Triggers></Style></Button.Style>
-                            <Grid><Border BorderBrush="#42FFFFFF" BorderThickness="1" CornerRadius="16" Margin="1" Opacity="0.38"/><Grid Margin="8,6"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="◎" FontSize="28" Foreground="#FF9D7BFF" VerticalAlignment="Center"/><StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center"><TextBlock Text="BELLION" FontSize="22" FontWeight="SemiBold" Foreground="#F0FCFF"/><TextBlock Text="PRIMARY SHADOW" FontSize="11" Foreground="#7FA7B8"/><TextBlock Text="Balanced control. Stability, efficiency, and throne authority." FontSize="10" Foreground="#BFDCE8" Margin="0,6,0,0" TextWrapping="Wrap"/></StackPanel><StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right"><Rectangle Width="26" Height="2" Fill="#FF9D7BFF" Opacity="0.9" Margin="0,0,0,6"/><Rectangle Width="18" Height="2" Fill="#FF9D7BFF" Opacity="0.55"/></StackPanel></Grid></Grid>
+                            <Grid><Border BorderBrush="#42FFFFFF" BorderThickness="1" CornerRadius="16" Margin="1" Opacity="0.38"/><Grid Margin="8,6"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="◎" FontSize="28" Foreground="#FF9D7BFF" VerticalAlignment="Center"/><StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Center"><TextBlock Text="JOTUNN CORE" FontSize="22" FontWeight="SemiBold" Foreground="#F0FCFF"/><TextBlock Text="ACTIVE DIRECTIVE" FontSize="11" Foreground="#7FA7B8"/><TextBlock Text="Balanced control. Stability, efficiency, and core authority." FontSize="10" Foreground="#BFDCE8" Margin="0,6,0,0" TextWrapping="Wrap"/></StackPanel><StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right"><Rectangle Width="26" Height="2" Fill="#FF9D7BFF" Opacity="0.9" Margin="0,0,0,6"/><Rectangle Width="18" Height="2" Fill="#FF9D7BFF" Opacity="0.55"/></StackPanel></Grid></Grid>
                         </Button>
                         <Button Grid.Row="1" Grid.Column="0" Margin="0,8,8,8" Command="{Binding ModeManager.SetModeCommand}" CommandParameter="{x:Static models:OperationalMode.Thunder}">
                             <Button.Style><Style TargetType="Button" BasedOn="{StaticResource ShadowTileStyle}"><Style.Triggers><DataTrigger Binding="{Binding CurrentMode, Converter={StaticResource ModeEqualsConverter}, ConverterParameter=Thunder}" Value="Active"><Setter Property="Opacity" Value="1"/><Setter Property="RenderTransform"><Setter.Value><ScaleTransform ScaleX="1.04" ScaleY="1.04"/></Setter.Value></Setter><Setter Property="Background" Value="#3A111C28"/><Setter Property="Effect"><Setter.Value><DropShadowEffect BlurRadius="42" ShadowDepth="0" Color="#FF00D4FF" Opacity="0.85"/></Setter.Value></Setter></DataTrigger></Style.Triggers></Style></Button.Style>
@@ -786,7 +806,7 @@
                 <Border Grid.Row="4" CornerRadius="18" Background="#60070F18" BorderBrush="#18BEE9FF" BorderThickness="1" Padding="16,12">
                     <Grid>
                         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="48"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                        <Grid Grid.Row="0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="HEIMDALL // LINKED" FontSize="13" FontWeight="SemiBold" Foreground="#D8F4FF"/><StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{Binding CurrentMode, Converter={StaticResource ModeToBrushConverter}}"><Ellipse.Style><Style TargetType="Ellipse"><Setter Property="Opacity" Value="0.22"/><Style.Triggers><DataTrigger Binding="{Binding IsHeimdallSpeaking}" Value="True"><Setter Property="Opacity" Value="1"/></DataTrigger></Style.Triggers></Style></Ellipse.Style></Ellipse><Rectangle Width="28" Height="2" Fill="{Binding CurrentMode, Converter={StaticResource ModeToBrushConverter}}" VerticalAlignment="Center" Opacity="0.90"/></StackPanel></Grid>
+                        <Grid Grid.Row="0"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="HEIMDALL SIGNALS" FontSize="13" FontWeight="SemiBold" Foreground="#D8F4FF"/><StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{Binding CurrentMode, Converter={StaticResource ModeToBrushConverter}}"><Ellipse.Style><Style TargetType="Ellipse"><Setter Property="Opacity" Value="0.22"/><Style.Triggers><DataTrigger Binding="{Binding IsHeimdallSpeaking}" Value="True"><Setter Property="Opacity" Value="1"/></DataTrigger></Style.Triggers></Style></Ellipse.Style></Ellipse><Rectangle Width="28" Height="2" Fill="{Binding CurrentMode, Converter={StaticResource ModeToBrushConverter}}" VerticalAlignment="Center" Opacity="0.90"/></StackPanel></Grid>
                         <Border Grid.Row="1" Margin="0,12,0,10" CornerRadius="12" Background="#180B1420" BorderBrush="#16BEE9FF" BorderThickness="1" Padding="10,8"><Grid><Rectangle Height="1" Fill="#22BEE9FF" Opacity="0.54" VerticalAlignment="Center"/><Canvas Opacity="{Binding ModeIntensity, Converter={StaticResource IntensityToOpacityConverter}}"><Canvas.RenderTransform><TransformGroup><ScaleTransform ScaleY="{Binding ModeIntensity, Converter={StaticResource IntensityToWaveScaleConverter}}" CenterX="232" CenterY="18"/><TranslateTransform/></TransformGroup></Canvas.RenderTransform><Polyline Stroke="{Binding CurrentMode, Converter={StaticResource ModeToBrushConverter}}" StrokeThickness="{Binding ModeIntensity, Converter={StaticResource IntensityToStrokeThicknessConverter}}" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Points="0,18 12,17 22,19 34,8 46,22 58,14 72,13 86,9 102,20 118,12 136,14 154,6 176,18 198,10 220,15 240,11 262,16 286,9 308,15 332,11 356,17 382,12 408,14 436,10 464,16"/></Canvas></Grid></Border>
                         <TextBlock Grid.Row="2" Text="{Binding HeimdallStatus}" FontSize="19" Foreground="#D8F4FF" TextWrapping="Wrap"/>
                     </Grid>
