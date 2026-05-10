@@ -10,16 +10,16 @@ namespace JotunnSystem
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             if (value is not OperationalMode mode)
-                return "BELLION";
+                return "JOTUNN CORE";
 
             return mode switch
             {
-                OperationalMode.Frost => "BELLION",
-                OperationalMode.Forge => "KAISEL",
-                OperationalMode.Thunder => "BERU",
-                OperationalMode.Storm => "IGRIS",
-                OperationalMode.Anvil => "TUSK",
-                _ => "BELLION"
+                OperationalMode.Frost => "JOTUNN CORE",
+                OperationalMode.Forge => "JOTUNN CORE",
+                OperationalMode.Thunder => "PERFORMANCE WATCH",
+                OperationalMode.Storm => "PRECISION WATCH",
+                OperationalMode.Anvil => "SUSTAIN CHANNEL",
+                _ => "JOTUNN CORE"
             };
         }
 

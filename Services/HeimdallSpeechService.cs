@@ -68,12 +68,12 @@ namespace JotunnSystem.Services
         {
             return mode switch
             {
-                OperationalMode.Frost => "Bellion authority engaged. Primary shadow online.",
-                OperationalMode.Forge => "Bellion efficiency posture engaged.",
-                OperationalMode.Thunder => "Beru authority engaged. Swarm shadow online.",
-                OperationalMode.Storm => "Igris authority engaged. Blade shadow online.",
-                OperationalMode.Anvil => "Tusk authority engaged. Arcane shadow online.",
-                _ => "Shadow authority stable."
+                OperationalMode.Frost => "JOTUNN core command state engaged.",
+                OperationalMode.Forge => "JOTUNN efficiency channel engaged.",
+                OperationalMode.Thunder => "Performance watch engaged.",
+                OperationalMode.Storm => "Precision watch engaged.",
+                OperationalMode.Anvil => "Sustain channel engaged.",
+                _ => "JOTUNN command core stable."
             };
         }
 
@@ -81,12 +81,12 @@ namespace JotunnSystem.Services
         {
             return mode switch
             {
-                OperationalMode.Frost => "Arise Bellion. System authority stable.",
-                OperationalMode.Forge => "Arise Bellion. Efficiency posture stable.",
-                OperationalMode.Thunder => "Arise Beru. Aggression pattern stable.",
-                OperationalMode.Storm => "Arise Igris. Combat pattern stable.",
-                OperationalMode.Anvil => "Arise Tusk. Arcane pattern stable.",
-                _ => "Shadow authority stable."
+                OperationalMode.Frost => "JOTUNN core command state stable.",
+                OperationalMode.Forge => "JOTUNN efficiency channel stable.",
+                OperationalMode.Thunder => "Performance response stable.",
+                OperationalMode.Storm => "Precision response stable.",
+                OperationalMode.Anvil => "Sustain channel stable.",
+                _ => "JOTUNN command core stable."
             };
         }
     }

@@ -21,7 +21,7 @@ namespace JotunnSystem.ViewModels
         [ObservableProperty] private string _currentDate = DateTime.Now.ToString("yyyy.MM.dd");
         [ObservableProperty] private string _systemUptime = "00:00:00";
         [ObservableProperty] private OperationalMode _currentMode = OperationalMode.Frost;
-        [ObservableProperty] private string _heimdallStatus = "Shadow authority stable.";
+        [ObservableProperty] private string _heimdallStatus = "JOTUNN command core stable.";
         [ObservableProperty] private bool _isModeTransitioning;
         [ObservableProperty] private bool _isHeimdallSpeaking;
         [ObservableProperty] private float _modeIntensity = 0.35f;
@@ -29,19 +29,19 @@ namespace JotunnSystem.ViewModels
         [ObservableProperty] private string _currentDomain = "Home";
 
         [ObservableProperty] private string _activeGamingPlatform = "Steam";
-        [ObservableProperty] private string _gamingWingStatus = "Gaming wing online. Session staging ready.";
-        [ObservableProperty] private string _gamingWingRecommendation = "Choose a launcher or prepare a game session posture.";
+        [ObservableProperty] private string _gamingWingStatus = "Armory launch network online. Session staging ready.";
+        [ObservableProperty] private string _gamingWingRecommendation = "Choose a launch network or prepare a session directive.";
         [ObservableProperty] private ArmorySessionPrep _currentArmorySessionPrep = ArmorySessionPrep.Balanced;
-        [ObservableProperty] private string _armoryShadowLead = "Bellion";
+        [ObservableProperty] private string _armoryShadowLead = "JOTUNN";
 
         [ObservableProperty] private string _activeMediaService = "Crunchyroll";
-        [ObservableProperty] private string _mediaWingStatus = "Media wing online. Viewing posture stable.";
-        [ObservableProperty] private string _mediaWingRecommendation = "Choose a service or apply a viewing posture.";
+        [ObservableProperty] private string _mediaWingStatus = "Sanctum media network online. Viewing state stable.";
+        [ObservableProperty] private string _mediaWingRecommendation = "Choose a service or apply a viewing directive.";
         [ObservableProperty] private SanctumViewingPosture _currentSanctumViewingPosture = SanctumViewingPosture.Balanced;
-        [ObservableProperty] private string _sanctumShadowLead = "Bellion";
+        [ObservableProperty] private string _sanctumShadowLead = "JOTUNN";
 
         [ObservableProperty] private string _forgeWingStatus = "Forge wing online. Fenrir Forge systems awaiting command.";
-        [ObservableProperty] private string _forgeWingRecommendation = "Prepare a maker session, design flow, or long-run print posture.";
+        [ObservableProperty] private string _forgeWingRecommendation = "Prepare a maker session, design flow, or long-run production directive.";
 
         public SystemMonitorViewModel SystemMonitor { get; }
         public ModeManagerViewModel ModeManager { get; }
@@ -77,7 +77,7 @@ namespace JotunnSystem.ViewModels
             }
             else
             {
-                HeimdallStatus = "Arise. Shadow authority has been established.";
+                HeimdallStatus = "Fenrir Forgeworks command core established.";
             }
         }
 
@@ -94,13 +94,13 @@ namespace JotunnSystem.ViewModels
 
             HeimdallStatus = target switch
             {
-                "Home" => "Ashborn: Returning to the throne room.",
-                "Armory" => "Ashborn: Armory wing opened.",
-                "Gaming" => "Ashborn: Armory wing opened.",
-                "System" => "Ashborn: Battlestation systems exposed.",
-                "Sanctum" => "Ashborn: Sanctum wing opened.",
-                "Media" => "Ashborn: Sanctum wing opened.",
-                _ => "Ashborn: Domain shift complete."
+                "Home" => "Fenrir Forgeworks: Returning to Command Core.",
+                "Armory" => "Fenrir Forgeworks: Armory launch network opened.",
+                "Gaming" => "Fenrir Forgeworks: Armory launch network opened.",
+                "System" => "Fenrir Forgeworks: JOTUNN core health exposed.",
+                "Sanctum" => "Fenrir Forgeworks: Sanctum media network opened.",
+                "Media" => "Fenrir Forgeworks: Sanctum media network opened.",
+                _ => "Fenrir Forgeworks: Domain shift complete."
             };
         }
 
@@ -155,29 +155,29 @@ namespace JotunnSystem.ViewModels
             {
                 case "Balanced":
                     prep = ArmorySessionPrep.Balanced;
-                    shadowLead = "Bellion";
-                    status = "Bellion posture staged for balanced engagement.";
+                    shadowLead = "JOTUNN";
+                    status = "JOTUNN directive staged for balanced engagement.";
                     recommendation = "Use this for mixed play, stable thermals, and general readiness.";
                     break;
 
                 case "Competitive":
                     prep = ArmorySessionPrep.Competitive;
-                    shadowLead = "Igris";
-                    status = "Igris posture staged for competitive response.";
+                    shadowLead = "Precision Watch";
+                    status = "Precision Watch directive staged for competitive response.";
                     recommendation = "Use this for focused response, precision play, and tighter session pressure.";
                     break;
 
                 case "Performance":
                     prep = ArmorySessionPrep.Performance;
-                    shadowLead = "Beru";
-                    status = "Beru posture staged for performance pressure.";
+                    shadowLead = "Performance Watch";
+                    status = "Performance Watch directive staged for performance pressure.";
                     recommendation = "Use this for heavier titles, aggressive load, and maximum system demand.";
                     break;
 
                 case "LongSession":
                     prep = ArmorySessionPrep.LongSession;
-                    shadowLead = "Tusk";
-                    status = "Tusk posture staged for long-session sustain.";
+                    shadowLead = "Sustain Channel";
+                    status = "Sustain Channel directive staged for long-session sustain.";
                     recommendation = "Use this for extended play where sustained control matters more than peak aggression.";
                     break;
 
@@ -239,22 +239,22 @@ namespace JotunnSystem.ViewModels
             {
                 case "LowNoise":
                     posture = SanctumViewingPosture.LowNoise;
-                    shadowLead = "Bellion";
-                    status = "Bellion low-noise sanctum posture staged.";
+                    shadowLead = "JOTUNN";
+                    status = "JOTUNN low-noise Sanctum directive staged.";
                     recommendation = "Best for quieter system behavior and relaxed watch sessions.";
                     break;
 
                 case "Balanced":
                     posture = SanctumViewingPosture.Balanced;
-                    shadowLead = "Bellion";
-                    status = "Bellion balanced sanctum posture staged.";
+                    shadowLead = "JOTUNN";
+                    status = "JOTUNN balanced Sanctum directive staged.";
                     recommendation = "Best for normal playback, browser use, and general comfort.";
                     break;
 
                 case "Immersion":
                     posture = SanctumViewingPosture.Immersion;
-                    shadowLead = "Tusk";
-                    status = "Tusk immersion posture staged.";
+                    shadowLead = "Sustain Channel";
+                    status = "Sustain Channel immersion directive staged.";
                     recommendation = "Best for long-form media sessions, anime marathons, and arcane ambience.";
                     break;
 
@@ -282,17 +282,17 @@ namespace JotunnSystem.ViewModels
             switch (profile)
             {
                 case "SystemPrep":
-                    status = "Forge systems staged under Bellion.";
+                    status = "Forge systems staged under JOTUNN.";
                     recommendation = "Use this before general setup, printer checks, and workflow stabilization.";
                     break;
 
                 case "Design":
-                    status = "Design posture staged under Igris.";
+                    status = "Design directive staged under Precision Watch.";
                     recommendation = "Use this for focused modeling, slicing, and precision-heavy maker work.";
                     break;
 
                 case "LongPrint":
-                    status = "Long-print posture staged under Tusk.";
+                    status = "Long-print directive staged under Sustain Channel.";
                     recommendation = "Use this for extended maker sessions and sustained printer oversight.";
                     break;
 

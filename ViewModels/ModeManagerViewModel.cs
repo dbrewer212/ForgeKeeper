@@ -12,7 +12,7 @@ namespace JotunnSystem.ViewModels
         private readonly HeimdallSpeechService _heimdallService;
 
         [ObservableProperty] private OperationalMode _currentMode;
-        [ObservableProperty] private string _modeDescription = "Primary shadow authority active.";
+        [ObservableProperty] private string _modeDescription = "Core command state active.";
         public ObservableCollection<ModeItem> AvailableModes { get; } = new();
 
         public ModeManagerViewModel(ModeEngineService modeService, HeimdallSpeechService heimdallService)
@@ -22,11 +22,11 @@ namespace JotunnSystem.ViewModels
 
             CurrentMode = _modeService.CurrentMode;
 
-            AvailableModes.Add(new ModeItem { Mode = OperationalMode.Frost, Name = "Bellion", IsActive = CurrentMode == OperationalMode.Frost });
-            AvailableModes.Add(new ModeItem { Mode = OperationalMode.Forge, Name = "Kaisel", IsActive = CurrentMode == OperationalMode.Forge });
-            AvailableModes.Add(new ModeItem { Mode = OperationalMode.Thunder, Name = "Beru", IsActive = CurrentMode == OperationalMode.Thunder });
-            AvailableModes.Add(new ModeItem { Mode = OperationalMode.Storm, Name = "Igris", IsActive = CurrentMode == OperationalMode.Storm });
-            AvailableModes.Add(new ModeItem { Mode = OperationalMode.Anvil, Name = "Tusk", IsActive = CurrentMode == OperationalMode.Anvil });
+            AvailableModes.Add(new ModeItem { Mode = OperationalMode.Frost, Name = "JOTUNN CORE", IsActive = CurrentMode == OperationalMode.Frost });
+            AvailableModes.Add(new ModeItem { Mode = OperationalMode.Forge, Name = "EFFICIENCY CORE", IsActive = CurrentMode == OperationalMode.Forge });
+            AvailableModes.Add(new ModeItem { Mode = OperationalMode.Thunder, Name = "PERFORMANCE WATCH", IsActive = CurrentMode == OperationalMode.Thunder });
+            AvailableModes.Add(new ModeItem { Mode = OperationalMode.Storm, Name = "PRECISION WATCH", IsActive = CurrentMode == OperationalMode.Storm });
+            AvailableModes.Add(new ModeItem { Mode = OperationalMode.Anvil, Name = "SUSTAIN CHANNEL", IsActive = CurrentMode == OperationalMode.Anvil });
 
             ModeDescription = GetShadowDescription(CurrentMode);
 
@@ -47,12 +47,12 @@ namespace JotunnSystem.ViewModels
         {
             return mode switch
             {
-                OperationalMode.Frost => "Primary shadow authority active.",
-                OperationalMode.Forge => "Aerial shadow authority active.",
-                OperationalMode.Thunder => "Swarm shadow authority active.",
-                OperationalMode.Storm => "Blade shadow authority active.",
-                OperationalMode.Anvil => "Arcane shadow authority active.",
-                _ => "Shadow authority stable."
+                OperationalMode.Frost => "Core command state active.",
+                OperationalMode.Forge => "Efficiency channel active.",
+                OperationalMode.Thunder => "Performance watch active.",
+                OperationalMode.Storm => "Precision watch active.",
+                OperationalMode.Anvil => "Sustain channel active.",
+                _ => "JOTUNN command core stable."
             };
         }
 
