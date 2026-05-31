@@ -1,13 +1,28 @@
 import type { ReactNode } from "react";
 
-export function Card({ title, right, children, className = "" }: { title: string; right?: ReactNode; children: ReactNode; className?: string }) {
+type CardProps = {
+  title: string;
+  right?: ReactNode;
+  children: ReactNode;
+  className?: string;
+};
+
+export function Card({ title, right, children, className = "" }: CardProps) {
   return (
-    <section className={`rounded-3xl border border-amber-500/15 bg-[linear-gradient(180deg,rgba(17,23,34,0.98),rgba(10,14,22,0.96))] shadow-[0_12px_40px_rgba(0,0,0,0.35)] ${className}`}>
-      <div className="flex items-center justify-between gap-4 border-b border-white/8 px-5 py-4">
-        <h3 className="text-sm font-semibold text-slate-100">{title}</h3>
-        {right}
+    <section
+      className={`forge-panel group relative overflow-hidden rounded-2xl p-5 ${className}`}
+    >
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/35 to-transparent" />
+      <div className="pointer-events-none absolute -right-16 -top-16 h-36 w-36 rounded-full bg-amber-500/10 blur-3xl transition-opacity duration-300 group-hover:opacity-90" />
+
+      <div className="relative mb-4 flex items-start justify-between gap-4">
+        <h3 className="text-sm font-bold uppercase tracking-[0.22em] text-amber-100/90">
+          {title}
+        </h3>
+        {right ? <div className="shrink-0">{right}</div> : null}
       </div>
-      <div className="p-5">{children}</div>
+
+      <div className="relative">{children}</div>
     </section>
   );
 }

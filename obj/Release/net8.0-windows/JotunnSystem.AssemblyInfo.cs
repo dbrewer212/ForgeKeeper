@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("JotunnSystem")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+87652cc125a51e77f3bfb331d9b8e015578ce312")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+9e8b5cef2ba4e130df3def4e5c245ae6e9a755ef")]
 [assembly: System.Reflection.AssemblyProductAttribute("JotunnSystem")]
 [assembly: System.Reflection.AssemblyTitleAttribute("JotunnSystem")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

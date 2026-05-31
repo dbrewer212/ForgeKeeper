@@ -3,15 +3,67 @@
 @tailwind utilities;
 
 :root {
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
   color-scheme: dark;
+
+  --forge-bg: #05070a;
+  --forge-panel: rgba(15, 23, 42, 0.72);
+  --forge-panel-strong: rgba(17, 24, 39, 0.94);
+  --forge-border: rgba(245, 158, 11, 0.18);
+  --forge-border-soft: rgba(148, 163, 184, 0.13);
+  --forge-ember: #f59e0b;
+  --forge-ember-bright: #fbbf24;
+  --forge-rune: #38bdf8;
+  --forge-text: #e5e7eb;
+  --forge-muted: #94a3b8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100vh;
+  background: var(--forge-bg);
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #070b11;
+  color: var(--forge-text);
+  background:
+    radial-gradient(circle at 18% 12%, rgba(245, 158, 11, 0.16), transparent 30%),
+    radial-gradient(circle at 82% 8%, rgba(56, 189, 248, 0.12), transparent 26%),
+    radial-gradient(circle at 70% 88%, rgba(127, 29, 29, 0.24), transparent 34%),
+    linear-gradient(135deg, #040507 0%, #090d13 44%, #111827 100%);
+  overflow: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(circle at center, black, transparent 78%);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(245, 158, 11, 0.08), transparent 18%, transparent 82%, rgba(56, 189, 248, 0.08)),
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.06), transparent 44%);
+  mix-blend-mode: screen;
+  opacity: 0.85;
 }
 
 button,
@@ -19,4 +71,64 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+::selection {
+  background: rgba(245, 158, 11, 0.35);
+  color: #fff7ed;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.65);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.7), rgba(120, 53, 15, 0.9));
+  border: 2px solid rgba(15, 23, 42, 0.85);
+  border-radius: 999px;
+}
+
+.forge-glass {
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.78), rgba(3, 7, 18, 0.88));
+  border: 1px solid var(--forge-border-soft);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(18px);
+}
+
+.forge-panel {
+  background: var(--forge-panel);
+  border: 1px solid var(--forge-border-soft);
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.forge-ember-line {
+  position: relative;
+}
+
+.forge-ember-line::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, transparent, var(--forge-ember), transparent);
+  opacity: 0.8;
 }

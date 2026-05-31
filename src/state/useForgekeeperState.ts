@@ -27,6 +27,7 @@ import type {
   ViewKey,
 } from "../types/domain";
 import type { PlannedFilament, PlannedPrototype, ProductPlanningRecord, RealmMaterialReference } from "../types/planning";
+import { useBatchState } from "./batchState";
 
 const seedData: AppData = {
   products: seedProducts,
@@ -137,6 +138,7 @@ export function useForgekeeperState() {
   const [printers, setPrinters] = useState<PrinterRecord[]>(initial.printers);
   const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>(initial.maintenance);
   const [settings, setSettings] = useState<AppSettings>(initial.settings);
+  const { batches, setBatches } = useBatchState();
   const [prototypes, setPrototypes] = useState<PlannedPrototype[]>(initial.prototypes);
   const [plannedFilament, setPlannedFilament] = useState<PlannedFilament[]>(initial.plannedFilament);
   const [productPlanning, setProductPlanning] = useState<ProductPlanningRecord[]>(initial.productPlanning);
@@ -795,6 +797,7 @@ export function useForgekeeperState() {
     view, setView,
     products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
+    batches, setBatches,
     selectedProductId, setSelectedProductId, productTab, setProductTab,
     newProductName, setNewProductName, newStlName, setNewStlName, newConceptTitle, setNewConceptTitle,
     newCollectionName, setNewCollectionName, newReleaseName, setNewReleaseName, newOrderCustomer, setNewOrderCustomer,
