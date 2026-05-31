@@ -6,6 +6,7 @@ namespace JotunnSystem.Models
     {
         public ArmoryConfig Armory { get; set; } = new();
         public SanctumConfig Sanctum { get; set; } = new();
+        public ForgekeeperConfig Forgekeeper { get; set; } = new();
     }
 
     public sealed class ArmoryConfig
@@ -16,6 +17,16 @@ namespace JotunnSystem.Models
     public sealed class SanctumConfig
     {
         public SanctumLaunchTargets LaunchTargets { get; set; } = new();
+    }
+
+    public sealed class ForgekeeperConfig
+    {
+        public bool Enabled { get; set; } = true;
+        public string LaunchMode { get; set; } = "Command";
+        public string LocalPath { get; set; } = @"C:\Dev\forgekeeper";
+        public string GitHubUrl { get; set; } = "https://github.com/dbrewer212/ForgeKeeper";
+        public string WorkingDirectory { get; set; } = @"C:\Dev\forgekeeper";
+        public string Command { get; set; } = "npm run desktop";
     }
 
     public sealed class ArmoryLaunchTargets

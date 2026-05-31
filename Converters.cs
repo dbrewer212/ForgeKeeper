@@ -53,16 +53,16 @@ namespace JotunnSystem
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             if (value is not OperationalMode mode)
-                return "Bellion";
+                return "JOTUNN";
 
             return mode switch
             {
-                OperationalMode.Frost => "Bellion",
-                OperationalMode.Forge => "Bellion",
-                OperationalMode.Thunder => "Beru",
-                OperationalMode.Storm => "Igris",
-                OperationalMode.Anvil => "Tusk",
-                _ => "Bellion"
+                OperationalMode.Frost => "JOTUNN",
+                OperationalMode.Forge => "JOTUNN",
+                OperationalMode.Thunder => "Performance",
+                OperationalMode.Storm => "Precision",
+                OperationalMode.Anvil => "Sustain",
+                _ => "JOTUNN"
             };
         }
 
@@ -216,16 +216,16 @@ namespace JotunnSystem
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             if (value is not OperationalMode mode)
-                return "Shadow authority online.";
+                return "Core command online.";
 
             return mode switch
             {
-                OperationalMode.Frost => "Primary shadow authority",
-                OperationalMode.Forge => "Primary shadow authority",
-                OperationalMode.Thunder => "Swarm shadow authority",
-                OperationalMode.Storm => "Blade shadow authority",
-                OperationalMode.Anvil => "Arcane shadow authority",
-                _ => "Shadow authority online."
+                OperationalMode.Frost => "Core command state",
+                OperationalMode.Forge => "Core command state",
+                OperationalMode.Thunder => "Performance watch state",
+                OperationalMode.Storm => "Precision watch state",
+                OperationalMode.Anvil => "Sustain channel state",
+                _ => "Core command online."
             };
         }
 

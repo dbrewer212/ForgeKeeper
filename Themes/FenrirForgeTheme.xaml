@@ -51,17 +51,18 @@
     <SolidColorBrush x:Key="FenrirTextMutedBrush" Color="{StaticResource FenrirTextMuted}"/>
     <SolidColorBrush x:Key="FenrirTextDimBrush" Color="{StaticResource FenrirTextDim}"/>
 
+    <!-- Site-of-origin paths load from the copied output folder instead of embedded WPF resources. -->
     <BitmapImage x:Key="FenrirWolfCrestImage"
-                 UriSource="/Assets/FenrirForgeworks/Identity/fenrir_wolf_crest.png"/>
+                 UriSource="pack://siteoforigin:,,,/Assets/FenrirForgeworks/Identity/fenrir_wolf_crest.png"/>
 
     <BitmapImage x:Key="FenrirRuneImage"
-                 UriSource="/Assets/FenrirForgeworks/Identity/purple_command_rune.png"/>
+                 UriSource="pack://siteoforigin:,,,/Assets/FenrirForgeworks/Identity/purple_command_rune.png"/>
 
     <BitmapImage x:Key="FenrirWordmarkLockupImage"
-                 UriSource="/Assets/FenrirForgeworks/Identity/fenrir_wordmark_lockup.png"/>
+                 UriSource="pack://siteoforigin:,,,/Assets/FenrirForgeworks/Identity/fenrir_wordmark_lockup.png"/>
 
     <ImageBrush x:Key="FenrirBlackenedIronTexture"
-                ImageSource="/Assets/FenrirForgeworks/Textures/blackened_iron.png"
+                ImageSource="pack://siteoforigin:,,,/Assets/FenrirForgeworks/Textures/blackened_iron.png"
                 TileMode="Tile"
                 Viewport="0,0,320,320"
                 ViewportUnits="Absolute"
@@ -69,7 +70,7 @@
                 Opacity="0.55"/>
 
     <ImageBrush x:Key="FenrirForgedGraphiteTexture"
-                ImageSource="/Assets/FenrirForgeworks/Textures/forged_graphite.png"
+                ImageSource="pack://siteoforigin:,,,/Assets/FenrirForgeworks/Textures/forged_graphite.png"
                 TileMode="Tile"
                 Viewport="0,0,320,320"
                 ViewportUnits="Absolute"
@@ -77,7 +78,7 @@
                 Opacity="0.42"/>
 
     <ImageBrush x:Key="FenrirRunePanelTexture"
-                ImageSource="/Assets/FenrirForgeworks/Textures/rune_panel.png"
+                ImageSource="pack://siteoforigin:,,,/Assets/FenrirForgeworks/Textures/rune_panel.png"
                 TileMode="Tile"
                 Viewport="0,0,360,360"
                 ViewportUnits="Absolute"

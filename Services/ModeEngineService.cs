@@ -106,7 +106,7 @@ namespace JotunnSystem.Services
             RunPowerCfg("SCHEME_BALANCED");
             SetPriority(ProcessPriorityClass.Normal);
             ModeIntensity = 0.35f;
-            UpdateStatus("Bellion: Primary shadow authority stable.");
+            UpdateStatus("JOTUNN: Core command state stable.");
         }
 
         private void SetEfficiency()
@@ -114,7 +114,7 @@ namespace JotunnSystem.Services
             RunPowerCfg("SCHEME_MIN");
             SetPriority(ProcessPriorityClass.BelowNormal);
             ModeIntensity = 0.20f;
-            UpdateStatus("Kaisel: Efficiency pattern active.");
+            UpdateStatus("JOTUNN: Efficiency channel active.");
         }
 
         private void SetBeru()
@@ -122,7 +122,7 @@ namespace JotunnSystem.Services
             RunPowerCfg("SCHEME_MAX");
             SetPriority(ProcessPriorityClass.High);
             ModeIntensity = 0.75f;
-            UpdateStatus("Beru: Aggression pattern active.");
+            UpdateStatus("Performance Watch: High-load response active.");
 
             StartAdaptiveLoop(() =>
             {
@@ -131,11 +131,11 @@ namespace JotunnSystem.Services
                 ModeIntensity = Clamp(v.CpuUsage / 100f, 0.45f, 1.0f);
 
                 if (v.CpuUsage > 85f)
-                    UpdateStatus("Beru: High load detected.");
+                    UpdateStatus("Performance Watch: High load detected.");
 
                 if (v.CpuTemperature > 80f)
                 {
-                    UpdateStatus("Beru: Thermal limit reached. Returning to Bellion.");
+                    UpdateStatus("Performance Watch: Thermal limit reached. Returning to JOTUNN core.");
                     SetMode(OperationalMode.Frost);
                 }
             });
@@ -146,7 +146,7 @@ namespace JotunnSystem.Services
             RunPowerCfg("SCHEME_MAX");
             SetPriority(ProcessPriorityClass.High);
             ModeIntensity = 0.70f;
-            UpdateStatus("Igris: Combat pattern active.");
+            UpdateStatus("Precision Watch: Precision response active.");
 
             StartAdaptiveLoop(() =>
             {
@@ -156,11 +156,11 @@ namespace JotunnSystem.Services
                 ModeIntensity = Clamp(demand, 0.40f, 1.0f);
 
                 if (v.CpuUsage > 70f || v.GpuUsage > 70f)
-                    UpdateStatus("Igris: Combat load rising.");
+                    UpdateStatus("Precision Watch: Response load rising.");
 
                 if (v.CpuTemperature > 85f || v.GpuTemperature > 80f)
                 {
-                    UpdateStatus("Igris: Thermal threshold exceeded. Returning to Bellion.");
+                    UpdateStatus("Precision Watch: Thermal threshold exceeded. Returning to JOTUNN core.");
                     SetMode(OperationalMode.Frost);
                 }
             });
@@ -171,7 +171,7 @@ namespace JotunnSystem.Services
             RunPowerCfg("SCHEME_MAX");
             SetPriority(ProcessPriorityClass.AboveNormal);
             ModeIntensity = 0.60f;
-            UpdateStatus("Tusk: Arcane sustain active.");
+            UpdateStatus("Sustain Channel: Long-session sustain active.");
 
             StartAdaptiveLoop(() =>
             {
@@ -181,11 +181,11 @@ namespace JotunnSystem.Services
                 ModeIntensity = Clamp(sustain, 0.35f, 0.90f);
 
                 if (v.CpuTemperature > 78f || v.GpuTemperature > 74f)
-                    UpdateStatus("Tusk: Sustained load under watch.");
+                    UpdateStatus("Sustain Channel: Sustained load under watch.");
 
                 if (v.CpuTemperature > 82f || v.GpuTemperature > 78f)
                 {
-                    UpdateStatus("Tusk: Arcane sustain broken. Returning to Bellion.");
+                    UpdateStatus("Sustain Channel: Sustain state interrupted. Returning to JOTUNN core.");
                     SetMode(OperationalMode.Frost);
                 }
             });
@@ -243,7 +243,7 @@ namespace JotunnSystem.Services
             }
             catch
             {
-                UpdateStatus("Ashborn: Unable to change process priority.");
+                UpdateStatus("Fenrir Forgeworks: Unable to change process priority.");
             }
         }
 
@@ -261,7 +261,7 @@ namespace JotunnSystem.Services
             }
             catch
             {
-                UpdateStatus("Ashborn: Unable to change power profile.");
+                UpdateStatus("Fenrir Forgeworks: Unable to change power profile.");
             }
         }
 

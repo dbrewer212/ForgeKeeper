@@ -10,16 +10,16 @@ namespace JotunnSystem
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             if (value is not OperationalMode mode)
-                return "SHADOW AUTHORITY: STABLE";
+                return "JOTUNN COMMAND CORE STABLE";
 
             return mode switch
             {
-                OperationalMode.Frost => "PRIMARY SHADOW: BELLION ACTIVE",
-                OperationalMode.Forge => "AERIAL SHADOW: KAISEL ACTIVE",
-                OperationalMode.Thunder => "SWARM SHADOW: BERU ACTIVE",
-                OperationalMode.Storm => "BLADE SHADOW: IGRIS ACTIVE",
-                OperationalMode.Anvil => "ARCANE SHADOW: TUSK ACTIVE",
-                _ => "SHADOW AUTHORITY: STABLE"
+                OperationalMode.Frost => "COMMAND CORE ONLINE",
+                OperationalMode.Forge => "EFFICIENCY CHANNEL ONLINE",
+                OperationalMode.Thunder => "PERFORMANCE WATCH ONLINE",
+                OperationalMode.Storm => "PRECISION WATCH ONLINE",
+                OperationalMode.Anvil => "SUSTAIN CHANNEL ONLINE",
+                _ => "JOTUNN COMMAND CORE STABLE"
             };
         }
 
