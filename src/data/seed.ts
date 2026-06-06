@@ -16,7 +16,7 @@ export const seedProducts: Product[] = [
   {
     id: "P1",
     name: "Controller Stand",
-    tier: "Hero",
+    tier: "ForgeTech",
     line: "ForgeTech",
     category: "Controller Stand",
     collection: "ForgeTech Lane",
@@ -29,12 +29,12 @@ export const seedProducts: Product[] = [
     productImagePath: "/assets/products/controller-stand.png",
     conceptImagePath: "/assets/concepts/controller-stand-concept.png",
     supportedRealmVariants: ["Midgard", "Svartalfheim", "Asgard"],
-    notes: "Primary hero product",
+    notes: "Primary ForgeTech product",
   },
   {
     id: "P2",
     name: "Cable Organizer",
-    tier: "Utility",
+    tier: "ForgeTech",
     line: "ForgeTech",
     category: "Cable Organizer",
     collection: "ForgeTech Lane",
@@ -47,7 +47,7 @@ export const seedProducts: Product[] = [
     productImagePath: "/assets/products/cable-organizer.png",
     conceptImagePath: "/assets/concepts/cable-organizer-concept.png",
     supportedRealmVariants: [],
-    notes: "Utility fast print",
+    notes: "ForgeTech utility fast print",
   },
 ];
 
@@ -63,7 +63,7 @@ export const seedConcepts: ConceptSpec[] = [
     title: "Controller Stand Concept Spec",
     imageName: "/assets/concepts/controller-stand-concept.png",
     measurements: "Track overall footprint, controller cradle width, cable pass-through, and base height.",
-    description: "ForgeTech hero item with optional realm styling. Use this spec for listing content and variant planning.",
+    description: "ForgeTech pillar item with optional realm styling. Use this spec for listing content and variant planning.",
     notes: "Concept drives STL association and future variant image planning.",
     linkedStlId: "STL-P1-PRIMARY",
   },
@@ -120,12 +120,12 @@ export const seedCollections: CollectionRecord[] = [
 ];
 
 export const seedReleases: ReleaseRecord[] = [
-  { id: "R1", name: "Wave 01 Deskworks", wave: "Wave 01", targetDate: "2025-06-01", status: "Scheduled", productIds: ["P2"], notes: "Utility launch" },
+  { id: "R1", name: "Wave 01 Deskworks", wave: "Wave 01", targetDate: "2025-06-01", status: "Scheduled", productIds: ["P2"], notes: "ForgeTech launch" },
 ];
 
 export const seedOrders: OrderRecord[] = [
-  { id: "ORD-1001", productId: "P1", filamentId: "F1", materialGrams: 110, customer: "Rune Workshop", contact: "", quantity: 2, dueDate: "May 26, 2026", status: "Printing", priority: "High", paid: true, tracking: "", printerId: "PR1", estimatedPrintHours: 6.5, laborHours: 1, laborRate: 18, machineWatts: 280, electricityRate: 0.203, packagingCost: 1.25, otherCost: 0.5, quotedPrice: 64, notes: "Batch for featured display.", materialConsumed: false },
-  { id: "ORD-1002", productId: "P2", filamentId: "F2", materialGrams: 22, customer: "Shelf & Steel", contact: "", quantity: 4, dueDate: "May 28, 2026", status: "Queued", priority: "Normal", paid: false, tracking: "", printerId: undefined, estimatedPrintHours: 1.4, laborHours: 0.5, laborRate: 18, machineWatts: 250, electricityRate: 0.203, packagingCost: 1.25, otherCost: 0.5, quotedPrice: 48, notes: "Utility reorder.", materialConsumed: false },
+  { id: "ORD-1001", productId: "P1", filamentId: "F1", materialGrams: 110, customer: "Rune Workshop", contact: "", customerEmail: "", customerPhone: "", orderType: "Catalog Order", requestSource: "Admin", depositRequired: true, depositAmount: 25, depositPaid: true, depositStatus: "Paid in Full", quantity: 2, dueDate: "May 26, 2026", status: "Printing", priority: "High", paid: true, tracking: "", printerId: "PR1", estimatedPrintHours: 6.5, laborHours: 1, laborRate: 18, machineWatts: 280, electricityRate: 0.203, packagingCost: 1.25, otherCost: 0.5, quotedPrice: 64, notes: "Batch for featured display.", materialConsumed: false },
+  { id: "ORD-1002", productId: "P2", filamentId: "F2", materialGrams: 22, customer: "Shelf & Steel", contact: "", customerEmail: "", customerPhone: "", orderType: "Catalog Order", requestSource: "Admin", depositRequired: true, depositAmount: 25, depositPaid: false, depositStatus: "Awaiting Deposit", quantity: 4, dueDate: "May 28, 2026", status: "Queued", priority: "Normal", paid: false, tracking: "", printerId: undefined, estimatedPrintHours: 1.4, laborHours: 0.5, laborRate: 18, machineWatts: 250, electricityRate: 0.203, packagingCost: 1.25, otherCost: 0.5, quotedPrice: 48, notes: "ForgeTech reorder.", materialConsumed: false },
 ];
 
 export const seedFilament: FilamentRecord[] = [

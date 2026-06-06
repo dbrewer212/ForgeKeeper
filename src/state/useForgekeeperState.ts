@@ -47,12 +47,29 @@ const seedData: AppData = {
   realmMaterials: seedRealmMaterials,
 };
 
+function normalizeProductTier(tier: unknown): Product["tier"] {
+  if (tier === "Foundry" || tier === "Relics" || tier === "ForgeTech" || tier === "Reforged") {
+    return tier;
+  }
+
+  return "ForgeTech";
+}
+
+function normalizePlanningTier(tier: unknown): PlannedPrototype["tier"] {
+  if (tier === "Foundry" || tier === "Relics" || tier === "ForgeTech" || tier === "Reforged") {
+    return tier;
+  }
+
+  return "ForgeTech";
+}
+
 function hydrateData(): AppData {
   const stored = loadStoredData();
   if (!stored) return seedData;
   return {
     products: (stored.products ?? seedData.products).map((product) => ({
       ...product,
+      tier: normalizeProductTier(product.tier),
       productImagePath: product.productImagePath ?? "",
       conceptImagePath: product.conceptImagePath ?? "",
       supportedRealmVariants: product.supportedRealmVariants ?? [],
@@ -89,6 +106,15 @@ function hydrateData(): AppData {
       materialGrams: order.materialGrams ?? (stored.products ?? seedData.products).find((p) => p.id === order.productId)?.estimatedFilamentGrams ?? 0,
       electricityRate: order.electricityRate ?? defaultSettings.electricityRate,
       materialConsumed: order.materialConsumed ?? false,
+      customerEmail: order.customerEmail ?? "",
+      customerPhone: order.customerPhone ?? "",
+      orderType: order.orderType ?? "Catalog Order",
+      requestSource: order.requestSource ?? "Admin",
+      depositRequired: order.depositRequired ?? true,
+      depositAmount: order.depositAmount ?? 25,
+      depositPaid: order.depositPaid ?? order.paid ?? false,
+      depositStatus: order.depositStatus ?? (order.paid ? "Paid in Full" : "Awaiting Deposit"),
+      status: order.status ?? "Inquiry",
     })),
     filament: (stored.filament ?? seedData.filament).map((item) => ({
       ...item,
@@ -101,9 +127,15 @@ function hydrateData(): AppData {
     })),
     maintenance: stored.maintenance ?? [],
     settings: { ...defaultExternalTools, ...defaultSettings, ...(stored.settings ?? {}) },
-    prototypes: stored.prototypes ?? seedData.prototypes,
+    prototypes: (stored.prototypes ?? seedData.prototypes).map((prototype) => ({
+      ...prototype,
+      tier: normalizePlanningTier(prototype.tier),
+    })),
     plannedFilament: stored.plannedFilament ?? seedData.plannedFilament,
-    productPlanning: stored.productPlanning ?? seedData.productPlanning,
+    productPlanning: (stored.productPlanning ?? seedData.productPlanning).map((plan) => ({
+      ...plan,
+      tier: normalizePlanningTier(plan.tier),
+    })),
     realmMaterials: stored.realmMaterials ?? seedData.realmMaterials,
   };
 }
@@ -124,7 +156,7 @@ function productName(products: Product[], id: string): string {
 }
 
 export function useForgekeeperState() {
-  const initial = hydrateData();
+  const initial = useMemo(() => hydrateData(), []);
 
   const [view, setView] = useState<ViewKey>("dashboard");
   const [products, setProducts] = useState<Product[]>(initial.products);
@@ -236,6 +268,14 @@ export function useForgekeeperState() {
       materialGrams: product.estimatedFilamentGrams,
       customer: "Pricing Preview",
       contact: "",
+      customerEmail: "",
+      customerPhone: "",
+      orderType: "Catalog Order",
+      requestSource: "Admin",
+      depositRequired: true,
+      depositAmount: 25,
+      depositPaid: false,
+      depositStatus: "Awaiting Deposit",
       quantity: 1,
       dueDate: "",
       status: "Queued",
@@ -310,7 +350,7 @@ export function useForgekeeperState() {
     setProducts((prev) => [{
       id,
       name: newProductName.trim(),
-      tier: "Hero",
+      tier: "ForgeTech",
       line: "ForgeTech",
       category: "Accessory",
       collection: collections[0]?.name || "Unassigned",
@@ -517,9 +557,17 @@ export function useForgekeeperState() {
       materialGrams: selectedProduct.estimatedFilamentGrams,
       customer: newOrderCustomer.trim(),
       contact: "",
+      customerEmail: "",
+      customerPhone: "",
+      orderType: "Catalog Order",
+      requestSource: "Admin",
+      depositRequired: true,
+      depositAmount: 25,
+      depositPaid: false,
+      depositStatus: "Awaiting Deposit",
       quantity: 1,
       dueDate: "",
-      status: "Queued",
+      status: "Inquiry",
       priority: "Normal",
       paid: false,
       tracking: "",
@@ -555,6 +603,13 @@ export function useForgekeeperState() {
         const printer = printers.find((item) => item.id === patch.printerId);
         next.machineWatts = printer?.watts ?? settings.machineWatts;
         if (next.status === "Queued") next.status = "Printing";
+      }
+      if (patch.depositPaid !== undefined) {
+        next.depositStatus = patch.depositPaid ? "Deposit Received" : "Awaiting Deposit";
+      }
+      if (patch.paid !== undefined && patch.paid) {
+        next.depositPaid = true;
+        next.depositStatus = "Paid in Full";
       }
       return next;
     }));

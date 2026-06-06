@@ -21,7 +21,7 @@ export type PlannedPrototype = {
   productName: string;
   family: string;
   collection: string;
-  tier: "Hero" | "Utility";
+  tier: "Foundry" | "Relics" | "ForgeTech" | "Reforged";
   realm?: string;
   status: PrototypeStatus;
   priority: PrototypePriority;
@@ -56,7 +56,7 @@ export type ProductPlanningRecord = {
   productFamily: string;
   baseProduct: string;
   collection: string;
-  tier: "Hero" | "Utility";
+  tier: "Foundry" | "Relics" | "ForgeTech" | "Reforged";
   sharedChassis: "Yes" | "No" | "Partial";
   coreFunction: string;
   realmVariantSupport: "Yes" | "No" | "Optional";

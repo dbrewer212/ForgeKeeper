@@ -1,9 +1,12 @@
 import type { PlannedFilament, PlannedPrototype, ProductPlanningRecord, RealmMaterialReference } from "./planning";
 
-export type ProductTier = "Hero" | "Utility";
+export type ProductPillar = "Foundry" | "Relics" | "ForgeTech" | "Reforged";
+export type ProductTier = ProductPillar;
 export type ProductLine = "ForgeTech" | "Foundry" | "Relics of the Nine Realms" | "Runehallow Relics";
 export type ProductStatus = "Concept" | "Prototype" | "Active" | "Production" | "Archived";
-export type OrderStatus = "Queued" | "Printing" | "Finishing" | "Packed" | "Shipped";
+export type OrderStatus = "Inquiry" | "Estimate" | "Awaiting Deposit" | "Queued" | "Production" | "Finishing" | "Completed" | "Voided" | "Printing" | "Packed" | "Shipped";
+export type OrderType = "Catalog Order" | "Custom Request";
+export type DepositStatus = "Not Requested" | "Awaiting Deposit" | "Deposit Received" | "Paid in Full" | "Waived" | "Refunded";
 export type OrderPriority = "Low" | "Normal" | "High" | "Rush";
 export type ReleaseStatus = "Planning" | "Scheduled" | "Live";
 export type FilamentMaterial = "PLA" | "PLA+" | "PETG" | "ABS" | "TPU";
@@ -118,6 +121,14 @@ export type OrderRecord = {
   materialGrams?: number;
   customer: string;
   contact: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  orderType: OrderType;
+  requestSource: "Admin" | "Customer Catalog" | "Event" | "Manual";
+  depositRequired: boolean;
+  depositAmount: number;
+  depositPaid: boolean;
+  depositStatus: DepositStatus;
   quantity: number;
   dueDate: string;
   status: OrderStatus;

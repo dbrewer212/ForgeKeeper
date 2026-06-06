@@ -8,7 +8,7 @@ import { Textarea } from "../../components/ui/Textarea";
 import { money } from "../../lib/format";
 import { inventoryState, pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
-import type { OrderStatus, Product, ProductLine, ProductStatus, ProductTab, ProductTier, ProductVariant, RealmVariant } from "../../types/domain";
+import type { DepositStatus, OrderStatus, OrderType, Product, ProductLine, ProductStatus, ProductTab, ProductPillar, ProductVariant, RealmVariant } from "../../types/domain";
 
 const productTabs: ProductTab[] = ["overview", "stls", "concepts", "variants", "orders"];
 const realmOptions: RealmVariant[] = ["Midgard", "Alfheim", "Svartalfheim", "Vanaheim", "Asgard", "Jotunheim", "Muspelheim", "Niflheim", "Helheim"];
@@ -195,10 +195,12 @@ function ProductEditor({ state }: { state: ForgekeeperState }) {
           <Field label="Category">
             <Input value={product.category} onChange={(e) => state.updateProduct(product.id, { category: e.target.value })} />
           </Field>
-          <Field label="Tier">
-            <Select value={product.tier} onChange={(e) => state.updateProduct(product.id, { tier: e.target.value as ProductTier })}>
-              <option value="Hero">Hero</option>
-              <option value="Utility">Utility</option>
+          <Field label="Pillar">
+            <Select value={product.tier} onChange={(e) => state.updateProduct(product.id, { tier: e.target.value as ProductPillar })}>
+              <option value="Foundry">Foundry</option>
+              <option value="Relics">Relics</option>
+              <option value="ForgeTech">ForgeTech</option>
+              <option value="Reforged">Reforged</option>
             </Select>
           </Field>
           <Field label="Status">
@@ -247,7 +249,7 @@ function ProductEditor({ state }: { state: ForgekeeperState }) {
 
       <Card title="Realm Variant Planning">
         <div className="mb-3 text-sm text-slate-400">
-          Hero products can carry realm variants. Utility products can stay blank unless you want variants later.
+          Pillar products can carry realm variants when the design supports them. Leave variants blank for simple products until they need them.
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           {realmOptions.map((realm) => {
@@ -665,20 +667,68 @@ function ProductOrdersPanel({ state }: { state: ForgekeeperState }) {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="font-semibold text-slate-100">{order.customer}</div>
-                  <div className="mt-1 text-sm text-slate-400">Quoted {money(order.quotedPrice)} · Cost {money(state.getCostBreakdownForOrder(order).total)} · Suggested {money(state.getCostBreakdownForOrder(order).suggestedPrice)}</div>
+                  <div className="mt-1 text-sm text-slate-400">
+                    {order.orderType} · {order.depositStatus} · Quoted {money(order.quotedPrice)} · Cost {money(state.getCostBreakdownForOrder(order).total)} · Suggested {money(state.getCostBreakdownForOrder(order).suggestedPrice)}
+                  </div>
                 </div>
                 <span className={`rounded-full border px-3 py-1 text-xs ${pillClass(order.paid ? "Paid" : order.status)}`}>{order.paid ? "Paid" : order.status}</span>
               </div>
 
+              <div className="mt-4 rounded-2xl border border-amber-500/15 bg-amber-500/5 p-3 text-xs leading-5 text-slate-300">
+                Commission foundation: customer info, order type, deposit requirement, and request source are now tracked here. Production should not begin until the deposit status is ready.
+              </div>
+
               <div className="mt-4 grid gap-3 md:grid-cols-4">
+                <Field label="Order Type">
+                  <Select value={order.orderType} onChange={(e) => state.updateOrder(order.id, { orderType: e.target.value as OrderType })}>
+                    <option value="Catalog Order">Catalog Order</option>
+                    <option value="Custom Request">Custom Request</option>
+                  </Select>
+                </Field>
+                <Field label="Request Source">
+                  <Select value={order.requestSource} onChange={(e) => state.updateOrder(order.id, { requestSource: e.target.value as any })}>
+                    <option value="Admin">Admin</option>
+                    <option value="Customer Catalog">Customer Catalog</option>
+                    <option value="Event">Event</option>
+                    <option value="Manual">Manual</option>
+                  </Select>
+                </Field>
                 <Field label="Status">
                   <Select value={order.status} onChange={(e) => state.updateOrder(order.id, { status: e.target.value as OrderStatus })}>
+                    <option value="Inquiry">Inquiry</option>
+                    <option value="Estimate">Estimate</option>
+                    <option value="Awaiting Deposit">Awaiting Deposit</option>
                     <option value="Queued">Queued</option>
-                    <option value="Printing">Printing</option>
+                    <option value="Production">Production</option>
                     <option value="Finishing">Finishing</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Voided">Voided</option>
+                    <option value="Printing">Printing</option>
                     <option value="Packed">Packed</option>
                     <option value="Shipped">Shipped</option>
                   </Select>
+                </Field>
+                <Field label="Deposit Status">
+                  <Select value={order.depositStatus} onChange={(e) => state.updateOrder(order.id, { depositStatus: e.target.value as DepositStatus, depositPaid: e.target.value === "Deposit Received" || e.target.value === "Paid in Full" })}>
+                    <option value="Not Requested">Not Requested</option>
+                    <option value="Awaiting Deposit">Awaiting Deposit</option>
+                    <option value="Deposit Received">Deposit Received</option>
+                    <option value="Paid in Full">Paid in Full</option>
+                    <option value="Waived">Waived</option>
+                    <option value="Refunded">Refunded</option>
+                  </Select>
+                </Field>
+                <Field label="Customer Contact">
+                  <Input value={order.contact} onChange={(e) => state.updateOrder(order.id, { contact: e.target.value })} placeholder="Preferred contact" />
+                </Field>
+                <Field label="Customer Email">
+                  <Input value={order.customerEmail || ""} onChange={(e) => state.updateOrder(order.id, { customerEmail: e.target.value })} placeholder="customer@email.com" />
+                </Field>
+                <Field label="Customer Phone">
+                  <Input value={order.customerPhone || ""} onChange={(e) => state.updateOrder(order.id, { customerPhone: e.target.value })} placeholder="Phone number" />
+                </Field>
+                <Field label="Deposit Amount">
+                  <Input type="number" min={0} step="0.01" value={order.depositAmount} onChange={(e) => state.updateOrder(order.id, { depositAmount: Number(e.target.value), depositRequired: Number(e.target.value) > 0 })} />
                 </Field>
                 <Field label="Printer">
                   <Select value={order.printerId || ""} onChange={(e) => state.updateOrder(order.id, { printerId: e.target.value || undefined })}>
@@ -709,6 +759,7 @@ function ProductOrdersPanel({ state }: { state: ForgekeeperState }) {
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button variant="ghost" onClick={() => state.updateOrder(order.id, { quotedPrice: Number(state.getCostBreakdownForOrder(order).suggestedPrice.toFixed(2)) })}>Use Suggested Price</Button>
+                <Button variant="ghost" onClick={() => state.updateOrder(order.id, { depositPaid: !order.depositPaid })}>{order.depositPaid ? "Mark Deposit Pending" : "Mark Deposit Received"}</Button>
                 <Button variant="ghost" onClick={() => state.updateOrder(order.id, { paid: !order.paid })}>{order.paid ? "Mark Unpaid" : "Mark Paid"}</Button>
                 <Button variant="danger" onClick={() => state.removeOrder(order.id)}>Remove Order</Button>
               </div>
