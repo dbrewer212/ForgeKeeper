@@ -16,8 +16,13 @@ const navItems: NavItem[] = [
   },
   {
     key: "catalog",
-    label: "Catalog",
+    label: "Admin Catalog",
     description: "Products and assets",
+  },
+  {
+    key: "customerCatalog",
+    label: "Customer Catalog",
+    description: "Browse and request",
   },
   {
     key: "planning",

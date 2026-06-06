@@ -4,6 +4,7 @@ export type ProductPillar = "Foundry" | "Relics" | "ForgeTech" | "Reforged";
 export type ProductTier = ProductPillar;
 export type ProductLine = "ForgeTech" | "Foundry" | "Relics of the Nine Realms" | "Runehallow Relics";
 export type ProductStatus = "Concept" | "Prototype" | "Active" | "Production" | "Archived";
+export type ProductVisibility = "Internal" | "Concept" | "Preorder" | "Available" | "Commission Available" | "Archived";
 export type OrderStatus = "Inquiry" | "Estimate" | "Awaiting Deposit" | "Queued" | "Production" | "Finishing" | "Completed" | "Voided" | "Printing" | "Packed" | "Shipped";
 export type OrderType = "Catalog Order" | "Custom Request";
 export type DepositStatus = "Not Requested" | "Awaiting Deposit" | "Deposit Received" | "Paid in Full" | "Waived" | "Refunded";
@@ -14,7 +15,7 @@ export type PrinterStatus = "Available" | "Printing" | "Maintenance" | "Offline"
 export type ProductTab = "overview" | "stls" | "concepts" | "variants" | "orders";
 export type AssetStatus = "Planned" | "Linked" | "Needs Update" | "Archived";
 export type SlicerKey = "orca" | "anycubic";
-export type ViewKey = "dashboard" | "catalog" | "collections" | "releases" | "orders" | "filament" | "printers" | "planning" | "reports" | "settings";
+export type ViewKey = "dashboard" | "catalog" | "customerCatalog" | "collections" | "releases" | "orders" | "filament" | "printers" | "planning" | "reports" | "settings";
 export type QuickActionKey = "newProduct" | "newOrder" | "newFilament" | "newPrinter";
 
 export type RealmVariant =
@@ -36,6 +37,7 @@ export type Product = {
   category: string;
   collection: string;
   status: ProductStatus;
+  visibility: ProductVisibility;
   targetPrice: number;
   estimatedFilamentGrams: number;
   estimatedPrintHours: number;

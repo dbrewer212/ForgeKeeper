@@ -2,6 +2,7 @@ import { useForgekeeperState } from "./state/useForgekeeperState";
 import { Sidebar } from "./components/layout/Sidebar";
 import { DashboardView } from "./features/dashboard/DashboardView";
 import { CatalogView } from "./features/catalog/CatalogView";
+import { CustomerCatalogView } from "./features/customerCatalog/CustomerCatalogView";
 import { OrdersView } from "./features/orders/OrdersView";
 import { FilamentView } from "./features/filament/FilamentView";
 import { PrintersView } from "./features/printers/PrintersView";
@@ -18,6 +19,8 @@ export default function App() {
         return <DashboardView state={state} />;
       case "catalog":
         return <CatalogView state={state} />;
+      case "customerCatalog":
+        return <CustomerCatalogView state={state} />;
       case "orders":
         return <OrdersView state={state} />;
       case "filament":

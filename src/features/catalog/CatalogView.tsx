@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import { AssetLaunchpad } from "../../components/assets/AssetLaunchpad";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -8,10 +8,41 @@ import { Textarea } from "../../components/ui/Textarea";
 import { money } from "../../lib/format";
 import { inventoryState, pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
-import type { DepositStatus, OrderStatus, OrderType, Product, ProductLine, ProductStatus, ProductTab, ProductPillar, ProductVariant, RealmVariant } from "../../types/domain";
+import type { DepositStatus, OrderStatus, OrderType, Product, ProductLine, ProductStatus, ProductTab, ProductPillar, ProductVariant, ProductVisibility, RealmVariant } from "../../types/domain";
 
 const productTabs: ProductTab[] = ["overview", "stls", "concepts", "variants", "orders"];
 const realmOptions: RealmVariant[] = ["Midgard", "Alfheim", "Svartalfheim", "Vanaheim", "Asgard", "Jotunheim", "Muspelheim", "Niflheim", "Helheim"];
+const visibilityOptions: ProductVisibility[] = ["Internal", "Concept", "Preorder", "Available", "Commission Available", "Archived"];
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleImageUpload(event: ChangeEvent<HTMLInputElement>, onLoad: (dataUrl: string, file: File) => void) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+
+  try {
+    const dataUrl = await readFileAsDataUrl(file);
+    onLoad(dataUrl, file);
+  } catch (error) {
+    console.error("ForgeKeeper image upload failed", error);
+    window.alert("ForgeKeeper could not read that image file.");
+  }
+}
+
+function handleStlUpload(event: ChangeEvent<HTMLInputElement>, onLoad: (file: File) => void) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  onLoad(file);
+}
 
 export function CatalogView({ state }: { state: ForgekeeperState }) {
   const product = state.selectedProduct;
@@ -78,14 +109,17 @@ function CatalogRail({ state }: { state: ForgekeeperState }) {
                   <ProductThumb src={state.getProductDisplayImage(product)} alt={product.name} className="h-14 w-14 shrink-0" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-semibold text-slate-100">{product.name}</div>
-                    <div className="mt-1 truncate text-xs text-slate-500">{product.collection}</div>
+                    <div className="mt-1 truncate text-xs text-slate-500">{product.collection} · {product.visibility}</div>
                     {variantCount ? (
                       <div className="mt-2 text-[11px] text-amber-300">{variantCount} active variant records</div>
                     ) : product.supportedRealmVariants.length ? (
                       <div className="mt-2 text-[11px] text-amber-300">{product.supportedRealmVariants.length} planned realms</div>
                     ) : null}
                   </div>
-                  <span className={`rounded-full border px-2 py-1 text-[11px] ${pillClass(product.status)}`}>{product.status}</span>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className={`rounded-full border px-2 py-1 text-[11px] ${pillClass(product.status)}`}>{product.status}</span>
+                    <span className={`rounded-full border px-2 py-1 text-[10px] ${pillClass(product.visibility)}`}>{product.visibility}</span>
+                  </div>
                 </div>
 
                 <div className="mt-3 grid grid-cols-4 gap-2 text-center text-[11px] text-slate-400">
@@ -113,7 +147,12 @@ function ProductWorkspace({ state, product }: { state: ForgekeeperState; product
     <div className="space-y-6">
       <Card
         title="Product Command Center"
-        right={<span className={`rounded-full border px-3 py-1 text-xs ${pillClass(product.status)}`}>{product.status}</span>}
+        right={
+          <div className="flex flex-wrap gap-2">
+            <span className={`rounded-full border px-3 py-1 text-xs ${pillClass(product.status)}`}>{product.status}</span>
+            <span className={`rounded-full border px-3 py-1 text-xs ${pillClass(product.visibility)}`}>{product.visibility}</span>
+          </div>
+        }
       >
         <div className="grid gap-5 xl:grid-cols-[320px,1fr,360px]">
           <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-3">
@@ -130,6 +169,7 @@ function ProductWorkspace({ state, product }: { state: ForgekeeperState; product
               <div className="flex flex-wrap gap-2">
                 <span className={`rounded-full border px-3 py-1 text-xs ${pillClass(inventory)}`}>{inventory}</span>
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">{product.tier}</span>
+                <span className={`rounded-full border px-3 py-1 text-xs ${pillClass(product.visibility)}`}>{product.visibility}</span>
               </div>
             </div>
 
@@ -212,6 +252,13 @@ function ProductEditor({ state }: { state: ForgekeeperState }) {
               <option value="Archived">Archived</option>
             </Select>
           </Field>
+          <Field label="Customer Visibility">
+            <Select value={product.visibility} onChange={(e) => state.updateProduct(product.id, { visibility: e.target.value as ProductVisibility })}>
+              {visibilityOptions.map((visibility) => (
+                <option key={visibility} value={visibility}>{visibility}</option>
+              ))}
+            </Select>
+          </Field>
           <Field label="Product Line">
             <Select value={product.line} onChange={(e) => state.updateProduct(product.id, { line: e.target.value as ProductLine })}>
               <option value="ForgeTech">ForgeTech</option>
@@ -230,15 +277,28 @@ function ProductEditor({ state }: { state: ForgekeeperState }) {
           </Field>
           <Field label="Product Image Path" className="md:col-span-2">
             <Input value={product.productImagePath} onChange={(e) => state.updateProduct(product.id, { productImagePath: e.target.value })} placeholder="/assets/products/product-image.png" />
+            <input
+              type="file"
+              accept="image/*"
+              className="mt-2 block w-full rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2 text-xs text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-amber-400/15 file:px-3 file:py-1 file:text-amber-100"
+              onChange={(e) => handleImageUpload(e, (dataUrl) => state.updateProduct(product.id, { productImagePath: dataUrl }))}
+            />
           </Field>
           <Field label="Concept Image Path" className="md:col-span-2">
             <Input value={product.conceptImagePath} onChange={(e) => state.updateProduct(product.id, { conceptImagePath: e.target.value })} placeholder="/assets/concepts/product-concept.png" />
+            <input
+              type="file"
+              accept="image/*"
+              className="mt-2 block w-full rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2 text-xs text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-amber-400/15 file:px-3 file:py-1 file:text-amber-100"
+              onChange={(e) => handleImageUpload(e, (dataUrl) => state.updateProduct(product.id, { conceptImagePath: dataUrl }))}
+            />
           </Field>
         </div>
       </Card>
 
       <Card title="Production Snapshot">
         <div className="space-y-3">
+          <StatusRow label="Visibility" value={product.visibility} status={product.visibility} />
           <StatusRow label="Inventory" value={`${product.available}`} status={inventoryState(product.available, product.reorderPoint)} />
           <StatusRow label="STL Files" value={`${state.productStls.length}`} />
           <StatusRow label="Concept Specs" value={`${state.productConcepts.length}`} />
@@ -422,6 +482,15 @@ function StlPanel({ state }: { state: ForgekeeperState }) {
                       <option key={concept.id} value={concept.id}>{concept.title}</option>
                     ))}
                   </Select>
+                </Field>
+                <Field label="Upload / Link STL" className="md:col-span-3">
+                  <input
+                    type="file"
+                    accept=".stl,.3mf,.obj"
+                    className="block w-full rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2 text-xs text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-amber-400/15 file:px-3 file:py-1 file:text-amber-100"
+                    onChange={(e) => handleStlUpload(e, (file) => state.updateStl(stl.id, { fileName: file.name, filePath: file.name, assetStatus: "Linked" }))}
+                  />
+                  <div className="mt-2 text-xs text-slate-500">Browser mode stores the file name/reference. Tauri file-path linking can upgrade this later.</div>
                 </Field>
                 <Field label="Launch Actions" className="md:col-span-3">
                   <div className="flex flex-wrap gap-2">

@@ -55,6 +55,23 @@ function normalizeProductTier(tier: unknown): Product["tier"] {
   return "ForgeTech";
 }
 
+function normalizeProductVisibility(visibility: unknown, status?: Product["status"]): Product["visibility"] {
+  if (
+    visibility === "Internal" ||
+    visibility === "Concept" ||
+    visibility === "Preorder" ||
+    visibility === "Available" ||
+    visibility === "Commission Available" ||
+    visibility === "Archived"
+  ) {
+    return visibility;
+  }
+
+  if (status === "Archived") return "Archived";
+  if (status === "Concept") return "Concept";
+  return "Commission Available";
+}
+
 function normalizePlanningTier(tier: unknown): PlannedPrototype["tier"] {
   if (tier === "Foundry" || tier === "Relics" || tier === "ForgeTech" || tier === "Reforged") {
     return tier;
@@ -70,6 +87,7 @@ function hydrateData(): AppData {
     products: (stored.products ?? seedData.products).map((product) => ({
       ...product,
       tier: normalizeProductTier(product.tier),
+      visibility: normalizeProductVisibility((product as Partial<Product>).visibility, product.status),
       productImagePath: product.productImagePath ?? "",
       conceptImagePath: product.conceptImagePath ?? "",
       supportedRealmVariants: product.supportedRealmVariants ?? [],
@@ -224,7 +242,7 @@ export function useForgekeeperState() {
   const filteredProducts = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     if (!query) return products;
-    return products.filter((p) => [p.name, p.collection, p.category, p.line, p.status].join(" ").toLowerCase().includes(query));
+    return products.filter((p) => [p.name, p.collection, p.category, p.line, p.status, p.tier, p.visibility].join(" ").toLowerCase().includes(query));
   }, [products, searchTerm]);
 
   const selectedProduct = products.find((p) => p.id === selectedProductId) || products[0];
@@ -355,6 +373,7 @@ export function useForgekeeperState() {
       category: "Accessory",
       collection: collections[0]?.name || "Unassigned",
       status: "Concept",
+      visibility: "Concept",
       targetPrice: 0,
       estimatedFilamentGrams: 0,
       estimatedPrintHours: 0,
@@ -587,6 +606,73 @@ export function useForgekeeperState() {
     clearQuickAction("newOrder");
   }
 
+  function createCustomerCatalogRequest(input: {
+    productId?: string;
+    customer: string;
+    customerEmail: string;
+    customerPhone: string;
+    contact: string;
+    orderType: OrderRecord["orderType"];
+    quantity: number;
+    notes: string;
+  }) {
+    const fallbackProduct = products.find((product) => product.visibility === "Available" || product.visibility === "Commission Available" || product.visibility === "Preorder") ?? products[0];
+    const product = products.find((item) => item.id === input.productId) ?? fallbackProduct;
+
+    if (!product) {
+      window.alert("No product is available to attach this request to yet.");
+      return;
+    }
+
+    if (!input.customer.trim()) {
+      window.alert("Customer name is required.");
+      return;
+    }
+
+    if (!input.customerEmail.trim() && !input.customerPhone.trim()) {
+      window.alert("Add at least one contact method: email or phone.");
+      return;
+    }
+
+    const isCustom = input.orderType === "Custom Request";
+
+    setOrders((prev) => [{
+      id: uid("REQ"),
+      productId: product.id,
+      filamentId: filament[0]?.id,
+      materialGrams: product.estimatedFilamentGrams,
+      customer: input.customer.trim(),
+      contact: input.contact.trim(),
+      customerEmail: input.customerEmail.trim(),
+      customerPhone: input.customerPhone.trim(),
+      orderType: input.orderType,
+      requestSource: "Customer Catalog",
+      depositRequired: true,
+      depositAmount: 25,
+      depositPaid: false,
+      depositStatus: "Awaiting Deposit",
+      quantity: Math.max(1, input.quantity || 1),
+      dueDate: "",
+      status: "Inquiry",
+      priority: isCustom ? "High" : "Normal",
+      paid: false,
+      tracking: "",
+      printerId: undefined,
+      estimatedPrintHours: product.estimatedPrintHours || 0,
+      laborHours: isCustom ? 1 : 0.5,
+      laborRate: settings.laborRate,
+      machineWatts: printers[0]?.watts ?? settings.machineWatts,
+      electricityRate: settings.electricityRate,
+      packagingCost: settings.packagingCost,
+      otherCost: settings.otherCost,
+      quotedPrice: product.targetPrice || 0,
+      notes: input.notes.trim(),
+      materialConsumed: false,
+    }, ...prev]);
+
+    setView("orders");
+  }
+
   function updateOrder(id: string, patch: Partial<OrderRecord>) {
     setOrders((prev) => prev.map((order) => {
       if (order.id !== id) return order;
@@ -783,26 +869,65 @@ export function useForgekeeperState() {
     setSettings((prev) => ({ ...prev, ...patch }));
   }
 
-  function exportProductsCsv() { downloadCsv("products.csv", products); }
+  function exportProductsCsv() {
+    downloadCsv("forgekeeper-products.csv", products.map((product) => ({
+      ...product,
+      primaryStl: getPrimaryStlForProduct(product.id)?.name ?? "",
+      primaryStlFile: getPrimaryStlForProduct(product.id)?.filePath || getPrimaryStlForProduct(product.id)?.fileName || "",
+      latestConcept: getLatestConceptForProduct(product.id)?.title ?? "",
+      orderCount: orders.filter((order) => order.productId === product.id).length,
+      variantCount: variants.filter((variant) => variant.productId === product.id).length,
+      readyForCustomerCatalog: ["Available", "Commission Available", "Preorder"].includes(product.visibility) ? "Yes" : "No",
+    })));
+  }
   function exportStlsCsv() { downloadCsv("stls.csv", stls); }
   function exportConceptsCsv() { downloadCsv("concepts.csv", concepts); }
   function exportVariantsCsv() { downloadCsv("variants.csv", variants.map((variant) => ({ ...variant, productName: productName(products, variant.productId) }))); }
   function exportCollectionsCsv() { downloadCsv("collections.csv", collections); }
   function exportReleasesCsv() { downloadCsv("releases.csv", releases.map((r) => ({ ...r, productNames: r.productIds.map((id) => productName(products, id)).join(" | ") }))); }
-  function exportOrdersCsv() { downloadCsv("orders.csv", orders.map((order) => {
-    const breakdown = getCostBreakdownForOrder(order);
-    return {
-      ...order,
-      productName: productName(products, order.productId),
-      materialCost: breakdown.material.toFixed(2),
-      electricityCost: breakdown.electricity.toFixed(2),
-      laborCost: breakdown.labor.toFixed(2),
-      totalCost: breakdown.total.toFixed(2),
-      suggestedPrice: breakdown.suggestedPrice.toFixed(2),
-      profit: breakdown.profit.toFixed(2),
-      marginPercent: breakdown.marginPercent.toFixed(1),
-    };
-  })); }
+  function exportOrdersCsv() {
+    downloadCsv("forgekeeper-orders-trace.csv", orders.map((order) => {
+      const breakdown = getCostBreakdownForOrder(order);
+      const product = products.find((item) => item.id === order.productId);
+      return {
+        id: order.id,
+        productId: order.productId,
+        productName: product?.name ?? order.productId,
+        productPillar: product?.tier ?? "",
+        productVisibility: product?.visibility ?? "",
+        customer: order.customer,
+        customerEmail: order.customerEmail ?? "",
+        customerPhone: order.customerPhone ?? "",
+        preferredContact: order.contact ?? "",
+        orderType: order.orderType,
+        requestSource: order.requestSource,
+        status: order.status,
+        priority: order.priority,
+        depositRequired: order.depositRequired ? "Yes" : "No",
+        depositAmount: order.depositAmount.toFixed(2),
+        depositPaid: order.depositPaid ? "Yes" : "No",
+        depositStatus: order.depositStatus,
+        paidInFull: order.paid ? "Yes" : "No",
+        quantity: order.quantity,
+        quotedPrice: order.quotedPrice.toFixed(2),
+        dueDate: order.dueDate,
+        tracking: order.tracking,
+        filamentId: order.filamentId ?? "",
+        materialGrams: order.materialGrams ?? "",
+        materialConsumed: order.materialConsumed ? "Yes" : "No",
+        estimatedPrintHours: order.estimatedPrintHours,
+        laborHours: order.laborHours,
+        materialCost: breakdown.material.toFixed(2),
+        electricityCost: breakdown.electricity.toFixed(2),
+        laborCost: breakdown.labor.toFixed(2),
+        totalCost: breakdown.total.toFixed(2),
+        suggestedPrice: breakdown.suggestedPrice.toFixed(2),
+        profit: breakdown.profit.toFixed(2),
+        marginPercent: breakdown.marginPercent.toFixed(1),
+        notes: order.notes,
+      };
+    }));
+  }
   function exportFilamentCsv() { downloadCsv("filament.csv", filament); }
   function exportPrintersCsv() { downloadCsv("printers.csv", printers); }
   function exportMaintenanceCsv() { downloadCsv("maintenance.csv", maintenance); }
@@ -865,7 +990,7 @@ export function useForgekeeperState() {
     addVariant, updateVariant, removeVariant,
     addCollection, updateCollection, removeCollection, assignProductToCollection, setCollectionHero,
     addRelease, updateRelease, removeRelease, addProductToRelease, removeProductFromRelease,
-    addOrder, updateOrder, removeOrder, consumeFilamentForOrder,
+    addOrder, createCustomerCatalogRequest, updateOrder, removeOrder, consumeFilamentForOrder,
     addFilament, updateFilament, adjustFilament, removeFilament,
     addPrinter, updatePrinter, removePrinter,
     addMaintenance, updateMaintenance, removeMaintenance,
