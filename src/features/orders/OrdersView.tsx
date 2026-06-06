@@ -35,26 +35,7 @@ const depositStatuses: DepositStatus[] = [
   "Refunded",
 ];
 
-function getNextStatus(status: OrderStatus): OrderStatus {
-  const currentIndex = statuses.indexOf(status);
-  if (currentIndex < 0) return "Inquiry";
-  return statuses[Math.min(statuses.length - 2, currentIndex + 1)];
-}
-
-function appendReviewNote(existingNotes: string, note: string): string {
-  const timestamp = new Date().toLocaleString();
-  const entry = `[${timestamp}] ${note}`;
-  return existingNotes ? `${existingNotes}\n${entry}` : entry;
-}
-
 export function OrdersView({ state }: { state: ForgekeeperState }) {
-  const inquiryCount = state.orders.filter((order) => order.status === "Inquiry").length;
-  const awaitingDepositCount = state.orders.filter((order) => order.status === "Awaiting Deposit").length;
-  const queuedCount = state.orders.filter((order) => order.status === "Queued").length;
-  const depositNeededCount = state.orders.filter(
-    (order) => order.depositRequired && !order.depositPaid && order.status !== "Voided",
-  ).length;
-
   return (
     <div className="space-y-6">
       <Card
@@ -92,20 +73,6 @@ export function OrdersView({ state }: { state: ForgekeeperState }) {
         </div>
       </Card>
 
-      <Card title="Admin Review" right={<span className="text-xs text-slate-500">Commission control</span>}>
-        <div className="grid gap-3 md:grid-cols-4">
-          <ReviewMetric label="New Inquiries" value={inquiryCount} />
-          <ReviewMetric label="Awaiting Deposit" value={awaitingDepositCount} />
-          <ReviewMetric label="Deposit Needed" value={depositNeededCount} />
-          <ReviewMetric label="Queued Work" value={queuedCount} />
-        </div>
-
-        <div className="mt-4 rounded-2xl border border-sky-300/15 bg-sky-400/10 p-4 text-sm leading-6 text-slate-300">
-          Review path: approve inquiry, prepare estimate, request deposit, then
-          queue the work only after commitment is recorded.
-        </div>
-      </Card>
-
       <Card title="Forge Queue" right={<Button variant="ghost" onClick={state.exportOrdersCsv}>Export CSV</Button>}>
         <div className="grid gap-4 xl:grid-cols-4">
           {statuses.map((status) => {
@@ -130,42 +97,6 @@ export function OrdersView({ state }: { state: ForgekeeperState }) {
                         ? "Deposit Needed"
                         : "No Deposit";
 
-                    const approveInquiry = () => {
-                      state.updateOrder(order.id, {
-                        status: "Estimate",
-                        depositRequired: true,
-                        depositStatus: "Awaiting Deposit",
-                        notes: appendReviewNote(order.notes, "Inquiry approved for estimate review."),
-                      });
-                    };
-
-                    const markEstimateSent = () => {
-                      state.updateOrder(order.id, {
-                        status: "Awaiting Deposit",
-                        depositRequired: true,
-                        depositStatus: "Awaiting Deposit",
-                        quotedPrice: order.quotedPrice || Number(cost.suggestedPrice.toFixed(2)),
-                        notes: appendReviewNote(order.notes, "Estimate prepared/sent. Awaiting deposit."),
-                      });
-                    };
-
-                    const markDepositReceived = () => {
-                      state.updateOrder(order.id, {
-                        status: "Queued",
-                        depositRequired: true,
-                        depositPaid: true,
-                        depositStatus: "Deposit Received",
-                        notes: appendReviewNote(order.notes, "Deposit received. Request moved to queue."),
-                      });
-                    };
-
-                    const voidRequest = () => {
-                      state.updateOrder(order.id, {
-                        status: "Voided",
-                        notes: appendReviewNote(order.notes, "Request voided during admin review."),
-                      });
-                    };
-
                     return (
                       <div key={order.id} className="rounded-xl border border-white/10 bg-[#111722] p-3">
                         <div className="flex items-start justify-between gap-2">
@@ -173,6 +104,14 @@ export function OrdersView({ state }: { state: ForgekeeperState }) {
                             <div className="font-medium text-slate-100">{order.customer}</div>
                             <div className="mt-1 text-xs text-slate-500">
                               {product?.name || order.productId} · {order.orderType} · Quote {money(order.quotedPrice)}
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-2 py-1 text-[11px] text-amber-200">
+                                {order.orderType}
+                              </span>
+                              <span className="rounded-full border border-sky-300/20 bg-sky-400/10 px-2 py-1 text-[11px] text-sky-200">
+                                {order.requestSource || "Admin Intake"}
+                              </span>
                             </div>
                           </div>
 
@@ -218,37 +157,6 @@ export function OrdersView({ state }: { state: ForgekeeperState }) {
                             >
                               {order.materialConsumed ? "Material Consumed" : "Consume Filament"}
                             </Button>
-                          </div>
-                        </div>
-
-                        <div className="mt-3 rounded-xl border border-amber-300/15 bg-black/20 p-3">
-                          <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">
-                            Admin Review Actions
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {order.status === "Inquiry" ? (
-                              <Button className="h-8 px-3 text-xs" onClick={approveInquiry}>
-                                Approve for Estimate
-                              </Button>
-                            ) : null}
-
-                            {order.status === "Estimate" ? (
-                              <Button className="h-8 px-3 text-xs" onClick={markEstimateSent}>
-                                Mark Estimate Sent
-                              </Button>
-                            ) : null}
-
-                            {order.status === "Awaiting Deposit" ? (
-                              <Button className="h-8 px-3 text-xs" onClick={markDepositReceived}>
-                                Mark Deposit Received
-                              </Button>
-                            ) : null}
-
-                            {order.status !== "Completed" && order.status !== "Voided" ? (
-                              <Button variant="ghost" className="h-8 px-3 text-xs" onClick={voidRequest}>
-                                Void Request
-                              </Button>
-                            ) : null}
                           </div>
                         </div>
 
@@ -466,7 +374,7 @@ export function OrdersView({ state }: { state: ForgekeeperState }) {
                               className="h-8 px-3 text-xs"
                               onClick={() =>
                                 state.updateOrder(order.id, {
-                                  status: getNextStatus(order.status),
+                                  status: statuses[Math.min(statuses.length - 2, statuses.indexOf(order.status) + 1)],
                                 })
                               }
                             >
@@ -497,17 +405,6 @@ export function OrdersView({ state }: { state: ForgekeeperState }) {
           })}
         </div>
       </Card>
-    </div>
-  );
-}
-
-function ReviewMetric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
-      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-        {label}
-      </div>
-      <div className="mt-2 text-2xl font-black text-slate-50">{value}</div>
     </div>
   );
 }
