@@ -11,6 +11,8 @@ import type { OrderType, Product, ProductPillar } from "../../types/domain";
 
 const visibleStates = ["Available", "Commission Available", "Preorder"];
 const pillars: Array<"All" | ProductPillar> = ["All", "Foundry", "Relics", "ForgeTech", "Reforged"];
+const minimumDeposit = 25;
+const companyEmailPlaceholder = "orders@fenrirforgeworks.com";
 
 export function CustomerCatalogView({ state }: { state: ForgekeeperState }) {
   const [activePillar, setActivePillar] = useState<"All" | ProductPillar>("All");
@@ -31,19 +33,73 @@ export function CustomerCatalogView({ state }: { state: ForgekeeperState }) {
     });
   }, [activePillar, state.products]);
 
-  const selectedProduct = state.products.find((product) => product.id === selectedProductId) ?? visibleProducts[0];
+  const selectedProduct =
+    visibleProducts.find((product) => product.id === selectedProductId) ?? visibleProducts[0];
+
+  const trimmedCustomer = customer.trim();
+  const trimmedEmail = customerEmail.trim();
+  const trimmedPhone = customerPhone.trim();
+  const trimmedContact = contact.trim();
+  const trimmedNotes = notes.trim();
+  const validQuantity = Number.isFinite(quantity) && quantity >= 1;
+  const hasContactMethod = trimmedEmail.length > 0 || trimmedPhone.length > 0;
+  const needsProduct = orderType === "Catalog Order";
+  const hasProduct = !needsProduct || Boolean(selectedProduct?.id);
+  const needsNotes = orderType === "Custom Request";
+
+  const missingFields = [
+    !trimmedCustomer ? "customer name" : "",
+    !hasContactMethod ? "email or phone" : "",
+    !trimmedContact ? "preferred contact / event notes" : "",
+    !validQuantity ? "quantity" : "",
+    !hasProduct ? "design / product reference" : "",
+    needsNotes && !trimmedNotes ? "custom request notes" : "",
+  ].filter(Boolean);
+
+  const canSubmit = missingFields.length === 0 && (visibleProducts.length > 0 || orderType === "Custom Request");
 
   function submitRequest() {
+    if (!canSubmit) {
+      window.alert(`Please add the required information: ${missingFields.join(", ")}.`);
+      return;
+    }
+
+    const productLabel = selectedProduct?.name ?? "Custom request to be reviewed";
+    const depositTotal = minimumDeposit * quantity;
+    const confirmation = [
+      "Confirm Fenrir Forgeworks request:",
+      "",
+      `Request type: ${orderType}`,
+      `Design / Product: ${productLabel}`,
+      `Customer: ${trimmedCustomer}`,
+      `Email: ${trimmedEmail || "Not provided"}`,
+      `Phone: ${trimmedPhone || "Not provided"}`,
+      `Preferred contact / notes: ${trimmedContact}`,
+      `Quantity: ${quantity}`,
+      `Minimum deposit due: ${money(depositTotal)}`,
+      "",
+      "Deposit must be finalized with Fenrir Forgeworks or an authorized representative before production begins.",
+      "This submission records the request only and does not collect payment automatically.",
+      "",
+      "Submit this request to the Admin Orders queue?",
+    ].join("\n");
+
+    if (!window.confirm(confirmation)) return;
+
     state.createCustomerCatalogRequest({
-      productId: orderType === "Custom Request" ? selectedProduct?.id : selectedProductId || selectedProduct?.id,
-      customer,
-      customerEmail,
-      customerPhone,
-      contact,
+      productId: orderType === "Custom Request" ? selectedProduct?.id : selectedProduct?.id,
+      customer: trimmedCustomer,
+      customerEmail: trimmedEmail,
+      customerPhone: trimmedPhone,
+      contact: trimmedContact,
       orderType,
       quantity,
-      notes,
+      notes: trimmedNotes,
     });
+
+    window.alert(
+      `Request submitted. Minimum deposit due: ${money(depositTotal)}. Please finalize deposit with Fenrir Forgeworks before production begins.`
+    );
 
     setCustomer("");
     setCustomerEmail("");
@@ -54,7 +110,7 @@ export function CustomerCatalogView({ state }: { state: ForgekeeperState }) {
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr),380px]">
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr),420px]">
       <div className="space-y-6">
         <Card title="Customer Catalog">
           <div className="rounded-2xl border border-amber-300/15 bg-amber-400/10 p-5">
@@ -119,18 +175,28 @@ export function CustomerCatalogView({ state }: { state: ForgekeeperState }) {
       <Card title="Request Work">
         <div className="space-y-4">
           <div className="rounded-2xl border border-sky-300/15 bg-sky-400/10 p-4 text-sm leading-6 text-slate-300">
-            Minimum deposit starts at {money(25)}. This records the request only; payment collection remains manual for now.
+            Minimum deposit starts at {money(minimumDeposit)} per requested item. This records the request only;
+            payment must be finalized with Fenrir Forgeworks or an authorized representative before production begins.
           </div>
 
-          <Field label="Request Type">
+          <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 text-xs leading-5 text-slate-400">
+            Future communications email placeholder: <span className="text-slate-200">{companyEmailPlaceholder}</span>
+          </div>
+
+          <Field label="Request Type" required>
             <Select value={orderType} onChange={(e) => setOrderType(e.target.value as OrderType)}>
               <option value="Catalog Order">Catalog Order</option>
               <option value="Custom Request">Custom Request</option>
             </Select>
           </Field>
 
-          <Field label="Design / Product Reference">
-            <Select value={selectedProduct?.id ?? ""} onChange={(e) => setSelectedProductId(e.target.value)}>
+          <Field label="Design / Product Reference" required={orderType === "Catalog Order"}>
+            <Select
+              value={selectedProduct?.id ?? ""}
+              onChange={(e) => setSelectedProductId(e.target.value)}
+              disabled={visibleProducts.length === 0}
+            >
+              {visibleProducts.length === 0 ? <option value="">No visible products</option> : null}
               {visibleProducts.map((product) => (
                 <option key={product.id} value={product.id}>
                   {product.name} · {product.visibility}
@@ -139,27 +205,26 @@ export function CustomerCatalogView({ state }: { state: ForgekeeperState }) {
             </Select>
           </Field>
 
-          <Field label="Customer Name">
+          <Field label="Customer Name" required>
             <Input value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Customer name" />
           </Field>
 
-          <Field label="Email">
-            <Input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="customer@email.com" />
+          <Field label="Email or Phone" required>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="customer@email.com" />
+              <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Phone number" />
+            </div>
           </Field>
 
-          <Field label="Phone">
-            <Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="Phone number" />
-          </Field>
-
-          <Field label="Preferred Contact / Event Notes">
+          <Field label="Preferred Contact / Event Notes" required>
             <Input value={contact} onChange={(e) => setContact(e.target.value)} placeholder="Text preferred, event pickup, etc." />
           </Field>
 
-          <Field label="Quantity">
+          <Field label="Quantity" required>
             <Input type="number" min={1} value={quantity} onChange={(e) => setQuantity(Number(e.target.value))} />
           </Field>
 
-          <Field label="Request Notes">
+          <Field label="Request Notes" required={orderType === "Custom Request"}>
             <Textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -167,8 +232,18 @@ export function CustomerCatalogView({ state }: { state: ForgekeeperState }) {
             />
           </Field>
 
-          <Button className="w-full" onClick={submitRequest} disabled={visibleProducts.length === 0}>
-            Submit Request to Admin Queue
+          <div className="rounded-2xl border border-amber-300/15 bg-amber-400/10 p-4 text-sm leading-6 text-slate-300">
+            Deposit preview: <span className="font-bold text-amber-100">{money(minimumDeposit * quantity)}</span>
+          </div>
+
+          {missingFields.length > 0 ? (
+            <div className="rounded-2xl border border-rose-300/20 bg-rose-400/10 p-4 text-sm leading-6 text-rose-100">
+              Required before submission: {missingFields.join(", ")}.
+            </div>
+          ) : null}
+
+          <Button className="w-full" onClick={submitRequest} disabled={!canSubmit}>
+            Review and Submit Request
           </Button>
         </div>
       </Card>
@@ -233,11 +308,11 @@ function ProductCatalogCard({
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, children, required = false }: { label: string; children: ReactNode; required?: boolean }) {
   return (
     <label className="block">
       <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-        {label}
+        {label} {required ? <span className="text-amber-300">*</span> : null}
       </div>
       {children}
     </label>
