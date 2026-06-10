@@ -419,6 +419,7 @@ function DesignPackagePanel({ state, product }: { state: ForgekeeperState; produ
 
   const totalLaborMinutes = pkg.cleanupMinutes + pkg.assemblyMinutes + pkg.paintingMinutes + pkg.packagingMinutes;
   const packageDisplayImage = pkg.catalogDisplayImagePath || pkg.catalogHeroImagePath || "";
+  const packageImportId = `package-folder-import-${product.id}`;
   const readiness = getDesignPackageReadiness(pkg, state);
 
   return (
