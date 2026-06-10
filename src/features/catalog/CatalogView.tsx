@@ -419,7 +419,6 @@ function DesignPackagePanel({ state, product }: { state: ForgekeeperState; produ
 
   const totalLaborMinutes = pkg.cleanupMinutes + pkg.assemblyMinutes + pkg.paintingMinutes + pkg.packagingMinutes;
   const packageDisplayImage = pkg.catalogDisplayImagePath || pkg.catalogHeroImagePath || "";
-  const packageImportId = `package-folder-import-${product.id}`;
   const readiness = getDesignPackageReadiness(pkg, state);
 
   return (
@@ -605,7 +604,6 @@ function DesignPackagePanel({ state, product }: { state: ForgekeeperState; produ
 
 function getDesignPackageReadiness(pkg: DesignPackage, state: ForgekeeperState) {
   const packageDisplayImage = pkg.catalogDisplayImagePath || pkg.catalogHeroImagePath || "";
-  const packageImportId = `package-folder-import-${product.id}`;
   const linkedProducts = state.products.filter((product) => product.designPackageId === pkg.id);
   const linkedProductIds = new Set(linkedProducts.map((product) => product.id));
   const linkedStls = state.stls.filter((stl) => linkedProductIds.has(stl.productId));
