@@ -419,6 +419,7 @@ function DesignPackagePanel({ state, product }: { state: ForgekeeperState; produ
 
   const totalLaborMinutes = pkg.cleanupMinutes + pkg.assemblyMinutes + pkg.paintingMinutes + pkg.packagingMinutes;
   const packageDisplayImage = pkg.catalogDisplayImagePath || pkg.catalogHeroImagePath || "";
+  const packageImportId = `package-folder-import-${product.id}`;
   const readiness = getDesignPackageReadiness(pkg, state);
 
   return (
@@ -442,6 +443,37 @@ function DesignPackagePanel({ state, product }: { state: ForgekeeperState; produ
             <StatusRow label="Package Print Estimate" value={`${pkg.estimatedPrintHours}h`} />
             <StatusRow label="Labor Estimate" value={`${totalLaborMinutes} min`} />
             <StatusRow label="Package Display Image" value={packageDisplayImage ? "Linked" : "Missing"} status={packageDisplayImage ? "Catalog Ready" : "Concept Ready"} />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-amber-300/15 bg-amber-400/5 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-amber-100">Package Folder Import</div>
+              <div className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">
+                Select a prepared package folder to build or refresh package source data. This first pass reads browser-safe file references, detects concepts, package display images, prompt/notes files, STL/3MF assets, and variant image candidates.
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <input
+                id={packageImportId}
+                type="file"
+                multiple
+                // @ts-expect-error webkitdirectory is supported by Chromium/Electron-style browsers and ignored elsewhere.
+                webkitdirectory="true"
+                className="hidden"
+                onChange={(event) => {
+                  state.importDesignPackageFolder(event.currentTarget.files, product);
+                  event.currentTarget.value = "";
+                }}
+              />
+              <Button variant="ghost" onClick={() => document.getElementById(packageImportId)?.click()}>
+                Import Package Folder
+              </Button>
+            </div>
+          </div>
+          <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-400">
+            Recommended folders: concepts, variants, prompts, stl, 3mf, photos, catalog, notes. STLs/3MFs can be added later when Meshy/modeling work is complete.
           </div>
         </div>
 
@@ -573,6 +605,7 @@ function DesignPackagePanel({ state, product }: { state: ForgekeeperState; produ
 
 function getDesignPackageReadiness(pkg: DesignPackage, state: ForgekeeperState) {
   const packageDisplayImage = pkg.catalogDisplayImagePath || pkg.catalogHeroImagePath || "";
+  const packageImportId = `package-folder-import-${product.id}`;
   const linkedProducts = state.products.filter((product) => product.designPackageId === pkg.id);
   const linkedProductIds = new Set(linkedProducts.map((product) => product.id));
   const linkedStls = state.stls.filter((stl) => linkedProductIds.has(stl.productId));

@@ -143,6 +143,55 @@ function suggestedPackageCode(pillar: Product["tier"], family: string, name: str
   return `${pillarCode[pillar]}-${codePart(family, "GEN")}-${codePart(name, "PKG")}`;
 }
 
+function titleFromFileName(fileName: string) {
+  return fileName
+    .replace(/\.[^.]+$/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function fileReference(file: File) {
+  const maybeRelative = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
+  return maybeRelative || file.name;
+}
+
+function rootFolderNameFromFiles(files: File[]) {
+  const firstRef = files[0] ? fileReference(files[0]) : "Design Package";
+  const firstPart = firstRef.split("/").filter(Boolean)[0] || firstRef;
+  return titleFromFileName(firstPart);
+}
+
+function fileExtension(fileName: string) {
+  return fileName.split(".").pop()?.toLowerCase() ?? "";
+}
+
+function isImageFile(fileName: string) {
+  return ["png", "jpg", "jpeg", "webp", "gif"].includes(fileExtension(fileName));
+}
+
+function isModelFile(fileName: string) {
+  return ["stl", "3mf", "obj", "blend"].includes(fileExtension(fileName));
+}
+
+function isTextFile(fileName: string) {
+  return ["txt", "md", "json"].includes(fileExtension(fileName));
+}
+
+function productLineForPillar(pillar: Product["tier"]): Product["line"] {
+  if (pillar === "Foundry") return "Foundry";
+  if (pillar === "ForgeTech") return "ForgeTech";
+  if (pillar === "Relics") return "Relics of the Nine Realms";
+  return "Runehallow Relics";
+}
+
+function packageStatusFromImport(hasConcept: boolean, hasModel: boolean, hasCatalogImage: boolean): DesignPackage["status"] {
+  if (hasModel && hasCatalogImage) return "STL Ready";
+  if (hasConcept) return "Concept Ready";
+  return "Planning";
+}
+
 function hydrateData(): AppData {
   const stored = loadStoredData();
   if (!stored) return seedData;
@@ -521,6 +570,149 @@ export function useForgekeeperState() {
       updateProduct(baseProduct.id, { designPackageId: id });
     }
     return id;
+  }
+
+  function importDesignPackageFolder(fileList: FileList | null, sourceProduct?: Product) {
+    const files = Array.from(fileList ?? []);
+    if (files.length === 0) return;
+
+    const packageName = rootFolderNameFromFiles(files);
+    const pillar = sourceProduct?.tier ?? "Foundry";
+    const family = sourceProduct?.collection || sourceProduct?.category || defaultPackageFamilies.find((item) => item.pillar === pillar)?.family || "Unassigned";
+    const packageId = uid("PKG");
+    const productId = sourceProduct?.id ?? uid("P");
+    const folderRefs = files.map(fileReference);
+    const lowerRefs = folderRefs.map((ref) => ref.toLowerCase());
+    const imageFiles = files.filter((file) => isImageFile(file.name));
+    const modelFiles = files.filter((file) => isModelFile(file.name));
+    const textFiles = files.filter((file) => isTextFile(file.name));
+    const conceptFile = imageFiles.find((file, index) => lowerRefs[files.indexOf(file)]?.includes("concept")) ?? imageFiles[0];
+    const catalogFile = imageFiles.find((file, index) => {
+      const ref = fileReference(file).toLowerCase();
+      return ref.includes("catalog") || ref.includes("display") || ref.includes("preview") || ref.includes("cover");
+    }) ?? conceptFile;
+    const variantFiles = imageFiles.filter((file) => {
+      const ref = fileReference(file).toLowerCase();
+      return ref.includes("variant") || ref.includes("variants") || ref.includes("realm") || ref.includes("style");
+    });
+    const promptFiles = textFiles.filter((file) => {
+      const ref = fileReference(file).toLowerCase();
+      return ref.includes("prompt") || ref.includes("note") || ref.includes("readme");
+    });
+    const folderRoot = folderRefs[0]?.split("/")[0] || packageName;
+    const packageCode = suggestedPackageCode(pillar, family, packageName);
+    const importedAt = new Date().toLocaleString();
+    const validationLines = [
+      `Imported from package folder: ${folderRoot}`,
+      `Imported at: ${importedAt}`,
+      `Concept image: ${conceptFile ? fileReference(conceptFile) : "Missing"}`,
+      `Package display image: ${catalogFile ? fileReference(catalogFile) : "Missing"}`,
+      `Variant image candidates: ${variantFiles.length}`,
+      `Model files: ${modelFiles.length}`,
+      `Prompt/note files: ${promptFiles.length}`,
+    ];
+
+    const nextPackage: DesignPackage = {
+      id: packageId,
+      name: packageName,
+      packageCode,
+      pillar,
+      family,
+      status: packageStatusFromImport(Boolean(conceptFile), modelFiles.length > 0, Boolean(catalogFile)),
+      description: `${packageName} design package imported from folder. Review catalog copy before customer-facing use.`,
+      lore: "",
+      conceptSheetPath: conceptFile ? fileReference(conceptFile) : "",
+      promptNotes: promptFiles.length > 0 ? `Prompt/note files:\n${promptFiles.map((file) => `- ${fileReference(file)}`).join("\n")}` : "",
+      referenceFolderPath: folderRoot,
+      stlFolderPath: modelFiles.length > 0 ? folderRoot : "",
+      photoFolderPath: folderRoot,
+      catalogDisplayImagePath: catalogFile ? fileReference(catalogFile) : "",
+      catalogHeroImagePath: catalogFile ? fileReference(catalogFile) : "",
+      estimatedFilamentGrams: sourceProduct?.estimatedFilamentGrams ?? 0,
+      estimatedPrintHours: sourceProduct?.estimatedPrintHours ?? 0,
+      cleanupMinutes: 0,
+      assemblyMinutes: 0,
+      paintingMinutes: 0,
+      packagingMinutes: 0,
+      notes: validationLines.join("\n"),
+    };
+
+    setDesignPackages((prev) => [nextPackage, ...prev]);
+
+    if (sourceProduct) {
+      setProducts((prev) => prev.map((product) => product.id === sourceProduct.id ? {
+        ...product,
+        designPackageId: packageId,
+        tier: pillar,
+        collection: family,
+        productImagePath: product.productImagePath || (catalogFile ? fileReference(catalogFile) : ""),
+        conceptImagePath: product.conceptImagePath || (conceptFile ? fileReference(conceptFile) : ""),
+      } : product));
+    } else {
+      setProducts((prev) => [{
+        id: productId,
+        name: packageName,
+        tier: pillar,
+        line: productLineForPillar(pillar),
+        category: family,
+        collection: family,
+        designPackageId: packageId,
+        status: "Concept",
+        visibility: "Concept",
+        targetPrice: 0,
+        estimatedFilamentGrams: 0,
+        estimatedPrintHours: 0,
+        available: 0,
+        reorderPoint: 5,
+        productImagePath: catalogFile ? fileReference(catalogFile) : "",
+        conceptImagePath: conceptFile ? fileReference(conceptFile) : "",
+        supportedRealmVariants: [],
+        notes: "Created from Design Package folder import.",
+      }, ...prev]);
+      setSelectedProductId(productId);
+    }
+
+    if (conceptFile) {
+      const conceptId = uid("CON");
+      setConcepts((prev) => [{
+        id: conceptId,
+        productId,
+        title: `${packageName} Concept Sheet`,
+        imageName: conceptFile.name,
+        imagePath: fileReference(conceptFile),
+        measurementImagePath: "",
+        referenceFolderPath: folderRoot,
+        measurements: "",
+        description: `${packageName} concept imported from package folder.`,
+        notes: variantFiles.length > 0 ? `Variant image candidates:\n${variantFiles.map((file) => `- ${fileReference(file)}`).join("\n")}` : "",
+        linkedStlId: undefined,
+        linkedStlIds: [],
+      }, ...prev]);
+    }
+
+    if (modelFiles.length > 0) {
+      setStls((prev) => [
+        ...modelFiles.map((file, index): STLRecord => ({
+          id: uid("STL"),
+          productId,
+          name: titleFromFileName(file.name),
+          fileName: file.name,
+          filePath: fileReference(file),
+          folderPath: folderRoot,
+          libraryPath: folderRoot,
+          version: `v${index + 1}`,
+          isPrimary: index === 0,
+          defaultPrinterId: printers[0]?.id,
+          defaultSlicer: printers[0] ? slicerForPrinter(printers[0].name) : settings.defaultSlicer,
+          linkedConceptId: undefined,
+          assetStatus: "Linked",
+          notes: "Imported from Design Package folder.",
+        })),
+        ...prev,
+      ]);
+    }
+
+    window.alert(`Imported ${packageName} package. Review package readiness and catalog details before publishing.`);
   }
 
   function updateDesignPackage(id: string, patch: Partial<DesignPackage>) {
@@ -1164,7 +1356,7 @@ export function useForgekeeperState() {
     newFilamentName, setNewFilamentName, newPrinterName, setNewPrinterName, searchTerm, setSearchTerm, quickAction,
     filteredProducts, selectedProduct, selectedDesignPackage, productStls, productConcepts, productOrders, productVariants, productRelease, metrics, queueCounts, productionMetrics, getCostBreakdownForOrder, getProductCostGuide, getPrimaryStlForProduct, getLatestConceptForProduct, getProductDisplayImage, getVariantDisplayImage,
     triggerQuickAction,
-    addDesignPackage, updateDesignPackage, removeDesignPackage,
+    addDesignPackage, importDesignPackageFolder, updateDesignPackage, removeDesignPackage,
     addProduct, updateProduct, removeProduct,
     addStl, updateStl, markPrimaryStl, removeStl,
     addConcept, updateConcept, removeConcept,
