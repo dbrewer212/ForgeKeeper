@@ -489,12 +489,15 @@ function DesignPackagePanel({ state, product }: { state: ForgekeeperState; produ
           </div>
 
           <div className="grid gap-2 md:grid-cols-2">
-            {readiness.items.map((item) => (
-              <div key={item.label} className={`rounded-xl border px-3 py-2 text-xs ${item.ready ? "border-emerald-300/15 bg-emerald-400/5 text-emerald-100" : "border-amber-300/15 bg-amber-400/5 text-amber-100"}`}>
-                <div className="font-semibold">{item.ready ? "✓" : "⚠"} {item.label}</div>
-                <div className="mt-1 text-slate-500">{item.detail}</div>
-              </div>
-            ))}
+            {readiness.items.map((item) => {
+              const isOptionalPending = !item.ready && !item.required;
+              return (
+                <div key={item.label} className={`rounded-xl border px-3 py-2 text-xs ${item.ready ? "border-emerald-300/15 bg-emerald-400/5 text-emerald-100" : isOptionalPending ? "border-sky-300/15 bg-sky-400/5 text-sky-100" : "border-amber-300/15 bg-amber-400/5 text-amber-100"}`}>
+                  <div className="font-semibold">{item.ready ? "✓" : isOptionalPending ? "○" : "⚠"} {item.label}</div>
+                  <div className="mt-1 text-slate-500">{item.detail}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -611,57 +614,89 @@ function getDesignPackageReadiness(pkg: DesignPackage, state: ForgekeeperState) 
   const linkedConcepts = state.concepts.filter((concept) => linkedProductIds.has(concept.productId));
   const linkedVariants = state.variants.filter((variant) => linkedProductIds.has(variant.productId));
   const totalLaborMinutes = pkg.cleanupMinutes + pkg.assemblyMinutes + pkg.paintingMinutes + pkg.packagingMinutes;
+  const variantCandidateMatch = pkg.notes.match(/Variant image candidates:\s*(\d+)/i);
+  const variantCandidateCount = variantCandidateMatch ? Number(variantCandidateMatch[1]) : 0;
+  const hasVariantSource = linkedVariants.length > 0 || variantCandidateCount > 0;
+  const hasModelAssets = Boolean(pkg.stlFolderPath || linkedStls.length > 0);
+  const hasMetrics = pkg.estimatedFilamentGrams > 0 && pkg.estimatedPrintHours > 0;
+  const hasLabor = totalLaborMinutes > 0;
+  const statusRank: Record<string, number> = {
+    Planning: 0,
+    "Concept Ready": 1,
+    Modeling: 2,
+    "STL Ready": 3,
+    "Print Tested": 4,
+    "Catalog Ready": 5,
+    Archived: 6,
+  };
+  const rank = statusRank[pkg.status] ?? 0;
 
   const items = [
     {
       label: "Package code",
       ready: Boolean(pkg.packageCode?.trim()),
+      required: true,
       detail: pkg.packageCode?.trim() ? pkg.packageCode : "Add a searchable package code.",
     },
     {
       label: "Pillar and family",
       ready: Boolean(pkg.pillar && pkg.family?.trim()),
+      required: true,
       detail: pkg.family?.trim() ? `${pkg.pillar} / ${pkg.family}` : "Choose a pillar and family.",
     },
     {
       label: "Concept source",
       ready: Boolean(pkg.conceptSheetPath || linkedConcepts.length > 0),
-      detail: pkg.conceptSheetPath ? "Concept sheet linked." : `${linkedConcepts.length} linked concept record(s).`,
+      required: rank >= 1,
+      detail: pkg.conceptSheetPath ? "Concept/spec sheet linked." : `${linkedConcepts.length} linked concept record(s).`,
     },
     {
       label: "Variant definitions",
-      ready: linkedVariants.length > 0,
-      detail: linkedVariants.length > 0 ? `${linkedVariants.length} variant(s) linked.` : "Add at least one package/product variant.",
+      ready: hasVariantSource,
+      required: rank >= 1,
+      detail: linkedVariants.length > 0 ? `${linkedVariants.length} variant record(s) linked.` : `${variantCandidateCount} variant image candidate(s).`,
     },
     {
       label: "Package display image",
       ready: Boolean(packageDisplayImage),
+      required: rank >= 1,
       detail: packageDisplayImage ? "Display image linked." : "Add a customer-facing package display image.",
     },
     {
+      label: "Prompt / design notes",
+      ready: Boolean(pkg.promptNotes.trim() || pkg.notes.trim()),
+      required: rank >= 1,
+      detail: pkg.promptNotes.trim() ? "Prompt/generation notes present." : "Add prompt, Meshy notes, or design notes.",
+    },
+    {
       label: "STL / 3MF assets",
-      ready: Boolean(pkg.stlFolderPath || linkedStls.length > 0),
-      detail: pkg.stlFolderPath ? "STL/3MF folder linked." : `${linkedStls.length} linked STL record(s).`,
+      ready: hasModelAssets,
+      required: rank >= 3,
+      detail: hasModelAssets ? "STL/3MF assets linked." : rank >= 3 ? "Required for STL Ready or later." : "Not required until STL Ready.",
     },
     {
       label: "Estimated metrics",
-      ready: pkg.estimatedFilamentGrams > 0 && pkg.estimatedPrintHours > 0,
-      detail: `${pkg.estimatedFilamentGrams}g / ${pkg.estimatedPrintHours}h`,
+      ready: hasMetrics,
+      required: rank >= 5,
+      detail: hasMetrics ? `${pkg.estimatedFilamentGrams}g / ${pkg.estimatedPrintHours}h` : rank >= 5 ? "Required before Catalog Ready." : "Can be added after model/export estimates exist.",
     },
     {
       label: "Labor profile",
-      ready: totalLaborMinutes > 0,
-      detail: `${totalLaborMinutes} total labor minute(s).`,
+      ready: hasLabor,
+      required: rank >= 5,
+      detail: hasLabor ? `${totalLaborMinutes} total labor minute(s).` : rank >= 5 ? "Required before final catalog readiness." : "Can be refined later.",
     },
     {
       label: "Catalog description",
       ready: Boolean(pkg.description.trim()),
+      required: rank >= 1,
       detail: pkg.description.trim() ? "Description present." : "Add package/customer-facing description.",
     },
   ];
 
-  const readyCount = items.filter((item) => item.ready).length;
-  const score = Math.round((readyCount / items.length) * 100);
+  const requiredItems = items.filter((item) => item.required);
+  const readyRequiredCount = requiredItems.filter((item) => item.ready).length;
+  const score = requiredItems.length > 0 ? Math.round((readyRequiredCount / requiredItems.length) * 100) : 100;
 
   return { score, items };
 }

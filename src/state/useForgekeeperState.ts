@@ -192,6 +192,77 @@ function packageStatusFromImport(hasConcept: boolean, hasModel: boolean, hasCata
   return "Planning";
 }
 
+type PackageImportManifest = {
+  packageName?: string;
+  name?: string;
+  packageCode?: string;
+  code?: string;
+  pillar?: Product["tier"] | string;
+  family?: string;
+  status?: DesignPackage["status"] | string;
+  description?: string;
+  lore?: string;
+  promptNotes?: string;
+  generationNotes?: string;
+  catalog?: {
+    displayImage?: string;
+    description?: string;
+  };
+  estimates?: {
+    estimatedFilamentGrams?: number;
+    estimatedPrintHours?: number;
+    cleanupMinutes?: number;
+    assemblyMinutes?: number;
+    paintingMinutes?: number;
+    packagingMinutes?: number;
+  };
+  variants?: Array<{
+    name?: string;
+    code?: string;
+    image?: string;
+    notes?: string;
+  }>;
+};
+
+function safeNumber(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function findFileByManifestPath(files: File[], manifestPath?: string) {
+  if (!manifestPath) return undefined;
+  const normalized = manifestPath.replace(/\\/g, "/").toLowerCase();
+  return files.find((file) => fileReference(file).replace(/\\/g, "/").toLowerCase().endsWith(normalized));
+}
+
+function inferRealmVariantFromName(name: string): ProductVariant["realm"] {
+  const lower = name.toLowerCase();
+  if (lower.includes("alfheim")) return "Alfheim";
+  if (lower.includes("svartalfheim") || lower.includes("svart")) return "Svartalfheim";
+  if (lower.includes("vanaheim")) return "Vanaheim";
+  if (lower.includes("asgard")) return "Asgard";
+  if (lower.includes("jotunheim") || lower.includes("jotun")) return "Jotunheim";
+  if (lower.includes("muspelheim") || lower.includes("muspel")) return "Muspelheim";
+  if (lower.includes("niflheim") || lower.includes("nifl")) return "Niflheim";
+  if (lower.includes("helheim") || lower.includes("hel")) return "Helheim";
+  return "Midgard";
+}
+
+async function readPackageManifest(files: File[]): Promise<PackageImportManifest | undefined> {
+  const manifestFile = files.find((file) => {
+    const ref = fileReference(file).toLowerCase();
+    return ref.endsWith("package_manifest.json") || ref.endsWith("manifest.json");
+  });
+
+  if (!manifestFile) return undefined;
+
+  try {
+    return JSON.parse(await manifestFile.text()) as PackageImportManifest;
+  } catch {
+    return undefined;
+  }
+}
+
 function hydrateData(): AppData {
   const stored = loadStoredData();
   if (!stored) return seedData;
@@ -572,22 +643,24 @@ export function useForgekeeperState() {
     return id;
   }
 
-  function importDesignPackageFolder(fileList: FileList | null, sourceProduct?: Product) {
+  async function importDesignPackageFolder(fileList: FileList | null, sourceProduct?: Product) {
     const files = Array.from(fileList ?? []);
     if (files.length === 0) return;
 
-    const packageName = rootFolderNameFromFiles(files);
-    const pillar = sourceProduct?.tier ?? "Foundry";
-    const family = sourceProduct?.collection || sourceProduct?.category || defaultPackageFamilies.find((item) => item.pillar === pillar)?.family || "Unassigned";
+    const manifest = await readPackageManifest(files);
+    const folderPackageName = rootFolderNameFromFiles(files);
+    const packageName = manifest?.packageName || manifest?.name || folderPackageName;
+    const pillar = normalizeProductTier(manifest?.pillar ?? sourceProduct?.tier ?? "Foundry");
+    const family = manifest?.family || sourceProduct?.collection || sourceProduct?.category || defaultPackageFamilies.find((item) => item.pillar === pillar)?.family || "Unassigned";
     const packageId = uid("PKG");
     const productId = sourceProduct?.id ?? uid("P");
     const folderRefs = files.map(fileReference);
-    const lowerRefs = folderRefs.map((ref) => ref.toLowerCase());
     const imageFiles = files.filter((file) => isImageFile(file.name));
     const modelFiles = files.filter((file) => isModelFile(file.name));
     const textFiles = files.filter((file) => isTextFile(file.name));
-    const conceptFile = imageFiles.find((file, index) => lowerRefs[files.indexOf(file)]?.includes("concept")) ?? imageFiles[0];
-    const catalogFile = imageFiles.find((file, index) => {
+    const manifestDisplayFile = findFileByManifestPath(files, manifest?.catalog?.displayImage);
+    const conceptFile = imageFiles.find((file) => fileReference(file).toLowerCase().includes("concept")) ?? imageFiles[0];
+    const catalogFile = manifestDisplayFile ?? imageFiles.find((file) => {
       const ref = fileReference(file).toLowerCase();
       return ref.includes("catalog") || ref.includes("display") || ref.includes("preview") || ref.includes("cover");
     }) ?? conceptFile;
@@ -597,16 +670,25 @@ export function useForgekeeperState() {
     });
     const promptFiles = textFiles.filter((file) => {
       const ref = fileReference(file).toLowerCase();
-      return ref.includes("prompt") || ref.includes("note") || ref.includes("readme");
+      return ref.includes("prompt") || ref.includes("note") || ref.includes("readme") || ref.includes("manifest");
     });
     const folderRoot = folderRefs[0]?.split("/")[0] || packageName;
-    const packageCode = suggestedPackageCode(pillar, family, packageName);
+    const packageCode = manifest?.packageCode || manifest?.code || suggestedPackageCode(pillar, family, packageName);
     const importedAt = new Date().toLocaleString();
+    const estimatedFilamentGrams = safeNumber(manifest?.estimates?.estimatedFilamentGrams, sourceProduct?.estimatedFilamentGrams ?? 0);
+    const estimatedPrintHours = safeNumber(manifest?.estimates?.estimatedPrintHours, sourceProduct?.estimatedPrintHours ?? 0);
+    const cleanupMinutes = safeNumber(manifest?.estimates?.cleanupMinutes, 0);
+    const assemblyMinutes = safeNumber(manifest?.estimates?.assemblyMinutes, 0);
+    const paintingMinutes = safeNumber(manifest?.estimates?.paintingMinutes, 0);
+    const packagingMinutes = safeNumber(manifest?.estimates?.packagingMinutes, 0);
+    const hasManifestVariants = Boolean(manifest?.variants?.length);
     const validationLines = [
       `Imported from package folder: ${folderRoot}`,
       `Imported at: ${importedAt}`,
+      `Manifest: ${manifest ? "Detected" : "Not detected"}`,
       `Concept image: ${conceptFile ? fileReference(conceptFile) : "Missing"}`,
       `Package display image: ${catalogFile ? fileReference(catalogFile) : "Missing"}`,
+      `Variant definitions: ${manifest?.variants?.length ?? 0}`,
       `Variant image candidates: ${variantFiles.length}`,
       `Model files: ${modelFiles.length}`,
       `Prompt/note files: ${promptFiles.length}`,
@@ -618,22 +700,27 @@ export function useForgekeeperState() {
       packageCode,
       pillar,
       family,
-      status: packageStatusFromImport(Boolean(conceptFile), modelFiles.length > 0, Boolean(catalogFile)),
-      description: `${packageName} design package imported from folder. Review catalog copy before customer-facing use.`,
-      lore: "",
+      status: normalizeDesignPackageStatus(manifest?.status) !== "Planning"
+        ? normalizeDesignPackageStatus(manifest?.status)
+        : packageStatusFromImport(Boolean(conceptFile), modelFiles.length > 0, Boolean(catalogFile)),
+      description: manifest?.catalog?.description || manifest?.description || `${packageName} design package imported from folder. Review catalog copy before customer-facing use.`,
+      lore: manifest?.lore || "",
       conceptSheetPath: conceptFile ? fileReference(conceptFile) : "",
-      promptNotes: promptFiles.length > 0 ? `Prompt/note files:\n${promptFiles.map((file) => `- ${fileReference(file)}`).join("\n")}` : "",
+      promptNotes: [
+        manifest?.promptNotes || manifest?.generationNotes || "",
+        promptFiles.length > 0 ? `Prompt/note files:\n${promptFiles.map((file) => `- ${fileReference(file)}`).join("\n")}` : "",
+      ].filter(Boolean).join("\n\n"),
       referenceFolderPath: folderRoot,
       stlFolderPath: modelFiles.length > 0 ? folderRoot : "",
       photoFolderPath: folderRoot,
       catalogDisplayImagePath: catalogFile ? fileReference(catalogFile) : "",
       catalogHeroImagePath: catalogFile ? fileReference(catalogFile) : "",
-      estimatedFilamentGrams: sourceProduct?.estimatedFilamentGrams ?? 0,
-      estimatedPrintHours: sourceProduct?.estimatedPrintHours ?? 0,
-      cleanupMinutes: 0,
-      assemblyMinutes: 0,
-      paintingMinutes: 0,
-      packagingMinutes: 0,
+      estimatedFilamentGrams,
+      estimatedPrintHours,
+      cleanupMinutes,
+      assemblyMinutes,
+      paintingMinutes,
+      packagingMinutes,
       notes: validationLines.join("\n"),
     };
 
@@ -645,6 +732,9 @@ export function useForgekeeperState() {
         designPackageId: packageId,
         tier: pillar,
         collection: family,
+        category: product.category || family,
+        estimatedFilamentGrams: product.estimatedFilamentGrams || estimatedFilamentGrams,
+        estimatedPrintHours: product.estimatedPrintHours || estimatedPrintHours,
         productImagePath: product.productImagePath || (catalogFile ? fileReference(catalogFile) : ""),
         conceptImagePath: product.conceptImagePath || (conceptFile ? fileReference(conceptFile) : ""),
       } : product));
@@ -660,8 +750,8 @@ export function useForgekeeperState() {
         status: "Concept",
         visibility: "Concept",
         targetPrice: 0,
-        estimatedFilamentGrams: 0,
-        estimatedPrintHours: 0,
+        estimatedFilamentGrams,
+        estimatedPrintHours,
         available: 0,
         reorderPoint: 5,
         productImagePath: catalogFile ? fileReference(catalogFile) : "",
@@ -710,6 +800,64 @@ export function useForgekeeperState() {
         })),
         ...prev,
       ]);
+    }
+
+    const manifestVariantFiles = (manifest?.variants ?? []).map((variant) => ({
+      name: variant.name || variant.code || "Variant",
+      code: variant.code,
+      notes: variant.notes || "Imported from package manifest.",
+      file: findFileByManifestPath(files, variant.image),
+    }));
+
+    const folderVariantFiles = variantFiles.map((file) => ({
+      name: titleFromFileName(file.name),
+      code: undefined,
+      notes: "Imported from package variant image folder.",
+      file,
+    }));
+
+    const importedVariants = [...manifestVariantFiles, ...folderVariantFiles].filter((variant, index, arr) => {
+      const key = `${variant.name}:${variant.file ? fileReference(variant.file) : ""}`;
+      return arr.findIndex((item) => `${item.name}:${item.file ? fileReference(item.file) : ""}` === key) === index;
+    });
+
+    if (importedVariants.length > 0) {
+      setVariants((prev) => [
+        ...importedVariants.map((variant): ProductVariant => ({
+          id: uid("VAR"),
+          productId,
+          realm: inferRealmVariantFromName(variant.name),
+          name: variant.name,
+          productImagePath: variant.file ? fileReference(variant.file) : (catalogFile ? fileReference(catalogFile) : ""),
+          conceptImagePath: variant.file ? fileReference(variant.file) : (conceptFile ? fileReference(conceptFile) : ""),
+          stlId: undefined,
+          conceptId: undefined,
+          filamentId: filament[0]?.id,
+          priceModifier: 0,
+          estimatedFilamentGrams,
+          estimatedPrintHours,
+          isActive: true,
+          notes: [variant.code ? `Variant code: ${variant.code}` : "", variant.notes].filter(Boolean).join("\n"),
+        })),
+        ...prev,
+      ]);
+    } else if (catalogFile || conceptFile || hasManifestVariants) {
+      setVariants((prev) => [{
+        id: uid("VAR"),
+        productId,
+        realm: "Midgard",
+        name: `${packageName} Standard`,
+        productImagePath: catalogFile ? fileReference(catalogFile) : "",
+        conceptImagePath: conceptFile ? fileReference(conceptFile) : "",
+        stlId: undefined,
+        conceptId: undefined,
+        filamentId: filament[0]?.id,
+        priceModifier: 0,
+        estimatedFilamentGrams,
+        estimatedPrintHours,
+        isActive: true,
+        notes: "Default variant created from Design Package folder import.",
+      }, ...prev]);
     }
 
     window.alert(`Imported ${packageName} package. Review package readiness and catalog details before publishing.`);
