@@ -8,11 +8,12 @@ import { Textarea } from "../../components/ui/Textarea";
 import { money } from "../../lib/format";
 import { inventoryState, pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
-import type { DepositStatus, OrderStatus, OrderType, Product, ProductLine, ProductStatus, ProductTab, ProductPillar, ProductVariant, ProductVisibility, RealmVariant } from "../../types/domain";
+import type { DepositStatus, DesignPackageStatus, OrderStatus, OrderType, Product, ProductLine, ProductStatus, ProductTab, ProductPillar, ProductVariant, ProductVisibility, RealmVariant } from "../../types/domain";
 
 const productTabs: ProductTab[] = ["overview", "stls", "concepts", "variants", "orders"];
 const realmOptions: RealmVariant[] = ["Midgard", "Alfheim", "Svartalfheim", "Vanaheim", "Asgard", "Jotunheim", "Muspelheim", "Niflheim", "Helheim"];
 const visibilityOptions: ProductVisibility[] = ["Internal", "Concept", "Preorder", "Available", "Commission Available", "Archived"];
+const designPackageStatuses: DesignPackageStatus[] = ["Planning", "Active", "Needs Assets", "Ready for Catalog", "Archived"];
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -165,6 +166,7 @@ function ProductWorkspace({ state, product }: { state: ForgekeeperState; product
               <div>
                 <h2 className="text-3xl font-semibold text-slate-100">{product.name}</h2>
                 <p className="mt-1 text-sm text-slate-400">{product.category} · {product.collection}</p>
+                <p className="mt-1 text-xs text-amber-300/80">Package: {state.selectedDesignPackage?.name || "Unassigned"}</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <span className={`rounded-full border px-3 py-1 text-xs ${pillClass(inventory)}`}>{inventory}</span>
@@ -186,6 +188,8 @@ function ProductWorkspace({ state, product }: { state: ForgekeeperState; product
           <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
             <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Connected Assets</div>
             <div className="mt-4 space-y-3 text-sm">
+              <AssetLine label="Design Package" value={state.selectedDesignPackage?.name || "Unassigned"} />
+              <AssetLine label="Package Family" value={state.selectedDesignPackage?.family || "No package family"} />
               <AssetLine label="Primary STL" value={primaryStl?.name || "None assigned"} />
               <AssetLine label="STL File" value={primaryStl?.filePath || primaryStl?.fileName || "No STL file path"} />
               <AssetLine label="Latest Concept" value={latestConcept?.title || "No concept spec"} />
@@ -275,6 +279,17 @@ function ProductEditor({ state }: { state: ForgekeeperState }) {
               ))}
             </Select>
           </Field>
+          <Field label="Design Package">
+            <Select value={product.designPackageId || ""} onChange={(e) => state.updateProduct(product.id, { designPackageId: e.target.value || undefined })}>
+              <option value="">Unassigned</option>
+              {state.designPackages.map((pkg) => (
+                <option key={pkg.id} value={pkg.id}>{pkg.name} · {pkg.family}</option>
+              ))}
+            </Select>
+            <Button variant="ghost" className="mt-2 h-8 px-3 text-xs" onClick={() => state.addDesignPackage(product)}>
+              Create Package From Product
+            </Button>
+          </Field>
           <Field label="Product Image Path" className="md:col-span-2">
             <Input value={product.productImagePath} onChange={(e) => state.updateProduct(product.id, { productImagePath: e.target.value })} placeholder="/assets/products/product-image.png" />
             <input
@@ -295,6 +310,8 @@ function ProductEditor({ state }: { state: ForgekeeperState }) {
           </Field>
         </div>
       </Card>
+
+      <DesignPackagePanel state={state} product={product} />
 
       <Card title="Production Snapshot">
         <div className="space-y-3">
@@ -383,6 +400,120 @@ function ProductEditor({ state }: { state: ForgekeeperState }) {
   );
 }
 
+
+function DesignPackagePanel({ state, product }: { state: ForgekeeperState; product: Product }) {
+  const pkg = state.selectedDesignPackage;
+
+  if (!pkg) {
+    return (
+      <Card title="Design Package">
+        <div className="rounded-2xl border border-amber-300/15 bg-amber-400/10 p-4 text-sm leading-6 text-slate-300">
+          This product is not linked to a design package yet. Create a package to centralize concept sheets, Meshy prompt notes, STL/3MF references, estimated metrics, and catalog assets.
+        </div>
+        <div className="mt-4">
+          <Button onClick={() => state.addDesignPackage(product)}>Create Design Package From Product</Button>
+        </div>
+      </Card>
+    );
+  }
+
+  const totalLaborMinutes = pkg.cleanupMinutes + pkg.assemblyMinutes + pkg.paintingMinutes + pkg.packagingMinutes;
+
+  return (
+    <Card
+      title="Design Package"
+      right={<span className={`rounded-full border px-3 py-1 text-xs ${pillClass(pkg.status)}`}>{pkg.status}</span>}
+    >
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-lg font-semibold text-slate-100">{pkg.name}</div>
+              <div className="mt-1 text-sm text-slate-400">{pkg.pillar} · {pkg.family}</div>
+            </div>
+            <Button variant="danger" className="h-8 px-3 text-xs" onClick={() => state.removeDesignPackage(pkg.id)}>Remove Package</Button>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <StatusRow label="Package Filament Estimate" value={`${pkg.estimatedFilamentGrams}g`} />
+            <StatusRow label="Package Print Estimate" value={`${pkg.estimatedPrintHours}h`} />
+            <StatusRow label="Labor Estimate" value={`${totalLaborMinutes} min`} />
+            <StatusRow label="Catalog Hero" value={pkg.catalogHeroImagePath ? "Linked" : "Missing"} status={pkg.catalogHeroImagePath ? "Active" : "Needs Assets"} />
+          </div>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="Package Name">
+            <Input value={pkg.name} onChange={(e) => state.updateDesignPackage(pkg.id, { name: e.target.value })} />
+          </Field>
+          <Field label="Family">
+            <Input value={pkg.family} onChange={(e) => state.updateDesignPackage(pkg.id, { family: e.target.value })} placeholder="Forge Goblins, Wyrmslings, Nine Realms Coins..." />
+          </Field>
+          <Field label="Pillar">
+            <Select value={pkg.pillar} onChange={(e) => state.updateDesignPackage(pkg.id, { pillar: e.target.value as ProductPillar })}>
+              <option value="Foundry">Foundry</option>
+              <option value="Relics">Relics</option>
+              <option value="ForgeTech">ForgeTech</option>
+              <option value="Reforged">Reforged</option>
+            </Select>
+          </Field>
+          <Field label="Package Status">
+            <Select value={pkg.status} onChange={(e) => state.updateDesignPackage(pkg.id, { status: e.target.value as DesignPackageStatus })}>
+              {designPackageStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+            </Select>
+          </Field>
+          <Field label="Concept Sheet / Source Image" className="md:col-span-2">
+            <Input value={pkg.conceptSheetPath} onChange={(e) => state.updateDesignPackage(pkg.id, { conceptSheetPath: e.target.value })} placeholder="Concept sheet path or uploaded image reference" />
+          </Field>
+          <Field label="Catalog Hero Image" className="md:col-span-2">
+            <Input value={pkg.catalogHeroImagePath} onChange={(e) => state.updateDesignPackage(pkg.id, { catalogHeroImagePath: e.target.value })} placeholder="Hero image for catalog package display" />
+          </Field>
+          <Field label="Reference Folder">
+            <Input value={pkg.referenceFolderPath} onChange={(e) => state.updateDesignPackage(pkg.id, { referenceFolderPath: e.target.value })} />
+          </Field>
+          <Field label="STL / 3MF Folder">
+            <Input value={pkg.stlFolderPath} onChange={(e) => state.updateDesignPackage(pkg.id, { stlFolderPath: e.target.value })} />
+          </Field>
+          <Field label="Photo Folder">
+            <Input value={pkg.photoFolderPath} onChange={(e) => state.updateDesignPackage(pkg.id, { photoFolderPath: e.target.value })} />
+          </Field>
+          <Field label="Estimated Filament Grams">
+            <Input type="number" min={0} value={pkg.estimatedFilamentGrams} onChange={(e) => state.updateDesignPackage(pkg.id, { estimatedFilamentGrams: Number(e.target.value) })} />
+          </Field>
+          <Field label="Estimated Print Hours">
+            <Input type="number" min={0} step="0.1" value={pkg.estimatedPrintHours} onChange={(e) => state.updateDesignPackage(pkg.id, { estimatedPrintHours: Number(e.target.value) })} />
+          </Field>
+          <Field label="Cleanup Minutes">
+            <Input type="number" min={0} value={pkg.cleanupMinutes} onChange={(e) => state.updateDesignPackage(pkg.id, { cleanupMinutes: Number(e.target.value) })} />
+          </Field>
+          <Field label="Assembly Minutes">
+            <Input type="number" min={0} value={pkg.assemblyMinutes} onChange={(e) => state.updateDesignPackage(pkg.id, { assemblyMinutes: Number(e.target.value) })} />
+          </Field>
+          <Field label="Painting Minutes">
+            <Input type="number" min={0} value={pkg.paintingMinutes} onChange={(e) => state.updateDesignPackage(pkg.id, { paintingMinutes: Number(e.target.value) })} />
+          </Field>
+          <Field label="Packaging Minutes">
+            <Input type="number" min={0} value={pkg.packagingMinutes} onChange={(e) => state.updateDesignPackage(pkg.id, { packagingMinutes: Number(e.target.value) })} />
+          </Field>
+          <Field label="Description" className="md:col-span-2">
+            <Textarea value={pkg.description} onChange={(e) => state.updateDesignPackage(pkg.id, { description: e.target.value })} placeholder="Package/customer-facing concept description..." className="min-h-[90px] w-full" />
+          </Field>
+          <Field label="Lore / Identity Notes" className="md:col-span-2">
+            <Textarea value={pkg.lore} onChange={(e) => state.updateDesignPackage(pkg.id, { lore: e.target.value })} placeholder="Character, realm, collection, or story notes..." className="min-h-[90px] w-full" />
+          </Field>
+          <Field label="Meshy Prompt / Generation Notes" className="md:col-span-2">
+            <Textarea value={pkg.promptNotes} onChange={(e) => state.updateDesignPackage(pkg.id, { promptNotes: e.target.value })} placeholder="Prompt text, Meshy settings, generation notes, revisions..." className="min-h-[100px] w-full" />
+          </Field>
+          <Field label="Package Notes" className="md:col-span-2">
+            <Textarea value={pkg.notes} onChange={(e) => state.updateDesignPackage(pkg.id, { notes: e.target.value })} placeholder="Internal package notes, asset status, next revisions..." className="min-h-[90px] w-full" />
+          </Field>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+
 function StlPanel({ state }: { state: ForgekeeperState }) {
   return (
     <Card
@@ -444,8 +575,42 @@ function StlPanel({ state }: { state: ForgekeeperState }) {
                 <Field label="Version">
                   <Input value={stl.version} onChange={(e) => state.updateStl(stl.id, { version: e.target.value })} placeholder="v001" />
                 </Field>
-                <Field label="Full STL Path" className="md:col-span-2">
-                  <Input value={stl.filePath || ""} onChange={(e) => state.linkStlPath(stl.id, e.target.value)} placeholder="C:\ForgekeeperLibrary\STLs\Product\v001\part.stl" />
+                <Field label="Browse / Select STL" className="md:col-span-3">
+                  <div className="rounded-2xl border border-amber-300/15 bg-amber-400/10 p-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-amber-300/30 bg-gradient-to-br from-amber-300 via-amber-500 to-orange-700 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-amber-950/30 transition hover:from-amber-200 hover:via-amber-400 hover:to-orange-600">
+                        Browse STL / 3MF
+                        <input
+                          type="file"
+                          accept=".stl,.3mf,.obj"
+                          className="hidden"
+                          onChange={(e) =>
+                            handleStlUpload(e, (file) => {
+                              const displayName = file.name.replace(/\.(stl|3mf|obj)$/i, "");
+                              state.updateStl(stl.id, {
+                                name: stl.name || displayName,
+                                fileName: file.name,
+                                filePath: file.name,
+                                assetStatus: "Linked",
+                              });
+                            })
+                          }
+                        />
+                      </label>
+
+                      <div className="min-w-0 flex-1 text-sm text-slate-300">
+                        <div className="font-semibold text-slate-100">
+                          {stl.fileName || "No STL selected yet"}
+                        </div>
+                        <div className="mt-1 text-xs leading-5 text-slate-500">
+                          Selecting a file fills the STL file reference automatically. Full Windows path capture can be upgraded later through Tauri; manual path fields remain available below.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Field>
+                <Field label="Manual STL Path / Reference" className="md:col-span-2">
+                  <Input value={stl.filePath || ""} onChange={(e) => state.linkStlPath(stl.id, e.target.value)} placeholder="Select a file above or paste a path/reference here" />
                 </Field>
                 <Field label="Asset Status">
                   <Select value={stl.assetStatus || "Planned"} onChange={(e) => state.updateStl(stl.id, { assetStatus: e.target.value as any })}>
@@ -455,8 +620,8 @@ function StlPanel({ state }: { state: ForgekeeperState }) {
                     <option value="Archived">Archived</option>
                   </Select>
                 </Field>
-                <Field label="Library Folder" className="md:col-span-2">
-                  <Input value={stl.folderPath || stl.libraryPath || ""} onChange={(e) => state.updateStl(stl.id, { folderPath: e.target.value, libraryPath: e.target.value })} placeholder="C:\ForgekeeperLibrary\STLs\Product\v001" />
+                <Field label="Library Folder / Working Folder" className="md:col-span-2">
+                  <Input value={stl.folderPath || stl.libraryPath || ""} onChange={(e) => state.updateStl(stl.id, { folderPath: e.target.value, libraryPath: e.target.value })} placeholder="C:\Dev\Forgekeeper Library\STLs\Product\v001" />
                 </Field>
                 <Field label="Suggested Folder">
                   <Button variant="ghost" onClick={() => state.setStlSuggestedFolder(stl.id)}>Use Library Path</Button>
@@ -483,23 +648,19 @@ function StlPanel({ state }: { state: ForgekeeperState }) {
                     ))}
                   </Select>
                 </Field>
-                <Field label="Upload / Link STL" className="md:col-span-3">
-                  <input
-                    type="file"
-                    accept=".stl,.3mf,.obj"
-                    className="block w-full rounded-xl border border-white/10 bg-slate-950/55 px-3 py-2 text-xs text-slate-400 file:mr-3 file:rounded-lg file:border-0 file:bg-amber-400/15 file:px-3 file:py-1 file:text-amber-100"
-                    onChange={(e) => handleStlUpload(e, (file) => state.updateStl(stl.id, { fileName: file.name, filePath: file.name, assetStatus: "Linked" }))}
-                  />
-                  <div className="mt-2 text-xs text-slate-500">Browser mode stores the file name/reference. Tauri file-path linking can upgrade this later.</div>
-                </Field>
                 <Field label="Launch Actions" className="md:col-span-3">
                   <div className="flex flex-wrap gap-2">
-                    <Button variant="ghost" onClick={() => state.openStlAsset(stl.id, "file")}>Open STL</Button>
-                    <Button variant="ghost" onClick={() => state.openStlAsset(stl.id, "folder")}>Open Folder</Button>
-                    <Button variant="ghost" onClick={() => state.openStlAsset(stl.id, "slicer")}>Open Preferred Slicer</Button>
-                    <Button variant="ghost" onClick={() => state.openStlAsset(stl.id, "blender")}>Open Blender</Button>
+                    <Button variant="ghost" onClick={() => state.copyText(stl.filePath || stl.fileName || "", "STL reference")}>Copy STL Reference</Button>
+                    <Button variant="ghost" onClick={() => state.copyText(stl.folderPath || "", "Folder reference")}>Copy Folder Reference</Button>
                     <Button onClick={() => state.openExternalTool("meshy")}>Open Meshy.ai</Button>
+                    <Button variant="ghost" disabled title="Native file opening requires the later Tauri shell permissions pass.">Open STL · Tauri Required</Button>
+                    <Button variant="ghost" disabled title="Native folder opening requires the later Tauri shell permissions pass.">Open Folder · Tauri Required</Button>
+                    <Button variant="ghost" disabled title="Launching slicers with file arguments requires the later Tauri shell permissions pass.">Launch Slicer · Tauri Required</Button>
+                    <Button variant="ghost" disabled title="Launching Blender with file arguments requires the later Tauri shell permissions pass.">Launch Blender · Tauri Required</Button>
                   </div>
+                    <div className="mt-3 rounded-xl border border-sky-300/15 bg-sky-400/10 p-3 text-xs leading-5 text-slate-300">
+                      Browser mode can link files and copy references. Native opening of STLs, folders, Blender, and slicers will be enabled later through the Tauri shell/file-permission pass.
+                    </div>
                 </Field>
                 <Field label="STL Notes" className="md:col-span-3">
                   <Textarea value={stl.notes} onChange={(e) => state.updateStl(stl.id, { notes: e.target.value })} placeholder="Print orientation, supports, slicer notes, repair notes..." className="min-h-[90px] w-full" />

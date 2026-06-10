@@ -1,4 +1,4 @@
-import type { AppSettings, CollectionRecord, ConceptSpec, FilamentRecord, OrderRecord, PrinterRecord, Product, ProductVariant, ReleaseRecord, STLRecord } from "../types/domain";
+import type { AppSettings, CollectionRecord, ConceptSpec, DesignPackage, FilamentRecord, OrderRecord, PrinterRecord, Product, ProductVariant, ReleaseRecord, STLRecord } from "../types/domain";
 
 export const defaultSettings: AppSettings = {
   laborRate: 18,
@@ -12,6 +12,31 @@ export const defaultSettings: AppSettings = {
   productionHoursPerDay: 8,
 };
 
+export const seedDesignPackages: DesignPackage[] = [
+  {
+    id: "DP-FORGETECH-STANDS",
+    name: "ForgeTech Stand System",
+    pillar: "ForgeTech",
+    family: "ForgeTech Stands",
+    status: "Active",
+    description: "Shared package for early ForgeTech stand products and desk accessory concepts.",
+    lore: "Functional workstation artifacts forged for controller, headset, and desk organization.",
+    conceptSheetPath: "/assets/concepts/forgetech-stand-system.png",
+    promptNotes: "Rune-tech desk accessory system with strong silhouette, practical cradle geometry, and modular realm styling.",
+    referenceFolderPath: "FenrirForgeworks/assets/ForgeTech/ForgeTechStandSystem/reference",
+    stlFolderPath: "FenrirForgeworks/assets/ForgeTech/ForgeTechStandSystem/stl",
+    photoFolderPath: "FenrirForgeworks/assets/ForgeTech/ForgeTechStandSystem/photos",
+    catalogHeroImagePath: "/assets/products/controller-stand.png",
+    estimatedFilamentGrams: 110,
+    estimatedPrintHours: 6.5,
+    cleanupMinutes: 15,
+    assemblyMinutes: 0,
+    paintingMinutes: 0,
+    packagingMinutes: 5,
+    notes: "Starter package linking the original ForgeTech stand products while the package model is matured.",
+  },
+];
+
 export const seedProducts: Product[] = [
   {
     id: "P1",
@@ -20,6 +45,7 @@ export const seedProducts: Product[] = [
     line: "ForgeTech",
     category: "Controller Stand",
     collection: "ForgeTech Lane",
+    designPackageId: "DP-FORGETECH-STANDS",
     status: "Active",
     visibility: "Available",
     targetPrice: 29.99,
@@ -39,6 +65,7 @@ export const seedProducts: Product[] = [
     line: "ForgeTech",
     category: "Cable Organizer",
     collection: "ForgeTech Lane",
+    designPackageId: "DP-FORGETECH-STANDS",
     status: "Active",
     visibility: "Available",
     targetPrice: 12,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { defaultSettings, seedCollections, seedConcepts, seedFilament, seedOrders, seedPrinters, seedProducts, seedReleases, seedStls, seedVariants } from "../data/seed";
+import { defaultSettings, seedCollections, seedConcepts, seedDesignPackages, seedFilament, seedOrders, seedPrinters, seedProducts, seedReleases, seedStls, seedVariants } from "../data/seed";
 import { seedPlannedFilament, seedProductPlanning, seedPrototypes, seedRealmMaterials } from "../data/planningSeed";
 import { directCost, getOrderCostBreakdown } from "../lib/cost";
 import { calculateProductionMetrics, orderMaterialGrams } from "../lib/production";
@@ -13,6 +13,7 @@ import type {
   AppSettings,
   CollectionRecord,
   ConceptSpec,
+  DesignPackage,
   FilamentRecord,
   MaintenanceRecord,
   OrderRecord,
@@ -31,6 +32,7 @@ import { useBatchState } from "./batchState";
 
 const seedData: AppData = {
   products: seedProducts,
+  designPackages: seedDesignPackages,
   stls: seedStls,
   concepts: seedConcepts,
   variants: seedVariants,
@@ -53,6 +55,20 @@ function normalizeProductTier(tier: unknown): Product["tier"] {
   }
 
   return "ForgeTech";
+}
+
+function normalizeDesignPackageStatus(status: unknown): DesignPackage["status"] {
+  if (
+    status === "Planning" ||
+    status === "Active" ||
+    status === "Needs Assets" ||
+    status === "Ready for Catalog" ||
+    status === "Archived"
+  ) {
+    return status;
+  }
+
+  return "Planning";
 }
 
 function normalizeProductVisibility(visibility: unknown, status?: Product["status"]): Product["visibility"] {
@@ -84,12 +100,34 @@ function hydrateData(): AppData {
   const stored = loadStoredData();
   if (!stored) return seedData;
   return {
+    designPackages: (stored.designPackages ?? seedData.designPackages ?? []).map((pkg) => ({
+      ...pkg,
+      pillar: normalizeProductTier(pkg.pillar),
+      status: normalizeDesignPackageStatus(pkg.status),
+      family: pkg.family ?? "Unassigned",
+      description: pkg.description ?? "",
+      lore: pkg.lore ?? "",
+      conceptSheetPath: pkg.conceptSheetPath ?? "",
+      promptNotes: pkg.promptNotes ?? "",
+      referenceFolderPath: pkg.referenceFolderPath ?? "",
+      stlFolderPath: pkg.stlFolderPath ?? "",
+      photoFolderPath: pkg.photoFolderPath ?? "",
+      catalogHeroImagePath: pkg.catalogHeroImagePath ?? "",
+      estimatedFilamentGrams: pkg.estimatedFilamentGrams ?? 0,
+      estimatedPrintHours: pkg.estimatedPrintHours ?? 0,
+      cleanupMinutes: pkg.cleanupMinutes ?? 0,
+      assemblyMinutes: pkg.assemblyMinutes ?? 0,
+      paintingMinutes: pkg.paintingMinutes ?? 0,
+      packagingMinutes: pkg.packagingMinutes ?? 0,
+      notes: pkg.notes ?? "",
+    })),
     products: (stored.products ?? seedData.products).map((product) => ({
       ...product,
       tier: normalizeProductTier(product.tier),
       visibility: normalizeProductVisibility((product as Partial<Product>).visibility, product.status),
       productImagePath: product.productImagePath ?? "",
       conceptImagePath: product.conceptImagePath ?? "",
+      designPackageId: product.designPackageId ?? undefined,
       supportedRealmVariants: product.supportedRealmVariants ?? [],
     })),
     stls: (stored.stls ?? seedData.stls).map((stl) => ({
@@ -178,6 +216,7 @@ export function useForgekeeperState() {
 
   const [view, setView] = useState<ViewKey>("dashboard");
   const [products, setProducts] = useState<Product[]>(initial.products);
+  const [designPackages, setDesignPackages] = useState<DesignPackage[]>(initial.designPackages);
   const [stls, setStls] = useState<STLRecord[]>(initial.stls);
   const [concepts, setConcepts] = useState<ConceptSpec[]>(initial.concepts);
   const [variants, setVariants] = useState<ProductVariant[]>(initial.variants);
@@ -209,6 +248,7 @@ export function useForgekeeperState() {
 
   const appData: AppData = {
     products,
+    designPackages,
     stls,
     concepts,
     variants,
@@ -227,7 +267,7 @@ export function useForgekeeperState() {
 
   useEffect(() => {
     saveStoredData(appData);
-  }, [products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
+  }, [products, designPackages, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
 
   useEffect(() => {
     setPrinters((prev) => prev.map((printer) => printerStatusFromOrders(printer, orders, products)));
@@ -239,11 +279,13 @@ export function useForgekeeperState() {
     }
   }, [products, selectedProductId]);
 
+  const packageNameById = useMemo(() => new Map(designPackages.map((pkg) => [pkg.id, pkg.name])), [designPackages]);
+
   const filteredProducts = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     if (!query) return products;
-    return products.filter((p) => [p.name, p.collection, p.category, p.line, p.status, p.tier, p.visibility].join(" ").toLowerCase().includes(query));
-  }, [products, searchTerm]);
+    return products.filter((p) => [p.name, p.collection, p.category, p.line, p.status, p.tier, p.visibility, p.designPackageId ? packageNameById.get(p.designPackageId) : ""].join(" ").toLowerCase().includes(query));
+  }, [products, searchTerm, packageNameById]);
 
   const selectedProduct = products.find((p) => p.id === selectedProductId) || products[0];
   const productStls = stls.filter((s) => s.productId === selectedProductId);
@@ -251,6 +293,12 @@ export function useForgekeeperState() {
   const productOrders = orders.filter((o) => o.productId === selectedProductId);
   const productVariants = variants.filter((variant) => variant.productId === selectedProductId);
   const productRelease = releases.find((r) => r.productIds.includes(selectedProductId));
+
+  function getDesignPackageForProduct(product?: Product) {
+    return product?.designPackageId ? designPackages.find((pkg) => pkg.id === product.designPackageId) : undefined;
+  }
+
+  const selectedDesignPackage = getDesignPackageForProduct(selectedProduct);
 
   function getPrimaryStlForProduct(productId: string) {
     return stls.find((stl) => stl.productId === productId && stl.isPrimary) ?? stls.find((stl) => stl.productId === productId);
@@ -279,11 +327,12 @@ export function useForgekeeperState() {
   }
 
   function getProductCostGuide(product: Product) {
+    const packageForProduct = getDesignPackageForProduct(product);
     const sampleOrder: OrderRecord = {
       id: "sample",
       productId: product.id,
       filamentId: filament[0]?.id,
-      materialGrams: product.estimatedFilamentGrams,
+      materialGrams: packageForProduct?.estimatedFilamentGrams || product.estimatedFilamentGrams,
       customer: "Pricing Preview",
       contact: "",
       customerEmail: "",
@@ -301,8 +350,8 @@ export function useForgekeeperState() {
       paid: false,
       tracking: "",
       printerId: printers[0]?.id,
-      estimatedPrintHours: product.estimatedPrintHours,
-      laborHours: 0.5,
+      estimatedPrintHours: packageForProduct?.estimatedPrintHours || product.estimatedPrintHours,
+      laborHours: packageForProduct ? ((packageForProduct.cleanupMinutes + packageForProduct.assemblyMinutes + packageForProduct.paintingMinutes + packageForProduct.packagingMinutes) / 60) : 0.5,
       laborRate: settings.laborRate,
       machineWatts: printers[0]?.watts ?? settings.machineWatts,
       electricityRate: settings.electricityRate,
@@ -362,6 +411,54 @@ export function useForgekeeperState() {
     if (quickAction === action) setQuickAction(null);
   }
 
+  function addDesignPackage(sourceProduct?: Product) {
+    const baseProduct = sourceProduct ?? selectedProduct;
+    const id = uid("PKG");
+    const name = baseProduct?.name ? `${baseProduct.name} Package` : "New Design Package";
+    const family = baseProduct?.collection || baseProduct?.category || "Unassigned";
+
+    const nextPackage: DesignPackage = {
+      id,
+      name,
+      pillar: baseProduct?.tier ?? "Foundry",
+      family,
+      status: "Planning",
+      description: baseProduct?.notes ?? "",
+      lore: "",
+      conceptSheetPath: baseProduct?.conceptImagePath ?? "",
+      promptNotes: "",
+      referenceFolderPath: suggestedLibraryPath(settings.forgekeeperLibraryPath, name, "reference"),
+      stlFolderPath: suggestedLibraryPath(settings.forgekeeperLibraryPath, name, "stl"),
+      photoFolderPath: suggestedLibraryPath(settings.forgekeeperLibraryPath, name, "photos"),
+      catalogHeroImagePath: baseProduct?.productImagePath ?? "",
+      estimatedFilamentGrams: baseProduct?.estimatedFilamentGrams ?? 0,
+      estimatedPrintHours: baseProduct?.estimatedPrintHours ?? 0,
+      cleanupMinutes: 0,
+      assemblyMinutes: 0,
+      paintingMinutes: 0,
+      packagingMinutes: 5,
+      notes: "",
+    };
+
+    setDesignPackages((prev) => [nextPackage, ...prev]);
+    if (baseProduct) {
+      updateProduct(baseProduct.id, { designPackageId: id });
+    }
+    return id;
+  }
+
+  function updateDesignPackage(id: string, patch: Partial<DesignPackage>) {
+    setDesignPackages((prev) => prev.map((pkg) => (pkg.id === id ? { ...pkg, ...patch } : pkg)));
+  }
+
+  function removeDesignPackage(id: string) {
+    const pkg = designPackages.find((item) => item.id === id);
+    if (!pkg) return;
+    if (!window.confirm(`Remove design package ${pkg.name}? Products will remain but lose this package link.`)) return;
+    setDesignPackages((prev) => prev.filter((item) => item.id !== id));
+    setProducts((prev) => prev.map((product) => (product.designPackageId === id ? { ...product, designPackageId: undefined } : product)));
+  }
+
   function addProduct() {
     if (!newProductName.trim()) return;
     const id = uid("P");
@@ -372,6 +469,7 @@ export function useForgekeeperState() {
       line: "ForgeTech",
       category: "Accessory",
       collection: collections[0]?.name || "Unassigned",
+      designPackageId: designPackages[0]?.id,
       status: "Concept",
       visibility: "Concept",
       targetPrice: 0,
@@ -635,12 +733,13 @@ export function useForgekeeperState() {
     }
 
     const isCustom = input.orderType === "Custom Request";
+    const packageForProduct = getDesignPackageForProduct(product);
 
     setOrders((prev) => [{
       id: uid("REQ"),
       productId: product.id,
       filamentId: filament[0]?.id,
-      materialGrams: product.estimatedFilamentGrams,
+      materialGrams: packageForProduct?.estimatedFilamentGrams || product.estimatedFilamentGrams,
       customer: input.customer.trim(),
       contact: input.contact.trim(),
       customerEmail: input.customerEmail.trim(),
@@ -658,8 +757,8 @@ export function useForgekeeperState() {
       paid: false,
       tracking: "",
       printerId: undefined,
-      estimatedPrintHours: product.estimatedPrintHours || 0,
-      laborHours: isCustom ? 1 : 0.5,
+      estimatedPrintHours: packageForProduct?.estimatedPrintHours || product.estimatedPrintHours || 0,
+      laborHours: isCustom ? 1 : packageForProduct ? ((packageForProduct.cleanupMinutes + packageForProduct.assemblyMinutes + packageForProduct.paintingMinutes + packageForProduct.packagingMinutes) / 60) : 0.5,
       laborRate: settings.laborRate,
       machineWatts: printers[0]?.watts ?? settings.machineWatts,
       electricityRate: settings.electricityRate,
@@ -872,6 +971,8 @@ export function useForgekeeperState() {
   function exportProductsCsv() {
     downloadCsv("forgekeeper-products.csv", products.map((product) => ({
       ...product,
+      designPackageName: getDesignPackageForProduct(product)?.name ?? "",
+      designPackageFamily: getDesignPackageForProduct(product)?.family ?? "",
       primaryStl: getPrimaryStlForProduct(product.id)?.name ?? "",
       primaryStlFile: getPrimaryStlForProduct(product.id)?.filePath || getPrimaryStlForProduct(product.id)?.fileName || "",
       latestConcept: getLatestConceptForProduct(product.id)?.title ?? "",
@@ -895,6 +996,8 @@ export function useForgekeeperState() {
         productName: product?.name ?? order.productId,
         productPillar: product?.tier ?? "",
         productVisibility: product?.visibility ?? "",
+        designPackageName: getDesignPackageForProduct(product)?.name ?? "",
+        designPackageFamily: getDesignPackageForProduct(product)?.family ?? "",
         customer: order.customer,
         customerEmail: order.customerEmail ?? "",
         customerPhone: order.customerPhone ?? "",
@@ -943,6 +1046,7 @@ export function useForgekeeperState() {
           return;
         }
         setProducts(parsed.products ?? []);
+        setDesignPackages(parsed.designPackages ?? seedDesignPackages);
         setStls(parsed.stls ?? []);
         setConcepts(parsed.concepts ?? []);
         setVariants(parsed.variants ?? []);
@@ -975,15 +1079,16 @@ export function useForgekeeperState() {
 
   return {
     view, setView,
-    products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings,
+    products, designPackages, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
     batches, setBatches,
     selectedProductId, setSelectedProductId, productTab, setProductTab,
     newProductName, setNewProductName, newStlName, setNewStlName, newConceptTitle, setNewConceptTitle,
     newCollectionName, setNewCollectionName, newReleaseName, setNewReleaseName, newOrderCustomer, setNewOrderCustomer,
     newFilamentName, setNewFilamentName, newPrinterName, setNewPrinterName, searchTerm, setSearchTerm, quickAction,
-    filteredProducts, selectedProduct, productStls, productConcepts, productOrders, productVariants, productRelease, metrics, queueCounts, productionMetrics, getCostBreakdownForOrder, getProductCostGuide, getPrimaryStlForProduct, getLatestConceptForProduct, getProductDisplayImage, getVariantDisplayImage,
+    filteredProducts, selectedProduct, selectedDesignPackage, productStls, productConcepts, productOrders, productVariants, productRelease, metrics, queueCounts, productionMetrics, getCostBreakdownForOrder, getProductCostGuide, getPrimaryStlForProduct, getLatestConceptForProduct, getProductDisplayImage, getVariantDisplayImage,
     triggerQuickAction,
+    addDesignPackage, updateDesignPackage, removeDesignPackage,
     addProduct, updateProduct, removeProduct,
     addStl, updateStl, markPrimaryStl, removeStl,
     addConcept, updateConcept, removeConcept,

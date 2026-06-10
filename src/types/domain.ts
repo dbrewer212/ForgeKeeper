@@ -5,6 +5,7 @@ export type ProductTier = ProductPillar;
 export type ProductLine = "ForgeTech" | "Foundry" | "Relics of the Nine Realms" | "Runehallow Relics";
 export type ProductStatus = "Concept" | "Prototype" | "Active" | "Production" | "Archived";
 export type ProductVisibility = "Internal" | "Concept" | "Preorder" | "Available" | "Commission Available" | "Archived";
+export type DesignPackageStatus = "Planning" | "Active" | "Needs Assets" | "Ready for Catalog" | "Archived";
 export type OrderStatus = "Inquiry" | "Estimate" | "Awaiting Deposit" | "Queued" | "Production" | "Finishing" | "Completed" | "Voided" | "Printing" | "Packed" | "Shipped";
 export type OrderType = "Catalog Order" | "Custom Request";
 export type DepositStatus = "Not Requested" | "Awaiting Deposit" | "Deposit Received" | "Paid in Full" | "Waived" | "Refunded";
@@ -29,6 +30,29 @@ export type RealmVariant =
   | "Niflheim"
   | "Helheim";
 
+export type DesignPackage = {
+  id: string;
+  name: string;
+  pillar: ProductPillar;
+  family: string;
+  status: DesignPackageStatus;
+  description: string;
+  lore: string;
+  conceptSheetPath: string;
+  promptNotes: string;
+  referenceFolderPath: string;
+  stlFolderPath: string;
+  photoFolderPath: string;
+  catalogHeroImagePath: string;
+  estimatedFilamentGrams: number;
+  estimatedPrintHours: number;
+  cleanupMinutes: number;
+  assemblyMinutes: number;
+  paintingMinutes: number;
+  packagingMinutes: number;
+  notes: string;
+};
+
 export type Product = {
   id: string;
   name: string;
@@ -36,6 +60,7 @@ export type Product = {
   line: ProductLine;
   category: string;
   collection: string;
+  designPackageId?: string;
   status: ProductStatus;
   visibility: ProductVisibility;
   targetPrice: number;
@@ -202,6 +227,7 @@ export type AppSettings = {
 
 export type AppData = {
   products: Product[];
+  designPackages: DesignPackage[];
   stls: STLRecord[];
   concepts: ConceptSpec[];
   variants: ProductVariant[];
