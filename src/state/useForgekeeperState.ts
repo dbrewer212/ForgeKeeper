@@ -60,13 +60,19 @@ function normalizeProductTier(tier: unknown): Product["tier"] {
 function normalizeDesignPackageStatus(status: unknown): DesignPackage["status"] {
   if (
     status === "Planning" ||
-    status === "Active" ||
-    status === "Needs Assets" ||
-    status === "Ready for Catalog" ||
+    status === "Concept Ready" ||
+    status === "Modeling" ||
+    status === "STL Ready" ||
+    status === "Print Tested" ||
+    status === "Catalog Ready" ||
     status === "Archived"
   ) {
     return status;
   }
+
+  if (status === "Active") return "Modeling";
+  if (status === "Needs Assets") return "Concept Ready";
+  if (status === "Ready for Catalog") return "Catalog Ready";
 
   return "Planning";
 }
@@ -96,6 +102,47 @@ function normalizePlanningTier(tier: unknown): PlannedPrototype["tier"] {
   return "ForgeTech";
 }
 
+const defaultPackageFamilies: Array<{ pillar: Product["tier"]; family: string }> = [
+  { pillar: "Foundry", family: "Forge Goblins" },
+  { pillar: "Foundry", family: "Wyrmslings" },
+  { pillar: "Foundry", family: "Mimics" },
+  { pillar: "Foundry", family: "Mystery Boxes" },
+  { pillar: "Foundry", family: "Dice" },
+  { pillar: "Relics", family: "Nine Realms Coins" },
+  { pillar: "Relics", family: "Forge Coins" },
+  { pillar: "Relics", family: "Altars" },
+  { pillar: "Relics", family: "Realm Artifacts" },
+  { pillar: "ForgeTech", family: "Headset Stands" },
+  { pillar: "ForgeTech", family: "Controller Stands" },
+  { pillar: "ForgeTech", family: "Desk Accessories" },
+  { pillar: "Reforged", family: "Resilience Collection" },
+  { pillar: "Reforged", family: "Memorial Pieces" },
+  { pillar: "Reforged", family: "Restoration Series" },
+];
+
+function codePart(value: string, fallback: string) {
+  const clean = value.toUpperCase().replace(/[^A-Z0-9\s-]/g, "").trim();
+  if (!clean) return fallback;
+
+  const words = clean.split(/[\s-]+/).filter(Boolean);
+  if (words.length >= 2) {
+    return words.map((word) => word[0]).join("").slice(0, 3).padEnd(3, "X");
+  }
+
+  return clean.slice(0, 3).padEnd(3, "X");
+}
+
+function suggestedPackageCode(pillar: Product["tier"], family: string, name: string) {
+  const pillarCode: Record<Product["tier"], string> = {
+    Foundry: "FND",
+    Relics: "REL",
+    ForgeTech: "FGT",
+    Reforged: "RFG",
+  };
+
+  return `${pillarCode[pillar]}-${codePart(family, "GEN")}-${codePart(name, "PKG")}`;
+}
+
 function hydrateData(): AppData {
   const stored = loadStoredData();
   if (!stored) return seedData;
@@ -105,6 +152,7 @@ function hydrateData(): AppData {
       pillar: normalizeProductTier(pkg.pillar),
       status: normalizeDesignPackageStatus(pkg.status),
       family: pkg.family ?? "Unassigned",
+      packageCode: pkg.packageCode || suggestedPackageCode(normalizeProductTier(pkg.pillar), pkg.family ?? "Unassigned", pkg.name ?? "Package"),
       description: pkg.description ?? "",
       lore: pkg.lore ?? "",
       conceptSheetPath: pkg.conceptSheetPath ?? "",
@@ -112,7 +160,8 @@ function hydrateData(): AppData {
       referenceFolderPath: pkg.referenceFolderPath ?? "",
       stlFolderPath: pkg.stlFolderPath ?? "",
       photoFolderPath: pkg.photoFolderPath ?? "",
-      catalogHeroImagePath: pkg.catalogHeroImagePath ?? "",
+      catalogDisplayImagePath: pkg.catalogDisplayImagePath ?? pkg.catalogHeroImagePath ?? "",
+      catalogHeroImagePath: pkg.catalogHeroImagePath ?? pkg.catalogDisplayImagePath ?? "",
       estimatedFilamentGrams: pkg.estimatedFilamentGrams ?? 0,
       estimatedPrintHours: pkg.estimatedPrintHours ?? 0,
       cleanupMinutes: pkg.cleanupMinutes ?? 0,
@@ -281,6 +330,29 @@ export function useForgekeeperState() {
 
   const packageNameById = useMemo(() => new Map(designPackages.map((pkg) => [pkg.id, pkg.name])), [designPackages]);
 
+  const packageFamilyOptions = useMemo(() => {
+    const options = new Map<string, { pillar: Product["tier"]; family: string }>();
+
+    for (const item of defaultPackageFamilies) {
+      options.set(`${item.pillar}:${item.family}`, item);
+    }
+
+    for (const pkg of designPackages) {
+      if (pkg.family?.trim()) {
+        options.set(`${pkg.pillar}:${pkg.family.trim()}`, { pillar: pkg.pillar, family: pkg.family.trim() });
+      }
+    }
+
+    for (const product of products) {
+      const family = product.collection || product.category;
+      if (family?.trim()) {
+        options.set(`${product.tier}:${family.trim()}`, { pillar: product.tier, family: family.trim() });
+      }
+    }
+
+    return Array.from(options.values()).sort((a, b) => a.pillar.localeCompare(b.pillar) || a.family.localeCompare(b.family));
+  }, [designPackages, products]);
+
   const filteredProducts = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
     if (!query) return products;
@@ -417,10 +489,13 @@ export function useForgekeeperState() {
     const name = baseProduct?.name ? `${baseProduct.name} Package` : "New Design Package";
     const family = baseProduct?.collection || baseProduct?.category || "Unassigned";
 
+    const pillar = baseProduct?.tier ?? "Foundry";
+
     const nextPackage: DesignPackage = {
       id,
       name,
-      pillar: baseProduct?.tier ?? "Foundry",
+      packageCode: suggestedPackageCode(pillar, family, name),
+      pillar,
       family,
       status: "Planning",
       description: baseProduct?.notes ?? "",
@@ -430,6 +505,7 @@ export function useForgekeeperState() {
       referenceFolderPath: suggestedLibraryPath(settings.forgekeeperLibraryPath, name, "reference"),
       stlFolderPath: suggestedLibraryPath(settings.forgekeeperLibraryPath, name, "stl"),
       photoFolderPath: suggestedLibraryPath(settings.forgekeeperLibraryPath, name, "photos"),
+      catalogDisplayImagePath: baseProduct?.productImagePath ?? "",
       catalogHeroImagePath: baseProduct?.productImagePath ?? "",
       estimatedFilamentGrams: baseProduct?.estimatedFilamentGrams ?? 0,
       estimatedPrintHours: baseProduct?.estimatedPrintHours ?? 0,
@@ -1079,7 +1155,7 @@ export function useForgekeeperState() {
 
   return {
     view, setView,
-    products, designPackages, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings,
+    products, designPackages, packageFamilyOptions, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
     batches, setBatches,
     selectedProductId, setSelectedProductId, productTab, setProductTab,

@@ -5,7 +5,7 @@ export type ProductTier = ProductPillar;
 export type ProductLine = "ForgeTech" | "Foundry" | "Relics of the Nine Realms" | "Runehallow Relics";
 export type ProductStatus = "Concept" | "Prototype" | "Active" | "Production" | "Archived";
 export type ProductVisibility = "Internal" | "Concept" | "Preorder" | "Available" | "Commission Available" | "Archived";
-export type DesignPackageStatus = "Planning" | "Active" | "Needs Assets" | "Ready for Catalog" | "Archived";
+export type DesignPackageStatus = "Planning" | "Concept Ready" | "Modeling" | "STL Ready" | "Print Tested" | "Catalog Ready" | "Archived" | "Active" | "Needs Assets" | "Ready for Catalog";
 export type OrderStatus = "Inquiry" | "Estimate" | "Awaiting Deposit" | "Queued" | "Production" | "Finishing" | "Completed" | "Voided" | "Printing" | "Packed" | "Shipped";
 export type OrderType = "Catalog Order" | "Custom Request";
 export type DepositStatus = "Not Requested" | "Awaiting Deposit" | "Deposit Received" | "Paid in Full" | "Waived" | "Refunded";
@@ -33,6 +33,7 @@ export type RealmVariant =
 export type DesignPackage = {
   id: string;
   name: string;
+  packageCode?: string;
   pillar: ProductPillar;
   family: string;
   status: DesignPackageStatus;
@@ -43,7 +44,8 @@ export type DesignPackage = {
   referenceFolderPath: string;
   stlFolderPath: string;
   photoFolderPath: string;
-  catalogHeroImagePath: string;
+  catalogDisplayImagePath?: string;
+  catalogHeroImagePath?: string;
   estimatedFilamentGrams: number;
   estimatedPrintHours: number;
   cleanupMinutes: number;
