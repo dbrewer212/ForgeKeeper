@@ -104,6 +104,13 @@ export function OrdersView({ state }: { state: ForgekeeperState }) {
                             <div className="font-medium text-slate-100">{order.customer}</div>
                             <div className="mt-1 text-xs text-slate-500">
                               {product?.name || order.productId} · {order.orderType} · Quote {money(order.quotedPrice)}
+                              {order.designPackageCode ? (
+                                <>
+                                  <br />
+                                  Package: {order.designPackageCode} · {order.designPackageName || "Package"}
+                                  {order.selectedVariantName ? ` · Variant: ${order.selectedVariantName}` : ""}
+                                </>
+                              ) : null}
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2">
                               <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-2 py-1 text-[11px] text-amber-200">

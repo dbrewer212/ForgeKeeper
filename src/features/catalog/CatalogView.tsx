@@ -8,12 +8,12 @@ import { Textarea } from "../../components/ui/Textarea";
 import { money } from "../../lib/format";
 import { inventoryState, pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
-import type { DepositStatus, DesignPackage, DesignPackageStatus, OrderStatus, OrderType, Product, ProductLine, ProductStatus, ProductTab, ProductPillar, ProductVariant, ProductVisibility, RealmVariant } from "../../types/domain";
+import type { DepositStatus, DesignPackageStatus, OrderStatus, OrderType, Product, ProductLine, ProductStatus, ProductTab, ProductPillar, ProductVariant, ProductVisibility, RealmVariant } from "../../types/domain";
 
 const productTabs: ProductTab[] = ["overview", "stls", "concepts", "variants", "orders"];
 const realmOptions: RealmVariant[] = ["Midgard", "Alfheim", "Svartalfheim", "Vanaheim", "Asgard", "Jotunheim", "Muspelheim", "Niflheim", "Helheim"];
 const visibilityOptions: ProductVisibility[] = ["Internal", "Concept", "Preorder", "Available", "Commission Available", "Archived"];
-const designPackageStatuses: DesignPackageStatus[] = ["Planning", "Concept Ready", "Modeling", "STL Ready", "Print Tested", "Catalog Ready", "Archived"];
+const designPackageStatuses: DesignPackageStatus[] = ["Planning", "Active", "Needs Assets", "Ready for Catalog", "Archived"];
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -418,9 +418,6 @@ function DesignPackagePanel({ state, product }: { state: ForgekeeperState; produ
   }
 
   const totalLaborMinutes = pkg.cleanupMinutes + pkg.assemblyMinutes + pkg.paintingMinutes + pkg.packagingMinutes;
-  const packageDisplayImage = pkg.catalogDisplayImagePath || pkg.catalogHeroImagePath || "";
-  const packageImportId = `package-folder-import-${product.id}`;
-  const readiness = getDesignPackageReadiness(pkg, state);
 
   return (
     <Card
@@ -432,72 +429,16 @@ function DesignPackagePanel({ state, product }: { state: ForgekeeperState; produ
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-lg font-semibold text-slate-100">{pkg.name}</div>
-              <div className="mt-1 text-sm text-slate-400">{pkg.packageCode || "No code"} · {pkg.pillar} · {pkg.family}</div>
+              <div className="mt-1 text-sm text-slate-400">{pkg.pillar} · {pkg.family}</div>
             </div>
             <Button variant="danger" className="h-8 px-3 text-xs" onClick={() => state.removeDesignPackage(pkg.id)}>Remove Package</Button>
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <StatusRow label="Package Readiness" value={`${readiness.score}%`} status={readiness.score >= 80 ? "Catalog Ready" : readiness.score >= 50 ? "Concept Ready" : "Planning"} />
             <StatusRow label="Package Filament Estimate" value={`${pkg.estimatedFilamentGrams}g`} />
             <StatusRow label="Package Print Estimate" value={`${pkg.estimatedPrintHours}h`} />
             <StatusRow label="Labor Estimate" value={`${totalLaborMinutes} min`} />
-            <StatusRow label="Package Display Image" value={packageDisplayImage ? "Linked" : "Missing"} status={packageDisplayImage ? "Catalog Ready" : "Concept Ready"} />
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-amber-300/15 bg-amber-400/5 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-amber-100">Package Folder Import</div>
-              <div className="mt-1 max-w-2xl text-xs leading-5 text-slate-400">
-                Select a prepared package folder to build or refresh package source data. This first pass reads browser-safe file references, detects concepts, package display images, prompt/notes files, STL/3MF assets, and variant image candidates.
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <input
-                id={packageImportId}
-                type="file"
-                multiple
-                // @ts-expect-error webkitdirectory is supported by Chromium/Electron-style browsers and ignored elsewhere.
-                webkitdirectory="true"
-                className="hidden"
-                onChange={(event) => {
-                  state.importDesignPackageFolder(event.currentTarget.files, product);
-                  event.currentTarget.value = "";
-                }}
-              />
-              <Button variant="ghost" onClick={() => document.getElementById(packageImportId)?.click()}>
-                Import Package Folder
-              </Button>
-            </div>
-          </div>
-          <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3 text-xs leading-5 text-slate-400">
-            Recommended folders: concepts, variants, prompts, stl, 3mf, photos, catalog, notes. STLs/3MFs can be added later when Meshy/modeling work is complete.
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-slate-100">Package Readiness Checklist</div>
-              <div className="mt-1 text-xs text-slate-500">Checks whether this package has enough structure to support catalog, production, and order workflows.</div>
-            </div>
-            <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${readiness.score >= 80 ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-200" : readiness.score >= 50 ? "border-amber-300/25 bg-amber-400/10 text-amber-200" : "border-rose-300/25 bg-rose-400/10 text-rose-200"}`}>
-              {readiness.score}% Ready
-            </span>
-          </div>
-
-          <div className="grid gap-2 md:grid-cols-2">
-            {readiness.items.map((item) => {
-              const isOptionalPending = !item.ready && !item.required;
-              return (
-                <div key={item.label} className={`rounded-xl border px-3 py-2 text-xs ${item.ready ? "border-emerald-300/15 bg-emerald-400/5 text-emerald-100" : isOptionalPending ? "border-sky-300/15 bg-sky-400/5 text-sky-100" : "border-amber-300/15 bg-amber-400/5 text-amber-100"}`}>
-                  <div className="font-semibold">{item.ready ? "✓" : isOptionalPending ? "○" : "⚠"} {item.label}</div>
-                  <div className="mt-1 text-slate-500">{item.detail}</div>
-                </div>
-              );
-            })}
+            <StatusRow label="Catalog Hero" value={pkg.catalogHeroImagePath ? "Linked" : "Missing"} status={pkg.catalogHeroImagePath ? "Active" : "Needs Assets"} />
           </div>
         </div>
 
@@ -505,15 +446,9 @@ function DesignPackagePanel({ state, product }: { state: ForgekeeperState; produ
           <Field label="Package Name">
             <Input value={pkg.name} onChange={(e) => state.updateDesignPackage(pkg.id, { name: e.target.value })} />
           </Field>
-
-          <Field label="Package Code">
-            <Input
-              value={pkg.packageCode || ""}
-              onChange={(e) => state.updateDesignPackage(pkg.id, { packageCode: e.target.value.toUpperCase() })}
-              placeholder="FND-GOB-GRI"
-            />
+          <Field label="Family">
+            <Input value={pkg.family} onChange={(e) => state.updateDesignPackage(pkg.id, { family: e.target.value })} placeholder="Forge Goblins, Wyrmslings, Nine Realms Coins..." />
           </Field>
-
           <Field label="Pillar">
             <Select value={pkg.pillar} onChange={(e) => state.updateDesignPackage(pkg.id, { pillar: e.target.value as ProductPillar })}>
               <option value="Foundry">Foundry</option>
@@ -522,51 +457,17 @@ function DesignPackagePanel({ state, product }: { state: ForgekeeperState; produ
               <option value="Reforged">Reforged</option>
             </Select>
           </Field>
-
-          <Field label="Family">
-            <Select value={pkg.family} onChange={(e) => state.updateDesignPackage(pkg.id, { family: e.target.value })}>
-              {state.packageFamilyOptions
-                .filter((familyOption) => familyOption.pillar === pkg.pillar)
-                .map((familyOption) => (
-                  <option key={`${familyOption.pillar}-${familyOption.family}`} value={familyOption.family}>
-                    {familyOption.family}
-                  </option>
-                ))}
-              {!state.packageFamilyOptions.some((familyOption) => familyOption.pillar === pkg.pillar && familyOption.family === pkg.family) ? (
-                <option value={pkg.family}>{pkg.family}</option>
-              ) : null}
-            </Select>
-            <Input
-              className="mt-2"
-              value={pkg.family}
-              onChange={(e) => state.updateDesignPackage(pkg.id, { family: e.target.value })}
-              placeholder="Custom family name"
-            />
-          </Field>
-
           <Field label="Package Status">
             <Select value={pkg.status} onChange={(e) => state.updateDesignPackage(pkg.id, { status: e.target.value as DesignPackageStatus })}>
               {designPackageStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
             </Select>
           </Field>
-
           <Field label="Concept Sheet / Source Image" className="md:col-span-2">
             <Input value={pkg.conceptSheetPath} onChange={(e) => state.updateDesignPackage(pkg.id, { conceptSheetPath: e.target.value })} placeholder="Concept sheet path or uploaded image reference" />
           </Field>
-
-          <Field label="Package Display Image" className="md:col-span-2">
-            <Input
-              value={packageDisplayImage}
-              onChange={(e) =>
-                state.updateDesignPackage(pkg.id, {
-                  catalogDisplayImagePath: e.target.value,
-                  catalogHeroImagePath: e.target.value,
-                })
-              }
-              placeholder="Customer-facing display image for this package"
-            />
+          <Field label="Catalog Hero Image" className="md:col-span-2">
+            <Input value={pkg.catalogHeroImagePath} onChange={(e) => state.updateDesignPackage(pkg.id, { catalogHeroImagePath: e.target.value })} placeholder="Hero image for catalog package display" />
           </Field>
-
           <Field label="Reference Folder">
             <Input value={pkg.referenceFolderPath} onChange={(e) => state.updateDesignPackage(pkg.id, { referenceFolderPath: e.target.value })} />
           </Field>
@@ -594,111 +495,22 @@ function DesignPackagePanel({ state, product }: { state: ForgekeeperState; produ
           <Field label="Packaging Minutes">
             <Input type="number" min={0} value={pkg.packagingMinutes} onChange={(e) => state.updateDesignPackage(pkg.id, { packagingMinutes: Number(e.target.value) })} />
           </Field>
+          <Field label="Description" className="md:col-span-2">
+            <Textarea value={pkg.description} onChange={(e) => state.updateDesignPackage(pkg.id, { description: e.target.value })} placeholder="Package/customer-facing concept description..." className="min-h-[90px] w-full" />
+          </Field>
+          <Field label="Lore / Identity Notes" className="md:col-span-2">
+            <Textarea value={pkg.lore} onChange={(e) => state.updateDesignPackage(pkg.id, { lore: e.target.value })} placeholder="Character, realm, collection, or story notes..." className="min-h-[90px] w-full" />
+          </Field>
           <Field label="Meshy Prompt / Generation Notes" className="md:col-span-2">
-            <Textarea value={pkg.promptNotes} onChange={(e) => state.updateDesignPackage(pkg.id, { promptNotes: e.target.value })} className="min-h-[96px]" placeholder="Prompt, Meshy settings, generation notes, or revision notes" />
+            <Textarea value={pkg.promptNotes} onChange={(e) => state.updateDesignPackage(pkg.id, { promptNotes: e.target.value })} placeholder="Prompt text, Meshy settings, generation notes, revisions..." className="min-h-[100px] w-full" />
           </Field>
           <Field label="Package Notes" className="md:col-span-2">
-            <Textarea value={pkg.notes} onChange={(e) => state.updateDesignPackage(pkg.id, { notes: e.target.value })} className="min-h-[96px]" placeholder="Package planning notes, status notes, or production concerns" />
+            <Textarea value={pkg.notes} onChange={(e) => state.updateDesignPackage(pkg.id, { notes: e.target.value })} placeholder="Internal package notes, asset status, next revisions..." className="min-h-[90px] w-full" />
           </Field>
         </div>
       </div>
     </Card>
   );
-}
-
-function getDesignPackageReadiness(pkg: DesignPackage, state: ForgekeeperState) {
-  const packageDisplayImage = pkg.catalogDisplayImagePath || pkg.catalogHeroImagePath || "";
-  const linkedProducts = state.products.filter((product) => product.designPackageId === pkg.id);
-  const linkedProductIds = new Set(linkedProducts.map((product) => product.id));
-  const linkedStls = state.stls.filter((stl) => linkedProductIds.has(stl.productId));
-  const linkedConcepts = state.concepts.filter((concept) => linkedProductIds.has(concept.productId));
-  const linkedVariants = state.variants.filter((variant) => linkedProductIds.has(variant.productId));
-  const totalLaborMinutes = pkg.cleanupMinutes + pkg.assemblyMinutes + pkg.paintingMinutes + pkg.packagingMinutes;
-  const variantCandidateMatch = pkg.notes.match(/Variant image candidates:\s*(\d+)/i);
-  const variantCandidateCount = variantCandidateMatch ? Number(variantCandidateMatch[1]) : 0;
-  const hasVariantSource = linkedVariants.length > 0 || variantCandidateCount > 0;
-  const hasModelAssets = Boolean(pkg.stlFolderPath || linkedStls.length > 0);
-  const hasMetrics = pkg.estimatedFilamentGrams > 0 && pkg.estimatedPrintHours > 0;
-  const hasLabor = totalLaborMinutes > 0;
-  const statusRank: Record<string, number> = {
-    Planning: 0,
-    "Concept Ready": 1,
-    Modeling: 2,
-    "STL Ready": 3,
-    "Print Tested": 4,
-    "Catalog Ready": 5,
-    Archived: 6,
-  };
-  const rank = statusRank[pkg.status] ?? 0;
-
-  const items = [
-    {
-      label: "Package code",
-      ready: Boolean(pkg.packageCode?.trim()),
-      required: true,
-      detail: pkg.packageCode?.trim() ? pkg.packageCode : "Add a searchable package code.",
-    },
-    {
-      label: "Pillar and family",
-      ready: Boolean(pkg.pillar && pkg.family?.trim()),
-      required: true,
-      detail: pkg.family?.trim() ? `${pkg.pillar} / ${pkg.family}` : "Choose a pillar and family.",
-    },
-    {
-      label: "Concept source",
-      ready: Boolean(pkg.conceptSheetPath || linkedConcepts.length > 0),
-      required: rank >= 1,
-      detail: pkg.conceptSheetPath ? "Concept/spec sheet linked." : `${linkedConcepts.length} linked concept record(s).`,
-    },
-    {
-      label: "Variant definitions",
-      ready: hasVariantSource,
-      required: rank >= 1,
-      detail: linkedVariants.length > 0 ? `${linkedVariants.length} variant record(s) linked.` : `${variantCandidateCount} variant image candidate(s).`,
-    },
-    {
-      label: "Package display image",
-      ready: Boolean(packageDisplayImage),
-      required: rank >= 1,
-      detail: packageDisplayImage ? "Display image linked." : "Add a customer-facing package display image.",
-    },
-    {
-      label: "Prompt / design notes",
-      ready: Boolean(pkg.promptNotes.trim() || pkg.notes.trim()),
-      required: rank >= 1,
-      detail: pkg.promptNotes.trim() ? "Prompt/generation notes present." : "Add prompt, Meshy notes, or design notes.",
-    },
-    {
-      label: "STL / 3MF assets",
-      ready: hasModelAssets,
-      required: rank >= 3,
-      detail: hasModelAssets ? "STL/3MF assets linked." : rank >= 3 ? "Required for STL Ready or later." : "Not required until STL Ready.",
-    },
-    {
-      label: "Estimated metrics",
-      ready: hasMetrics,
-      required: rank >= 5,
-      detail: hasMetrics ? `${pkg.estimatedFilamentGrams}g / ${pkg.estimatedPrintHours}h` : rank >= 5 ? "Required before Catalog Ready." : "Can be added after model/export estimates exist.",
-    },
-    {
-      label: "Labor profile",
-      ready: hasLabor,
-      required: rank >= 5,
-      detail: hasLabor ? `${totalLaborMinutes} total labor minute(s).` : rank >= 5 ? "Required before final catalog readiness." : "Can be refined later.",
-    },
-    {
-      label: "Catalog description",
-      ready: Boolean(pkg.description.trim()),
-      required: rank >= 1,
-      detail: pkg.description.trim() ? "Description present." : "Add package/customer-facing description.",
-    },
-  ];
-
-  const requiredItems = items.filter((item) => item.required);
-  const readyRequiredCount = requiredItems.filter((item) => item.ready).length;
-  const score = requiredItems.length > 0 ? Math.round((readyRequiredCount / requiredItems.length) * 100) : 100;
-
-  return { score, items };
 }
 
 

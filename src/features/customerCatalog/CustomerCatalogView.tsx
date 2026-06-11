@@ -112,6 +112,58 @@ export function CustomerCatalogView({ state }: { state: ForgekeeperState }) {
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr),420px]">
       <div className="space-y-6">
+
+      {state.customerVisibleDesignPackages?.length ? (
+        <section className="rounded-3xl border border-white/10 bg-[#111821] p-5 shadow-2xl shadow-black/20">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-slate-100">Visible Design Packages</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Package-based catalog entries prepared from Design Package data.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {state.customerVisibleDesignPackages.map((pkg) => {
+              const linkedProducts = state.products.filter((product) => product.designPackageId === pkg.id);
+              const primaryProduct = linkedProducts[0];
+              const packageVariants = state.variants.filter((variant) => linkedProducts.some((product) => product.id === variant.productId));
+              const image = pkg.catalogDisplayImagePath || pkg.catalogHeroImagePath || primaryProduct?.productImagePath || primaryProduct?.conceptImagePath || "";
+              return (
+                <button
+                  key={pkg.id}
+                  type="button"
+                  className="group overflow-hidden rounded-3xl border border-white/10 bg-[#0d131c] text-left transition hover:-translate-y-0.5 hover:border-amber-300/30"
+                  onClick={() => {
+                    if (primaryProduct) setSelectedProductId(primaryProduct.id);
+                  }}
+                >
+                  <div className="aspect-[4/3] bg-slate-950">
+                    {image ? (
+                      <img src={image} alt={pkg.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs text-slate-600">No package image</div>
+                    )}
+                  </div>
+                  <div className="space-y-2 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-base font-semibold text-slate-100">{pkg.name}</div>
+                        <div className="mt-1 text-xs text-slate-500">{pkg.packageCode || "No code"} · {pkg.family}</div>
+                      </div>
+                      <span className="rounded-full border border-sky-300/20 bg-sky-400/10 px-2 py-1 text-[11px] text-sky-200">
+                        {pkg.catalogVisibility || "Preview"}
+                      </span>
+                    </div>
+                    <p className="line-clamp-3 text-sm leading-6 text-slate-400">{pkg.description || "Package details are being prepared."}</p>
+                    <div className="text-xs text-slate-500">{packageVariants.length} variant option(s)</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+
         <Card title="Customer Catalog">
           <div className="rounded-2xl border border-amber-300/15 bg-amber-400/10 p-5">
             <p className="text-xs font-bold uppercase tracking-[0.28em] text-amber-200">
