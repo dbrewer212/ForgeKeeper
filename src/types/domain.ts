@@ -120,6 +120,7 @@ export type ProductVariant = {
   productId: string;
   realm: RealmVariant;
   name: string;
+  variantCode?: string;
   productImagePath: string;
   conceptImagePath: string;
   stlId?: string;

@@ -333,6 +333,24 @@ export function useForgekeeperState() {
     [designPackages],
   );
 
+  const customerCatalogPackages = useMemo(() => {
+    return customerVisibleDesignPackages.map((pkg) => {
+      const linkedProducts = products.filter((product) => product.designPackageId === pkg.id);
+      const primaryProduct = linkedProducts[0];
+      const linkedProductIds = new Set(linkedProducts.map((product) => product.id));
+      const packageVariants = variants.filter((variant) => linkedProductIds.has(variant.productId));
+
+      return {
+        package: pkg,
+        products: linkedProducts,
+        primaryProduct,
+        variants: packageVariants,
+      };
+    });
+  }, [customerVisibleDesignPackages, customerCatalogPackages, products, variants]);
+
+
+
 
   const filteredProducts = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -1132,7 +1150,7 @@ export function useForgekeeperState() {
 
   return {
     view, setView,
-    products, designPackages, customerVisibleDesignPackages, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings,
+    products, designPackages, customerVisibleDesignPackages, customerCatalogPackages, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
     batches, setBatches,
     selectedProductId, setSelectedProductId, productTab, setProductTab,

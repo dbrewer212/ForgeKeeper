@@ -17,6 +17,8 @@ const companyEmailPlaceholder = "orders@fenrirforgeworks.com";
 export function CustomerCatalogView({ state }: { state: ForgekeeperState }) {
   const [activePillar, setActivePillar] = useState<"All" | ProductPillar>("All");
   const [selectedProductId, setSelectedProductId] = useState("");
+  const [selectedPackageId, setSelectedPackageId] = useState<string>("");
+  const [selectedVariantId, setSelectedVariantId] = useState<string>("");
   const [orderType, setOrderType] = useState<OrderType>("Catalog Order");
   const [customer, setCustomer] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
@@ -113,26 +115,32 @@ export function CustomerCatalogView({ state }: { state: ForgekeeperState }) {
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr),420px]">
       <div className="space-y-6">
 
-      {state.customerVisibleDesignPackages?.length ? (
+      {state.customerCatalogPackages?.length ? (
         <section className="rounded-3xl border border-white/10 bg-[#111821] p-5 shadow-2xl shadow-black/20">
           <div className="mb-4">
-            <h2 className="text-lg font-semibold text-slate-100">Visible Design Packages</h2>
+            <h2 className="text-lg font-semibold text-slate-100">Design Package Catalog</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Package-based catalog entries prepared from Design Package data.
+              Browse by package, select a variant, then submit the request.
             </p>
           </div>
+
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {state.customerVisibleDesignPackages.map((pkg) => {
-              const linkedProducts = state.products.filter((product) => product.designPackageId === pkg.id);
-              const primaryProduct = linkedProducts[0];
-              const packageVariants = state.variants.filter((variant) => linkedProducts.some((product) => product.id === variant.productId));
+            {state.customerCatalogPackages.map((entry) => {
+              const pkg = entry.package;
+              const primaryProduct = entry.primaryProduct;
               const image = pkg.catalogDisplayImagePath || pkg.catalogHeroImagePath || primaryProduct?.productImagePath || primaryProduct?.conceptImagePath || "";
+              const selected = selectedCatalogPackage?.package.id === pkg.id;
+
               return (
                 <button
                   key={pkg.id}
                   type="button"
-                  className="group overflow-hidden rounded-3xl border border-white/10 bg-[#0d131c] text-left transition hover:-translate-y-0.5 hover:border-amber-300/30"
+                  className={`group overflow-hidden rounded-3xl border bg-[#0d131c] text-left transition hover:-translate-y-0.5 ${
+                    selected ? "border-amber-300/40 shadow-lg shadow-amber-950/20" : "border-white/10 hover:border-amber-300/30"
+                  }`}
                   onClick={() => {
+                    setSelectedPackageId(pkg.id);
+                    setSelectedVariantId("");
                     if (primaryProduct) setSelectedProductId(primaryProduct.id);
                   }}
                 >
@@ -154,14 +162,56 @@ export function CustomerCatalogView({ state }: { state: ForgekeeperState }) {
                       </span>
                     </div>
                     <p className="line-clamp-3 text-sm leading-6 text-slate-400">{pkg.description || "Package details are being prepared."}</p>
-                    <div className="text-xs text-slate-500">{packageVariants.length} variant option(s)</div>
+                    <div className="text-xs text-slate-500">{entry.variants.length} variant option(s)</div>
                   </div>
                 </button>
               );
             })}
           </div>
+
+          {selectedCatalogPackage ? (
+            <div className="mt-5 rounded-3xl border border-amber-300/15 bg-amber-400/5 p-4">
+              <div className="mb-3">
+                <div className="text-sm font-semibold text-amber-100">{selectedCatalogPackage.package.name} Variants</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  The selected package and variant will be attached to the order snapshot.
+                </div>
+              </div>
+
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                {selectedCatalogPackage.variants.length ? (
+                  selectedCatalogPackage.variants.map((variant) => {
+                    const active = selectedVariant?.id === variant.id;
+                    return (
+                      <button
+                        key={variant.id}
+                        type="button"
+                        className={`min-w-[180px] rounded-2xl border p-3 text-left transition ${
+                          active ? "border-amber-300/50 bg-amber-400/10" : "border-white/10 bg-[#0d131c] hover:border-amber-300/30"
+                        }`}
+                        onClick={() => {
+                          setSelectedVariantId(variant.id);
+                          setSelectedProductId(variant.productId);
+                        }}
+                      >
+                        <div className="text-sm font-semibold text-slate-100">{variant.name}</div>
+                        <div className="mt-1 text-[11px] text-slate-500">{variant.variantCode || variant.realm || "Variant"}</div>
+                        <div className="mt-2 line-clamp-3 text-xs leading-5 text-slate-400">{variant.notes || "No variant notes yet."}</div>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-3 text-sm text-slate-400">
+                    No variants linked yet. Orders will use the package default.
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
         </section>
       ) : null}
+
+
 
 
         <Card title="Customer Catalog">
