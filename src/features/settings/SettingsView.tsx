@@ -234,6 +234,42 @@ function InfoLine({ title, body }: { title: string; body: string }) {
     <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4">
       <div className="font-semibold text-slate-100">{title}</div>
       <div className="mt-1 leading-6 text-slate-400">{body}</div>
-    </div>
+    
+      <section className="rounded-3xl border border-white/10 bg-[#111821] p-5 shadow-2xl shadow-black/20">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-slate-100">Historical Analytics</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Collect production actuals now, but only use historical averages when you decide the data is ready.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-[#0d131c] px-4 py-3">
+            <span>
+              <span className="block text-sm font-semibold text-slate-100">Enable Historical Cost Analysis</span>
+              <span className="mt-1 block text-xs text-slate-500">Default off. Turn on after enough real production records exist.</span>
+            </span>
+            <input
+              type="checkbox"
+              checked={Boolean(state.settings.enableHistoricalAnalytics)}
+              onChange={(event) => state.updateSettings({ enableHistoricalAnalytics: event.target.checked })}
+            />
+          </label>
+
+          <label className="rounded-2xl border border-white/10 bg-[#0d131c] px-4 py-3">
+            <span className="block text-sm font-semibold text-slate-100">Minimum Historical Samples</span>
+            <span className="mt-1 block text-xs text-slate-500">Averages should stay informational until this sample count is reached.</span>
+            <input
+              className="mt-3 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-amber-300/50"
+              type="number"
+              min={1}
+              value={state.settings.minimumHistoricalSamples ?? 10}
+              onChange={(event) => state.updateSettings({ minimumHistoricalSamples: Number(event.target.value) || 1 })}
+            />
+          </label>
+        </div>
+      </section>
+
+</div>
   );
 }

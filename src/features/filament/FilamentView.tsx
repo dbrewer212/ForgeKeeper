@@ -9,11 +9,36 @@ import { inventoryState, pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 import type { FilamentMaterial } from "../../types/domain";
 
+
+const filamentBrandOptions = ["Anycubic", "Elegoo", "Flashforge", "Amolen", "Polymaker", "Overture", "Sunlu", "Inland", "Custom"];
+const filamentMaterialOptions = ["PLA", "PLA+", "PETG", "ABS", "ASA", "TPU", "Resin", "Custom"];
+const filamentFinishOptions = ["Standard", "Matte", "Silk", "Metallic", "Marble", "Glow", "Transparent", "Wood", "Carbon Fiber", "Custom"];
+const filamentSpoolSizeOptions = ["250g", "500g", "750g", "1kg", "2kg", "Custom"];
+const filamentStatusOptions = ["Active", "Hidden", "Flagged", "Retired"];
+
+
 const materialOptions: FilamentMaterial[] = ["PLA", "PLA+", "PETG", "ABS", "TPU"];
 
 export function FilamentView({ state }: { state: ForgekeeperState }) {
   return (
     <div className="space-y-6">
+
+      <section className="rounded-3xl border border-white/10 bg-[#111821] p-5 shadow-2xl shadow-black/20">
+        <div className="mb-3">
+          <h2 className="text-lg font-semibold text-slate-100">Filament Library Rules</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Use structured entries wherever possible. Custom entries can be promoted into the library later, while hidden or retired values preserve history without cluttering future dropdowns.
+          </p>
+        </div>
+        <div className="grid gap-3 text-xs text-slate-400 md:grid-cols-4">
+          <div className="rounded-2xl border border-emerald-300/15 bg-emerald-400/5 p-3"><span className="font-semibold text-emerald-200">Active</span><br />Shown in normal dropdowns.</div>
+          <div className="rounded-2xl border border-slate-300/15 bg-slate-400/5 p-3"><span className="font-semibold text-slate-200">Hidden</span><br />Kept in admin, hidden from normal entry.</div>
+          <div className="rounded-2xl border border-amber-300/15 bg-amber-400/5 p-3"><span className="font-semibold text-amber-200">Flagged</span><br />Visible with a quality warning.</div>
+          <div className="rounded-2xl border border-rose-300/15 bg-rose-400/5 p-3"><span className="font-semibold text-rose-200">Retired</span><br />Preserved for old records, hidden from future use.</div>
+        </div>
+      </section>
+
+
       <Card title="Add Filament" right={<span className="text-xs text-slate-500">Inventory + Cost Source</span>}>
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),auto]">
           <Input

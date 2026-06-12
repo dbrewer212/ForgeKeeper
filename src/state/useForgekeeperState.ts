@@ -1,26 +1,3 @@
-
-function buildPackageOrderSnapshot(args: {
-  packageName?: string;
-  packageCode?: string;
-  packageStatus?: string;
-  packageVisibility?: string;
-  variantName?: string;
-  variantCode?: string;
-  productName?: string;
-}) {
-  return [
-    args.packageName ? `Package: ${args.packageName}` : "",
-    args.packageCode ? `Package Code: ${args.packageCode}` : "",
-    args.packageStatus ? `Package Status: ${args.packageStatus}` : "",
-    args.packageVisibility ? `Catalog Visibility: ${args.packageVisibility}` : "",
-    args.variantName ? `Variant: ${args.variantName}` : "",
-    args.variantCode ? `Variant Code: ${args.variantCode}` : "",
-    args.productName ? `Catalog Entry: ${args.productName}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
 import { useEffect, useMemo, useState } from "react";
 import { defaultSettings, seedCollections, seedConcepts, seedDesignPackages, seedFilament, seedOrders, seedPrinters, seedProducts, seedReleases, seedStls, seedVariants } from "../data/seed";
 import { seedPlannedFilament, seedProductPlanning, seedPrototypes, seedRealmMaterials } from "../data/planningSeed";
@@ -83,31 +60,47 @@ function normalizeProductTier(tier: unknown): Product["tier"] {
 function normalizeDesignPackageStatus(status: unknown): DesignPackage["status"] {
   if (
     status === "Planning" ||
-    status === "Active" ||
-    status === "Needs Assets" ||
-    status === "Ready for Catalog" ||
+    status === "Concept Ready" ||
+    status === "Modeling" ||
+    status === "STL Ready" ||
+    status === "Print Tested" ||
+    status === "Catalog Ready" ||
     status === "Archived"
   ) {
     return status;
   }
 
+  if (status === "Active") return "Modeling";
+  if (status === "Needs Assets") return "Concept Ready";
+  if (status === "Ready for Catalog") return "Catalog Ready";
+
   return "Planning";
 }
 
 
-function normalizePackageCatalogVisibility(value: unknown): DesignPackage["catalogVisibility"] {
-  if (
-    value === "Hidden" ||
-    value === "Preview" ||
-    value === "Commission Available" ||
-    value === "Preorder" ||
-    value === "Available" ||
-    value === "Retired"
-  ) {
+function normalizeLibraryItemStatus(value: unknown) {
+  if (value === "Active" || value === "Hidden" || value === "Flagged" || value === "Retired") {
     return value;
   }
 
-  return "Hidden";
+  return "Active";
+}
+
+function normalizeSpoolSize(value: unknown) {
+  if (value === "250g" || value === "500g" || value === "750g" || value === "1kg" || value === "2kg" || value === "Custom") {
+    return value;
+  }
+
+  return "1kg";
+}
+
+function spoolSizeToGrams(spoolSize: unknown, customWeight = 0) {
+  if (spoolSize === "250g") return 250;
+  if (spoolSize === "500g") return 500;
+  if (spoolSize === "750g") return 750;
+  if (spoolSize === "1kg") return 1000;
+  if (spoolSize === "2kg") return 2000;
+  return customWeight > 0 ? customWeight : 1000;
 }
 
 
@@ -136,6 +129,167 @@ function normalizePlanningTier(tier: unknown): PlannedPrototype["tier"] {
   return "ForgeTech";
 }
 
+const defaultPackageFamilies: Array<{ pillar: Product["tier"]; family: string }> = [
+  { pillar: "Foundry", family: "Forge Goblins" },
+  { pillar: "Foundry", family: "Wyrmslings" },
+  { pillar: "Foundry", family: "Mimics" },
+  { pillar: "Foundry", family: "Mystery Boxes" },
+  { pillar: "Foundry", family: "Dice" },
+  { pillar: "Relics", family: "Nine Realms Coins" },
+  { pillar: "Relics", family: "Forge Coins" },
+  { pillar: "Relics", family: "Altars" },
+  { pillar: "Relics", family: "Realm Artifacts" },
+  { pillar: "ForgeTech", family: "Headset Stands" },
+  { pillar: "ForgeTech", family: "Controller Stands" },
+  { pillar: "ForgeTech", family: "Desk Accessories" },
+  { pillar: "Reforged", family: "Resilience Collection" },
+  { pillar: "Reforged", family: "Memorial Pieces" },
+  { pillar: "Reforged", family: "Restoration Series" },
+];
+
+function codePart(value: string, fallback: string) {
+  const clean = value.toUpperCase().replace(/[^A-Z0-9\s-]/g, "").trim();
+  if (!clean) return fallback;
+
+  const words = clean.split(/[\s-]+/).filter(Boolean);
+  if (words.length >= 2) {
+    return words.map((word) => word[0]).join("").slice(0, 3).padEnd(3, "X");
+  }
+
+  return clean.slice(0, 3).padEnd(3, "X");
+}
+
+function suggestedPackageCode(pillar: Product["tier"], family: string, name: string) {
+  const pillarCode: Record<Product["tier"], string> = {
+    Foundry: "FND",
+    Relics: "REL",
+    ForgeTech: "FGT",
+    Reforged: "RFG",
+  };
+
+  return `${pillarCode[pillar]}-${codePart(family, "GEN")}-${codePart(name, "PKG")}`;
+}
+
+function titleFromFileName(fileName: string) {
+  return fileName
+    .replace(/\.[^.]+$/, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function fileReference(file: File) {
+  const maybeRelative = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
+  return maybeRelative || file.name;
+}
+
+function rootFolderNameFromFiles(files: File[]) {
+  const firstRef = files[0] ? fileReference(files[0]) : "Design Package";
+  const firstPart = firstRef.split("/").filter(Boolean)[0] || firstRef;
+  return titleFromFileName(firstPart);
+}
+
+function fileExtension(fileName: string) {
+  return fileName.split(".").pop()?.toLowerCase() ?? "";
+}
+
+function isImageFile(fileName: string) {
+  return ["png", "jpg", "jpeg", "webp", "gif"].includes(fileExtension(fileName));
+}
+
+function isModelFile(fileName: string) {
+  return ["stl", "3mf", "obj", "blend"].includes(fileExtension(fileName));
+}
+
+function isTextFile(fileName: string) {
+  return ["txt", "md", "json"].includes(fileExtension(fileName));
+}
+
+function productLineForPillar(pillar: Product["tier"]): Product["line"] {
+  if (pillar === "Foundry") return "Foundry";
+  if (pillar === "ForgeTech") return "ForgeTech";
+  if (pillar === "Relics") return "Relics of the Nine Realms";
+  return "Runehallow Relics";
+}
+
+function packageStatusFromImport(hasConcept: boolean, hasModel: boolean, hasCatalogImage: boolean): DesignPackage["status"] {
+  if (hasModel && hasCatalogImage) return "STL Ready";
+  if (hasConcept) return "Concept Ready";
+  return "Planning";
+}
+
+type PackageImportManifest = {
+  packageName?: string;
+  name?: string;
+  packageCode?: string;
+  code?: string;
+  pillar?: Product["tier"] | string;
+  family?: string;
+  status?: DesignPackage["status"] | string;
+  description?: string;
+  lore?: string;
+  promptNotes?: string;
+  generationNotes?: string;
+  catalog?: {
+    displayImage?: string;
+    description?: string;
+  };
+  estimates?: {
+    estimatedFilamentGrams?: number;
+    estimatedPrintHours?: number;
+    cleanupMinutes?: number;
+    assemblyMinutes?: number;
+    paintingMinutes?: number;
+    packagingMinutes?: number;
+  };
+  variants?: Array<{
+    name?: string;
+    code?: string;
+    image?: string;
+    notes?: string;
+  }>;
+};
+
+function safeNumber(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function findFileByManifestPath(files: File[], manifestPath?: string) {
+  if (!manifestPath) return undefined;
+  const normalized = manifestPath.replace(/\\/g, "/").toLowerCase();
+  return files.find((file) => fileReference(file).replace(/\\/g, "/").toLowerCase().endsWith(normalized));
+}
+
+function inferRealmVariantFromName(name: string): ProductVariant["realm"] {
+  const lower = name.toLowerCase();
+  if (lower.includes("alfheim")) return "Alfheim";
+  if (lower.includes("svartalfheim") || lower.includes("svart")) return "Svartalfheim";
+  if (lower.includes("vanaheim")) return "Vanaheim";
+  if (lower.includes("asgard")) return "Asgard";
+  if (lower.includes("jotunheim") || lower.includes("jotun")) return "Jotunheim";
+  if (lower.includes("muspelheim") || lower.includes("muspel")) return "Muspelheim";
+  if (lower.includes("niflheim") || lower.includes("nifl")) return "Niflheim";
+  if (lower.includes("helheim") || lower.includes("hel")) return "Helheim";
+  return "Midgard";
+}
+
+async function readPackageManifest(files: File[]): Promise<PackageImportManifest | undefined> {
+  const manifestFile = files.find((file) => {
+    const ref = fileReference(file).toLowerCase();
+    return ref.endsWith("package_manifest.json") || ref.endsWith("manifest.json");
+  });
+
+  if (!manifestFile) return undefined;
+
+  try {
+    return JSON.parse(await manifestFile.text()) as PackageImportManifest;
+  } catch {
+    return undefined;
+  }
+}
+
 function hydrateData(): AppData {
   const stored = loadStoredData();
   if (!stored) return seedData;
@@ -145,6 +299,7 @@ function hydrateData(): AppData {
       pillar: normalizeProductTier(pkg.pillar),
       status: normalizeDesignPackageStatus(pkg.status),
       family: pkg.family ?? "Unassigned",
+      packageCode: pkg.packageCode || suggestedPackageCode(normalizeProductTier(pkg.pillar), pkg.family ?? "Unassigned", pkg.name ?? "Package"),
       description: pkg.description ?? "",
       lore: pkg.lore ?? "",
       conceptSheetPath: pkg.conceptSheetPath ?? "",
@@ -152,7 +307,8 @@ function hydrateData(): AppData {
       referenceFolderPath: pkg.referenceFolderPath ?? "",
       stlFolderPath: pkg.stlFolderPath ?? "",
       photoFolderPath: pkg.photoFolderPath ?? "",
-      catalogHeroImagePath: pkg.catalogHeroImagePath ?? "",
+      catalogDisplayImagePath: pkg.catalogDisplayImagePath ?? pkg.catalogHeroImagePath ?? "",
+      catalogHeroImagePath: pkg.catalogHeroImagePath ?? pkg.catalogDisplayImagePath ?? "",
       estimatedFilamentGrams: pkg.estimatedFilamentGrams ?? 0,
       estimatedPrintHours: pkg.estimatedPrintHours ?? 0,
       cleanupMinutes: pkg.cleanupMinutes ?? 0,
@@ -222,7 +378,9 @@ function hydrateData(): AppData {
       watts: printer.watts ?? defaultSettings.machineWatts,
     })),
     maintenance: stored.maintenance ?? [],
-    settings: { ...defaultExternalTools, ...defaultSettings, ...(stored.settings ?? {}) },
+    settings: { ...defaultExternalTools, ...defaultSettings,
+      enableHistoricalAnalytics: false,
+      minimumHistoricalSamples: 10, ...(stored.settings ?? {}) },
     prototypes: (stored.prototypes ?? seedData.prototypes).map((prototype) => ({
       ...prototype,
       tier: normalizePlanningTier(prototype.tier),
@@ -321,36 +479,40 @@ export function useForgekeeperState() {
 
   const packageNameById = useMemo(() => new Map(designPackages.map((pkg) => [pkg.id, pkg.name])), [designPackages]);
 
-  const customerVisibleDesignPackages = useMemo(
-    () =>
-      designPackages.filter(
-        (pkg) =>
-          pkg.catalogVisibility === "Preview" ||
-          pkg.catalogVisibility === "Commission Available" ||
-          pkg.catalogVisibility === "Preorder" ||
-          pkg.catalogVisibility === "Available",
-      ),
-    [designPackages],
-  );
+  const packageFamilyOptions = useMemo(() => {
+    const options = new Map<string, { pillar: Product["tier"]; family: string }>();
 
-  const customerCatalogPackages = useMemo(() => {
-    return customerVisibleDesignPackages.map((pkg) => {
-      const linkedProducts = products.filter((product) => product.designPackageId === pkg.id);
-      const primaryProduct = linkedProducts[0];
-      const linkedProductIds = new Set(linkedProducts.map((product) => product.id));
-      const packageVariants = variants.filter((variant) => linkedProductIds.has(variant.productId));
+    for (const item of defaultPackageFamilies) {
+      options.set(`${item.pillar}:${item.family}`, item);
+    }
 
-      return {
-        package: pkg,
-        products: linkedProducts,
-        primaryProduct,
-        variants: packageVariants,
-      };
-    });
-  }, [customerVisibleDesignPackages, customerCatalogPackages, products, variants]);
+    for (const pkg of designPackages) {
+      if (pkg.family?.trim()) {
+        options.set(`${pkg.pillar}:${pkg.family.trim()}`, { pillar: pkg.pillar, family: pkg.family.trim() });
+      }
+    }
+
+    for (const product of products) {
+      const family = product.collection || product.category;
+      if (family?.trim()) {
+        options.set(`${product.tier}:${family.trim()}`, { pillar: product.tier, family: family.trim() });
+      }
+    }
+
+    return Array.from(options.values()).sort((a, b) => a.pillar.localeCompare(b.pillar) || a.family.localeCompare(b.family));
+  }, [designPackages, products]);
 
 
+  const filamentLibraryOptions = useMemo(() => {
+    const activeOnly = filament.filter((item) => item.libraryStatus !== "Hidden" && item.libraryStatus !== "Retired");
 
+    const brands = Array.from(new Set(["Anycubic", "Elegoo", "Flashforge", "Amolen", "Polymaker", "Overture", "Sunlu", "Inland", ...activeOnly.map((item) => item.brand).filter(Boolean) as string[]])).sort();
+    const materials = Array.from(new Set(["PLA", "PLA+", "PETG", "ABS", "ASA", "TPU", "Resin", ...activeOnly.map((item) => item.material).filter(Boolean) as string[]])).sort();
+    const finishes = Array.from(new Set(["Standard", "Matte", "Silk", "Metallic", "Marble", "Glow", "Transparent", "Wood", "Carbon Fiber", ...activeOnly.map((item) => item.finish).filter(Boolean) as string[]])).sort();
+    const spoolSizes = ["250g", "500g", "750g", "1kg", "2kg", "Custom"];
+
+    return { brands, materials, finishes, spoolSizes };
+  }, [filament]);
 
   const filteredProducts = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -488,10 +650,13 @@ export function useForgekeeperState() {
     const name = baseProduct?.name ? `${baseProduct.name} Package` : "New Design Package";
     const family = baseProduct?.collection || baseProduct?.category || "Unassigned";
 
+    const pillar = baseProduct?.tier ?? "Foundry";
+
     const nextPackage: DesignPackage = {
       id,
       name,
-      pillar: baseProduct?.tier ?? "Foundry",
+      packageCode: suggestedPackageCode(pillar, family, name),
+      pillar,
       family,
       status: "Planning",
       description: baseProduct?.notes ?? "",
@@ -501,6 +666,7 @@ export function useForgekeeperState() {
       referenceFolderPath: suggestedLibraryPath(settings.forgekeeperLibraryPath, name, "reference"),
       stlFolderPath: suggestedLibraryPath(settings.forgekeeperLibraryPath, name, "stl"),
       photoFolderPath: suggestedLibraryPath(settings.forgekeeperLibraryPath, name, "photos"),
+      catalogDisplayImagePath: baseProduct?.productImagePath ?? "",
       catalogHeroImagePath: baseProduct?.productImagePath ?? "",
       estimatedFilamentGrams: baseProduct?.estimatedFilamentGrams ?? 0,
       estimatedPrintHours: baseProduct?.estimatedPrintHours ?? 0,
@@ -516,6 +682,226 @@ export function useForgekeeperState() {
       updateProduct(baseProduct.id, { designPackageId: id });
     }
     return id;
+  }
+
+  async function importDesignPackageFolder(fileList: FileList | null, sourceProduct?: Product) {
+    const files = Array.from(fileList ?? []);
+    if (files.length === 0) return;
+
+    const manifest = await readPackageManifest(files);
+    const folderPackageName = rootFolderNameFromFiles(files);
+    const packageName = manifest?.packageName || manifest?.name || folderPackageName;
+    const pillar = normalizeProductTier(manifest?.pillar ?? sourceProduct?.tier ?? "Foundry");
+    const family = manifest?.family || sourceProduct?.collection || sourceProduct?.category || defaultPackageFamilies.find((item) => item.pillar === pillar)?.family || "Unassigned";
+    const packageId = uid("PKG");
+    const productId = sourceProduct?.id ?? uid("P");
+    const folderRefs = files.map(fileReference);
+    const imageFiles = files.filter((file) => isImageFile(file.name));
+    const modelFiles = files.filter((file) => isModelFile(file.name));
+    const textFiles = files.filter((file) => isTextFile(file.name));
+    const manifestDisplayFile = findFileByManifestPath(files, manifest?.catalog?.displayImage);
+    const conceptFile = imageFiles.find((file) => fileReference(file).toLowerCase().includes("concept")) ?? imageFiles[0];
+    const catalogFile = manifestDisplayFile ?? imageFiles.find((file) => {
+      const ref = fileReference(file).toLowerCase();
+      return ref.includes("catalog") || ref.includes("display") || ref.includes("preview") || ref.includes("cover");
+    }) ?? conceptFile;
+    const variantFiles = imageFiles.filter((file) => {
+      const ref = fileReference(file).toLowerCase();
+      return ref.includes("variant") || ref.includes("variants") || ref.includes("realm") || ref.includes("style");
+    });
+    const promptFiles = textFiles.filter((file) => {
+      const ref = fileReference(file).toLowerCase();
+      return ref.includes("prompt") || ref.includes("note") || ref.includes("readme") || ref.includes("manifest");
+    });
+    const folderRoot = folderRefs[0]?.split("/")[0] || packageName;
+    const packageCode = manifest?.packageCode || manifest?.code || suggestedPackageCode(pillar, family, packageName);
+    const importedAt = new Date().toLocaleString();
+    const estimatedFilamentGrams = safeNumber(manifest?.estimates?.estimatedFilamentGrams, sourceProduct?.estimatedFilamentGrams ?? 0);
+    const estimatedPrintHours = safeNumber(manifest?.estimates?.estimatedPrintHours, sourceProduct?.estimatedPrintHours ?? 0);
+    const cleanupMinutes = safeNumber(manifest?.estimates?.cleanupMinutes, 0);
+    const assemblyMinutes = safeNumber(manifest?.estimates?.assemblyMinutes, 0);
+    const paintingMinutes = safeNumber(manifest?.estimates?.paintingMinutes, 0);
+    const packagingMinutes = safeNumber(manifest?.estimates?.packagingMinutes, 0);
+    const hasManifestVariants = Boolean(manifest?.variants?.length);
+    const validationLines = [
+      `Imported from package folder: ${folderRoot}`,
+      `Imported at: ${importedAt}`,
+      `Manifest: ${manifest ? "Detected" : "Not detected"}`,
+      `Concept image: ${conceptFile ? fileReference(conceptFile) : "Missing"}`,
+      `Package display image: ${catalogFile ? fileReference(catalogFile) : "Missing"}`,
+      `Variant definitions: ${manifest?.variants?.length ?? 0}`,
+      `Variant image candidates: ${variantFiles.length}`,
+      `Model files: ${modelFiles.length}`,
+      `Prompt/note files: ${promptFiles.length}`,
+    ];
+
+    const nextPackage: DesignPackage = {
+      id: packageId,
+      name: packageName,
+      packageCode,
+      pillar,
+      family,
+      status: normalizeDesignPackageStatus(manifest?.status) !== "Planning"
+        ? normalizeDesignPackageStatus(manifest?.status)
+        : packageStatusFromImport(Boolean(conceptFile), modelFiles.length > 0, Boolean(catalogFile)),
+      description: manifest?.catalog?.description || manifest?.description || `${packageName} design package imported from folder. Review catalog copy before customer-facing use.`,
+      lore: manifest?.lore || "",
+      conceptSheetPath: conceptFile ? fileReference(conceptFile) : "",
+      promptNotes: [
+        manifest?.promptNotes || manifest?.generationNotes || "",
+        promptFiles.length > 0 ? `Prompt/note files:\n${promptFiles.map((file) => `- ${fileReference(file)}`).join("\n")}` : "",
+      ].filter(Boolean).join("\n\n"),
+      referenceFolderPath: folderRoot,
+      stlFolderPath: modelFiles.length > 0 ? folderRoot : "",
+      photoFolderPath: folderRoot,
+      catalogDisplayImagePath: catalogFile ? fileReference(catalogFile) : "",
+      catalogHeroImagePath: catalogFile ? fileReference(catalogFile) : "",
+      estimatedFilamentGrams,
+      estimatedPrintHours,
+      cleanupMinutes,
+      assemblyMinutes,
+      paintingMinutes,
+      packagingMinutes,
+      notes: validationLines.join("\n"),
+    };
+
+    setDesignPackages((prev) => [nextPackage, ...prev]);
+
+    if (sourceProduct) {
+      setProducts((prev) => prev.map((product) => product.id === sourceProduct.id ? {
+        ...product,
+        designPackageId: packageId,
+        tier: pillar,
+        collection: family,
+        category: product.category || family,
+        estimatedFilamentGrams: product.estimatedFilamentGrams || estimatedFilamentGrams,
+        estimatedPrintHours: product.estimatedPrintHours || estimatedPrintHours,
+        productImagePath: product.productImagePath || (catalogFile ? fileReference(catalogFile) : ""),
+        conceptImagePath: product.conceptImagePath || (conceptFile ? fileReference(conceptFile) : ""),
+      } : product));
+    } else {
+      setProducts((prev) => [{
+        id: productId,
+        name: packageName,
+        tier: pillar,
+        line: productLineForPillar(pillar),
+        category: family,
+        collection: family,
+        designPackageId: packageId,
+        status: "Concept",
+        visibility: "Concept",
+        targetPrice: 0,
+        estimatedFilamentGrams,
+        estimatedPrintHours,
+        available: 0,
+        reorderPoint: 5,
+        productImagePath: catalogFile ? fileReference(catalogFile) : "",
+        conceptImagePath: conceptFile ? fileReference(conceptFile) : "",
+        supportedRealmVariants: [],
+        notes: "Created from Design Package folder import.",
+      }, ...prev]);
+      setSelectedProductId(productId);
+    }
+
+    if (conceptFile) {
+      const conceptId = uid("CON");
+      setConcepts((prev) => [{
+        id: conceptId,
+        productId,
+        title: `${packageName} Concept Sheet`,
+        imageName: conceptFile.name,
+        imagePath: fileReference(conceptFile),
+        measurementImagePath: "",
+        referenceFolderPath: folderRoot,
+        measurements: "",
+        description: `${packageName} concept imported from package folder.`,
+        notes: variantFiles.length > 0 ? `Variant image candidates:\n${variantFiles.map((file) => `- ${fileReference(file)}`).join("\n")}` : "",
+        linkedStlId: undefined,
+        linkedStlIds: [],
+      }, ...prev]);
+    }
+
+    if (modelFiles.length > 0) {
+      setStls((prev) => [
+        ...modelFiles.map((file, index): STLRecord => ({
+          id: uid("STL"),
+          productId,
+          name: titleFromFileName(file.name),
+          fileName: file.name,
+          filePath: fileReference(file),
+          folderPath: folderRoot,
+          libraryPath: folderRoot,
+          version: `v${index + 1}`,
+          isPrimary: index === 0,
+          defaultPrinterId: printers[0]?.id,
+          defaultSlicer: printers[0] ? slicerForPrinter(printers[0].name) : settings.defaultSlicer,
+          linkedConceptId: undefined,
+          assetStatus: "Linked",
+          notes: "Imported from Design Package folder.",
+        })),
+        ...prev,
+      ]);
+    }
+
+    const manifestVariantFiles = (manifest?.variants ?? []).map((variant) => ({
+      name: variant.name || variant.code || "Variant",
+      code: variant.code,
+      notes: variant.notes || "Imported from package manifest.",
+      file: findFileByManifestPath(files, variant.image),
+    }));
+
+    const folderVariantFiles = variantFiles.map((file) => ({
+      name: titleFromFileName(file.name),
+      code: undefined,
+      notes: "Imported from package variant image folder.",
+      file,
+    }));
+
+    const importedVariants = [...manifestVariantFiles, ...folderVariantFiles].filter((variant, index, arr) => {
+      const key = `${variant.name}:${variant.file ? fileReference(variant.file) : ""}`;
+      return arr.findIndex((item) => `${item.name}:${item.file ? fileReference(item.file) : ""}` === key) === index;
+    });
+
+    if (importedVariants.length > 0) {
+      setVariants((prev) => [
+        ...importedVariants.map((variant): ProductVariant => ({
+          id: uid("VAR"),
+          productId,
+          realm: inferRealmVariantFromName(variant.name),
+          name: variant.name,
+          productImagePath: variant.file ? fileReference(variant.file) : (catalogFile ? fileReference(catalogFile) : ""),
+          conceptImagePath: variant.file ? fileReference(variant.file) : (conceptFile ? fileReference(conceptFile) : ""),
+          stlId: undefined,
+          conceptId: undefined,
+          filamentId: filament[0]?.id,
+          priceModifier: 0,
+          estimatedFilamentGrams,
+          estimatedPrintHours,
+          isActive: true,
+          notes: [variant.code ? `Variant code: ${variant.code}` : "", variant.notes].filter(Boolean).join("\n"),
+        })),
+        ...prev,
+      ]);
+    } else if (catalogFile || conceptFile || hasManifestVariants) {
+      setVariants((prev) => [{
+        id: uid("VAR"),
+        productId,
+        realm: "Midgard",
+        name: `${packageName} Standard`,
+        productImagePath: catalogFile ? fileReference(catalogFile) : "",
+        conceptImagePath: conceptFile ? fileReference(conceptFile) : "",
+        stlId: undefined,
+        conceptId: undefined,
+        filamentId: filament[0]?.id,
+        priceModifier: 0,
+        estimatedFilamentGrams,
+        estimatedPrintHours,
+        isActive: true,
+        notes: "Default variant created from Design Package folder import.",
+      }, ...prev]);
+    }
+
+    window.alert(`Imported ${packageName} package. Review package readiness and catalog details before publishing.`);
   }
 
   function updateDesignPackage(id: string, patch: Partial<DesignPackage>) {
@@ -1150,7 +1536,7 @@ export function useForgekeeperState() {
 
   return {
     view, setView,
-    products, designPackages, customerVisibleDesignPackages, customerCatalogPackages, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings,
+    products, designPackages, packageFamilyOptions, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
     batches, setBatches,
     selectedProductId, setSelectedProductId, productTab, setProductTab,
@@ -1159,7 +1545,7 @@ export function useForgekeeperState() {
     newFilamentName, setNewFilamentName, newPrinterName, setNewPrinterName, searchTerm, setSearchTerm, quickAction,
     filteredProducts, selectedProduct, selectedDesignPackage, productStls, productConcepts, productOrders, productVariants, productRelease, metrics, queueCounts, productionMetrics, getCostBreakdownForOrder, getProductCostGuide, getPrimaryStlForProduct, getLatestConceptForProduct, getProductDisplayImage, getVariantDisplayImage,
     triggerQuickAction,
-    addDesignPackage, updateDesignPackage, removeDesignPackage,
+    addDesignPackage, importDesignPackageFolder, updateDesignPackage, removeDesignPackage,
     addProduct, updateProduct, removeProduct,
     addStl, updateStl, markPrimaryStl, removeStl,
     addConcept, updateConcept, removeConcept,
