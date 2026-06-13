@@ -564,7 +564,7 @@ export function useForgekeeperState() {
 
   useEffect(() => {
     saveStoredData(appData);
-  }, [products, designPackages, stls, concepts, variants, collections, releases, orders, filament, filamentLibraryOptions, printers, maintenance, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
+  }, [products, designPackages, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
 
   useEffect(() => {
     setPrinters((prev) => prev.map((printer) => printerStatusFromOrders(printer, orders, products)));
@@ -600,18 +600,6 @@ export function useForgekeeperState() {
 
     return Array.from(options.values()).sort((a, b) => a.pillar.localeCompare(b.pillar) || a.family.localeCompare(b.family));
   }, [designPackages, products]);
-
-
-  const filamentLibraryOptions = useMemo(() => {
-    const activeOnly = filament.filter((item) => item.libraryStatus !== "Hidden" && item.libraryStatus !== "Retired");
-
-    const brands = Array.from(new Set(["Anycubic", "Elegoo", "Flashforge", "Amolen", "Polymaker", "Overture", "Sunlu", "Inland", ...activeOnly.map((item) => item.brand).filter(Boolean) as string[]])).sort();
-    const materials = Array.from(new Set(["PLA", "PLA+", "PETG", "ABS", "ASA", "TPU", "Resin", ...activeOnly.map((item) => item.material).filter(Boolean) as string[]])).sort();
-    const finishes = Array.from(new Set(["Standard", "Matte", "Silk", "Metallic", "Marble", "Glow", "Transparent", "Wood", "Carbon Fiber", ...activeOnly.map((item) => item.finish).filter(Boolean) as string[]])).sort();
-    const spoolSizes = ["250g", "500g", "750g", "1kg", "2kg", "Custom"];
-
-    return { brands, materials, finishes, spoolSizes };
-  }, [filament]);
 
   const filteredProducts = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
@@ -1635,7 +1623,7 @@ export function useForgekeeperState() {
 
   return {
     view, setView,
-    products, designPackages, packageFamilyOptions, stls, concepts, variants, collections, releases, orders, filament, filamentLibraryOptions, printers, maintenance, settings,
+    products, designPackages, packageFamilyOptions, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
     batches, setBatches,
     selectedProductId, setSelectedProductId, productTab, setProductTab,
