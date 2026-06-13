@@ -4,19 +4,16 @@ export type ProductPillar = "Foundry" | "Relics" | "ForgeTech" | "Reforged";
 export type ProductTier = ProductPillar;
 export type ProductLine = "ForgeTech" | "Foundry" | "Relics of the Nine Realms" | "Runehallow Relics";
 export type ProductStatus = "Concept" | "Prototype" | "Active" | "Production" | "Archived";
+export type PackageCatalogVisibility =
+  | "Hidden"
+  | "Preview"
+  | "Commission Available"
+  | "Preorder"
+  | "Available"
+  | "Retired";
+
 export type ProductVisibility = "Internal" | "Concept" | "Preorder" | "Available" | "Commission Available" | "Archived";
-export type LibraryItemStatus = "Active" | "Hidden" | "Flagged" | "Retired";
-
-export type FilamentSpoolSize = "250g" | "500g" | "750g" | "1kg" | "2kg" | "Custom";
-
-export type DesignPackageStatus =
-  | "Planning"
-  | "Concept Ready"
-  | "Modeling"
-  | "STL Ready"
-  | "Print Tested"
-  | "Catalog Ready"
-  | "Archived";
+export type DesignPackageStatus = "Planning" | "Active" | "Needs Assets" | "Ready for Catalog" | "Archived";
 export type OrderStatus = "Inquiry" | "Estimate" | "Awaiting Deposit" | "Queued" | "Production" | "Finishing" | "Completed" | "Voided" | "Printing" | "Packed" | "Shipped";
 export type OrderType = "Catalog Order" | "Custom Request";
 export type DepositStatus = "Not Requested" | "Awaiting Deposit" | "Deposit Received" | "Paid in Full" | "Waived" | "Refunded";
@@ -43,8 +40,8 @@ export type RealmVariant =
 
 export type DesignPackage = {
   id: string;
+  catalogVisibility?: PackageCatalogVisibility;
   name: string;
-  packageCode?: string;
   pillar: ProductPillar;
   family: string;
   status: DesignPackageStatus;
@@ -55,8 +52,7 @@ export type DesignPackage = {
   referenceFolderPath: string;
   stlFolderPath: string;
   photoFolderPath: string;
-  catalogDisplayImagePath?: string;
-  catalogHeroImagePath?: string;
+  catalogHeroImagePath: string;
   estimatedFilamentGrams: number;
   estimatedPrintHours: number;
   cleanupMinutes: number;
@@ -124,6 +120,7 @@ export type ProductVariant = {
   productId: string;
   realm: RealmVariant;
   name: string;
+  variantCode?: string;
   productImagePath: string;
   conceptImagePath: string;
   stlId?: string;
@@ -157,6 +154,14 @@ export type ReleaseRecord = {
 export type OrderRecord = {
   id: string;
   productId: string;
+  designPackageId?: string;
+  designPackageName?: string;
+  designPackageCode?: string;
+  selectedVariantId?: string;
+  selectedVariantName?: string;
+  selectedVariantCode?: string;
+  packageVersionSnapshot?: string;
+  packageSnapshot?: string;
   filamentId?: string;
   materialGrams?: number;
   customer: string;
@@ -191,14 +196,6 @@ export type OrderRecord = {
 export type FilamentRecord = {
   id: string;
   brand: string;
-  brandStatus?: LibraryItemStatus;
-  materialStatus?: LibraryItemStatus;
-  finish?: string;
-  finishStatus?: LibraryItemStatus;
-  spoolSize?: FilamentSpoolSize;
-  customSpoolWeightGrams?: number;
-  libraryStatus?: LibraryItemStatus;
-  qualityNotes?: string;
   material: FilamentMaterial;
   colorName: string;
   colorFamily: string;
@@ -244,8 +241,6 @@ export type AppSettings = {
   blenderPath?: string;
   meshyUrl?: string;
   defaultSlicer?: "orca" | "anycubic";
-  enableHistoricalAnalytics?: boolean;
-  minimumHistoricalSamples?: number;
 };
 
 export type AppData = {
