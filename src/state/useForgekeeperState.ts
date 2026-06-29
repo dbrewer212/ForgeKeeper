@@ -30,105 +30,6 @@ import type {
 import type { PlannedFilament, PlannedPrototype, ProductPlanningRecord, RealmMaterialReference } from "../types/planning";
 import { useBatchState } from "./batchState";
 
-
-async function readDesignPackageZipShell(file: File) {
-  const buffer = await file.arrayBuffer();
-
-  const importDesignPackageZip = async (file: File) => {
-    const zipInfo = await readDesignPackageZipShell(file);
-    const identity = inferZipPackageIdentity(zipInfo.packageName);
-    const id = `pkg-${Date.now()}`;
-    const packageName = identity.packageName;
-    const packageCode = suggestedPackageCode(identity.pillar, identity.family, packageName);
-
-    const nextPackage: DesignPackage = {
-      id,
-      name: packageName,
-      packageCode,
-      catalogVisibility: "Hidden",
-      pillar: identity.pillar,
-      family: identity.family,
-      status: "Concept Ready",
-      description: `${packageName} imported from ZIP package. Extract the ZIP into the ForgeKeeper Library folder, then run folder import for full asset scanning.`,
-      lore: "",
-      conceptSheetPath: "",
-      promptNotes: `Imported ZIP source: ${zipInfo.zipFileName}\nZIP size: ${zipInfo.zipSize} bytes\n\nThis creates a package shell from the ZIP. Full ZIP content parsing requires either extracted folder import or a future ZIP parser dependency.`,
-      referenceFolderPath: "",
-      stlFolderPath: "",
-      photoFolderPath: "",
-      catalogDisplayImagePath: "",
-      catalogHeroImagePath: "",
-      estimatedFilamentGrams: 0,
-      estimatedPrintHours: 0,
-      cleanupMinutes: 0,
-      assemblyMinutes: 0,
-      paintingMinutes: 0,
-      packagingMinutes: 0,
-      notes: [
-        "ZIP import shell created.",
-        "Extract this ZIP into ForgeKeeper Library / Design Packages.",
-        "Then run folder import on the extracted package folder to scan concepts, variants, prompts, assets, and models.",
-      ].join("\n"),
-    };
-
-    setDesignPackages((prev) => [nextPackage, ...prev]);
-    setSelectedDesignPackageId(id);
-
-    const productId = `prod-${Date.now()}`;
-    const nextProduct: Product = {
-      id: productId,
-      name: packageName,
-      sku: packageCode,
-      line: identity.family,
-      tier: identity.pillar,
-      status: "Concept",
-      visibility: "Internal",
-      designPackageId: id,
-      collection: identity.family,
-      category: identity.family,
-      available: 0,
-      reorderPoint: 0,
-      targetPrice: 0,
-      estimatedFilamentGrams: 0,
-      estimatedPrintHours: 0,
-      productImagePath: "",
-      conceptImagePath: "",
-      notes: "Created from Design Package ZIP import shell.",
-    } as Product;
-
-    setProducts((prev) => [nextProduct, ...prev]);
-    setSelectedProductId(productId);
-  };
-
-
-  return {
-    packageName: file.name.replace(/\.zip$/i, "").replace(/[_-]+/g, " ").trim(),
-    zipFileName: file.name,
-    zipSize: buffer.byteLength,
-  };
-}
-
-function inferZipPackageIdentity(name: string) {
-  const clean = name.replace(/\.zip$/i, "").replace(/[_-]+/g, " ").trim();
-  const lower = clean.toLowerCase();
-
-  let pillar: Product["tier"] = "Foundry";
-  if (lower.includes("relic") || lower.includes("coin") || lower.includes("realm")) pillar = "Relics";
-  if (lower.includes("tech") || lower.includes("stand") || lower.includes("dock")) pillar = "ForgeTech";
-  if (lower.includes("resilience") || lower.includes("memorial") || lower.includes("reforged")) pillar = "Reforged";
-
-  let family = "Unassigned";
-  if (lower.includes("goblin")) family = "Forge Goblins";
-  else if (lower.includes("wyrm")) family = "Wyrmslings";
-  else if (lower.includes("mimic")) family = "Mimics";
-  else if (lower.includes("coin")) family = "Coins";
-  else if (lower.includes("resilience")) family = "Resilience Collection";
-  else if (lower.includes("stand")) family = "ForgeTech Stands";
-
-  return { packageName: clean, pillar, family };
-}
-
-
 const seedData: AppData = {
   products: seedProducts,
   designPackages: seedDesignPackages,
@@ -177,29 +78,33 @@ function normalizeDesignPackageStatus(status: unknown): DesignPackage["status"] 
 }
 
 
-function normalizeLibraryItemStatus(value: unknown) {
-  if (value === "Active" || value === "Hidden" || value === "Flagged" || value === "Retired") {
-    return value;
-  }
-
-  return "Active";
+async function readDesignPackageZipShell(file: File) {
+  const buffer = await file.arrayBuffer();
+  return {
+    packageName: file.name.replace(/\.zip$/i, "").replace(/[_-]+/g, " ").trim(),
+    zipFileName: file.name,
+    zipSize: buffer.byteLength,
+  };
 }
 
-function normalizeSpoolSize(value: unknown) {
-  if (value === "250g" || value === "500g" || value === "750g" || value === "1kg" || value === "2kg" || value === "Custom") {
-    return value;
-  }
+function inferZipPackageIdentity(name: string) {
+  const clean = name.replace(/\.zip$/i, "").replace(/[_-]+/g, " ").trim();
+  const lower = clean.toLowerCase();
 
-  return "1kg";
-}
+  let pillar: Product["tier"] = "Foundry";
+  if (lower.includes("relic") || lower.includes("coin") || lower.includes("realm")) pillar = "Relics";
+  if (lower.includes("tech") || lower.includes("stand") || lower.includes("dock")) pillar = "ForgeTech";
+  if (lower.includes("resilience") || lower.includes("memorial") || lower.includes("reforged")) pillar = "Reforged";
 
-function spoolSizeToGrams(spoolSize: unknown, customWeight = 0) {
-  if (spoolSize === "250g") return 250;
-  if (spoolSize === "500g") return 500;
-  if (spoolSize === "750g") return 750;
-  if (spoolSize === "1kg") return 1000;
-  if (spoolSize === "2kg") return 2000;
-  return customWeight > 0 ? customWeight : 1000;
+  let family = "Unassigned";
+  if (lower.includes("goblin")) family = "Forge Goblins";
+  else if (lower.includes("wyrm")) family = "Wyrmslings";
+  else if (lower.includes("mimic")) family = "Mimics";
+  else if (lower.includes("coin")) family = "Coins";
+  else if (lower.includes("resilience")) family = "Resilience Collection";
+  else if (lower.includes("stand")) family = "ForgeTech Stands";
+
+  return { packageName: clean || "Imported Design Package", pillar, family };
 }
 
 
@@ -477,9 +382,7 @@ function hydrateData(): AppData {
       watts: printer.watts ?? defaultSettings.machineWatts,
     })),
     maintenance: stored.maintenance ?? [],
-    settings: { ...defaultExternalTools, ...defaultSettings,
-      enableHistoricalAnalytics: false,
-      minimumHistoricalSamples: 10, ...(stored.settings ?? {}) },
+    settings: { ...defaultExternalTools, ...defaultSettings, ...(stored.settings ?? {}) },
     prototypes: (stored.prototypes ?? seedData.prototypes).map((prototype) => ({
       ...prototype,
       tier: normalizePlanningTier(prototype.tier),
@@ -770,6 +673,73 @@ export function useForgekeeperState() {
     }
     return id;
   }
+
+
+  const importDesignPackageZip = async (file: File) => {
+    const zipInfo = await readDesignPackageZipShell(file);
+    const identity = inferZipPackageIdentity(zipInfo.packageName);
+    const packageId = uid("PKG");
+    const productId = uid("P");
+    const packageName = identity.packageName;
+    const packageCode = suggestedPackageCode(identity.pillar, identity.family, packageName);
+
+    const nextPackage: DesignPackage = {
+      id: packageId,
+      name: packageName,
+      packageCode,
+      catalogVisibility: "Hidden",
+      pillar: identity.pillar,
+      family: identity.family,
+      status: "Concept Ready",
+      description: `${packageName} imported from ZIP package. Extract the ZIP into the ForgeKeeper Library folder, then run folder import for full asset scanning.`,
+      lore: "",
+      conceptSheetPath: "",
+      promptNotes: `Imported ZIP source: ${zipInfo.zipFileName}\nZIP size: ${zipInfo.zipSize} bytes\n\nZIP shell created. Full asset parsing should use extracted folder import until native ZIP extraction is added.`,
+      referenceFolderPath: "",
+      stlFolderPath: "",
+      photoFolderPath: "",
+      catalogDisplayImagePath: "",
+      catalogHeroImagePath: "",
+      estimatedFilamentGrams: 0,
+      estimatedPrintHours: 0,
+      cleanupMinutes: 0,
+      assemblyMinutes: 0,
+      paintingMinutes: 0,
+      packagingMinutes: 0,
+      notes: [
+        "ZIP import shell created.",
+        "Extract this ZIP into ForgeKeeper Library / Design Packages.",
+        "Then run folder import on the extracted package folder to scan concepts, variants, prompts, assets, and models.",
+      ].join("\n"),
+    };
+
+    const nextProduct: Product = {
+      id: productId,
+      name: packageName,
+      sku: packageCode,
+      line: identity.family,
+      tier: identity.pillar,
+      status: "Concept",
+      visibility: "Internal",
+      designPackageId: packageId,
+      collection: identity.family,
+      category: identity.family,
+      available: 0,
+      reorderPoint: 0,
+      targetPrice: 0,
+      estimatedFilamentGrams: 0,
+      estimatedPrintHours: 0,
+      productImagePath: "",
+      conceptImagePath: "",
+      notes: "Created from Design Package ZIP import shell.",
+    } as Product;
+
+    setDesignPackages((prev) => [nextPackage, ...prev]);
+    setProducts((prev) => [nextProduct, ...prev]);
+    setSelectedDesignPackageId(packageId);
+    setSelectedProductId(productId);
+  };
+
 
   async function importDesignPackageFolder(fileList: FileList | null, sourceProduct?: Product) {
     const files = Array.from(fileList ?? []);
@@ -1632,8 +1602,7 @@ export function useForgekeeperState() {
     newFilamentName, setNewFilamentName, newPrinterName, setNewPrinterName, searchTerm, setSearchTerm, quickAction,
     filteredProducts, selectedProduct, selectedDesignPackage, productStls, productConcepts, productOrders, productVariants, productRelease, metrics, queueCounts, productionMetrics, getCostBreakdownForOrder, getProductCostGuide, getPrimaryStlForProduct, getLatestConceptForProduct, getProductDisplayImage, getVariantDisplayImage,
     triggerQuickAction,
-    addDesignPackage, importDesignPackageZip,
-    importDesignPackageFolder, updateDesignPackage, removeDesignPackage,
+    addDesignPackage, importDesignPackageZip, importDesignPackageFolder, updateDesignPackage, removeDesignPackage,
     addProduct, updateProduct, removeProduct,
     addStl, updateStl, markPrimaryStl, removeStl,
     addConcept, updateConcept, removeConcept,

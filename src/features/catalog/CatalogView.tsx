@@ -113,8 +113,8 @@ function CatalogRail({ state }: { state: ForgekeeperState }) {
                     <div className="mt-1 truncate text-xs text-slate-500">{product.collection} · {product.visibility}</div>
                     {variantCount ? (
                       <div className="mt-2 text-[11px] text-amber-300">{variantCount} active variant records</div>
-                    ) : product.supportedRealmVariants.length ? (
-                      <div className="mt-2 text-[11px] text-amber-300">{product.supportedRealmVariants.length} planned realms</div>
+                    ) : (product.supportedRealmVariants?.length ?? 0) ? (
+                      <div className="mt-2 text-[11px] text-amber-300">{product.supportedRealmVariants?.length ?? 0} planned realms</div>
                     ) : null}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
