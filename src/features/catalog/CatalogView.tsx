@@ -15,6 +15,33 @@ const realmOptions: RealmVariant[] = ["Midgard", "Alfheim", "Svartalfheim", "Van
 const visibilityOptions: ProductVisibility[] = ["Internal", "Concept", "Preorder", "Available", "Commission Available", "Archived"];
 const designPackageStatuses: DesignPackageStatus[] = ["Planning", "Concept Ready", "Modeling", "STL Ready", "Print Tested", "Catalog Ready", "Archived"];
 
+
+function DesignPackageCreateImportCard({ state }: { state: ForgekeeperState }) {
+  return (
+    <div className="rounded-2xl border border-amber-300/15 bg-amber-400/5 p-4">
+      <div className="text-sm font-semibold text-amber-100">Create From Design Package</div>
+      <p className="mt-1 text-xs leading-5 text-slate-500">
+        Import a Design Package ZIP to create the package and linked catalog entry immediately.
+      </p>
+      <label className="mt-3 inline-flex cursor-pointer items-center rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-100 transition hover:border-amber-300/40">
+        Import Design Package
+        <input
+          className="hidden"
+          type="file"
+          accept=".zip,application/zip,application/x-zip-compressed"
+          onChange={async (event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            const importAction = (state as any).createDesignPackageFromZip ?? (state as any).importDesignPackageZip;
+            await importAction?.(file);
+            event.target.value = "";
+          }}
+        />
+      </label>
+    </div>
+  );
+}
+
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -226,34 +253,6 @@ function ProductWorkspace({ state, product }: { state: ForgekeeperState; product
   );
 }
 
-
-function DesignPackageCreateImportCard({ state }: { state: ForgekeeperState }) {
-  return (
-    <div className="rounded-2xl border border-amber-300/15 bg-amber-400/5 p-4">
-      <div className="text-sm font-semibold text-amber-100">Create From Design Package</div>
-      <p className="mt-1 text-xs leading-5 text-slate-500">
-        Import a Design Package ZIP to create the package and linked catalog entry immediately. Assets can be attached or replaced later from the package detail panel.
-      </p>
-      <label className="mt-3 inline-flex cursor-pointer items-center rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-100 transition hover:border-amber-300/40">
-        Import Design Package
-        <input
-          className="hidden"
-          type="file"
-          accept=".zip,application/zip,application/x-zip-compressed"
-          onChange={async (event) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
-            const importAction = (state as any).createDesignPackageFromZip ?? (state as any).importDesignPackageZip;
-            await importAction?.(file);
-            event.target.value = "";
-          }}
-        />
-      </label>
-    </div>
-  );
-}
-
-
 function ProductEditor({ state }: { state: ForgekeeperState }) {
   const product = state.selectedProduct;
   if (!product) return null;
@@ -262,17 +261,7 @@ function ProductEditor({ state }: { state: ForgekeeperState }) {
     <div className="grid gap-6 xl:grid-cols-[1fr,360px]">
       <Card title="Identity & Classification">
         <div className="grid gap-4 md:grid-cols-2">
-          
-          {product?.notes?.includes("Design Package ZIP import shell") ? (
-            <div className="rounded-2xl border border-amber-300/15 bg-amber-400/5 p-4 text-sm text-amber-100">
-              <div className="font-semibold">Imported Shell Entry</div>
-              <div className="mt-1 text-xs leading-5 text-slate-500">
-                This catalog item was created from a Design Package import. Attach concept images, data sheets, STL/3MF files, and production images from the Admin asset controls as they become available.
-              </div>
-            </div>
-          ) : null}
-
-<Field label="Product Name">
+          <Field label="Product Name">
             <Input value={product.name} onChange={(e) => state.updateProduct(product.id, { name: e.target.value })} />
           </Field>
           <Field label="Category">
@@ -369,7 +358,7 @@ function ProductEditor({ state }: { state: ForgekeeperState }) {
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           {realmOptions.map((realm) => {
-            const active = (product.supportedRealmVariants ?? []).includes(realm);
+            const active = product.supportedRealmVariants.includes(realm);
             return (
               <button
                 key={realm}
@@ -495,12 +484,12 @@ function DesignPackagePanel({ state, product }: { state: ForgekeeperState; produ
             </div>
             
           <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
-            <div className="text-sm font-semibold text-slate-100">Update Package From ZIP</div>
+            <div className="text-sm font-semibold text-slate-100">Import Design Package ZIP</div>
             <div className="mt-1 text-xs leading-5 text-slate-500">
-              Upload a package ZIP to update or refresh this package shell. Primary package creation should happen from the main Add/Create area.
+              Upload a package ZIP to create the package package. For full asset parsing, extract the ZIP into the ForgeKeeper Library folder and run folder import on the extracted folder.
             </div>
             <label className="mt-3 inline-flex cursor-pointer items-center rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-100 transition hover:border-amber-300/40">
-              Upload Update ZIP
+              Upload Package ZIP
               <input
                 id="package-zip-import"
                 className="hidden"
@@ -903,13 +892,13 @@ function StlPanel({ state }: { state: ForgekeeperState }) {
                     <Button variant="ghost" onClick={() => state.copyText(stl.filePath || stl.fileName || "", "STL reference")}>Copy STL Reference</Button>
                     <Button variant="ghost" onClick={() => state.copyText(stl.folderPath || "", "Folder reference")}>Copy Folder Reference</Button>
                     <Button onClick={() => state.openExternalTool("meshy")}>Open Meshy.ai</Button>
-                    <Button variant="ghost" disabled title="Native file opening requires the later Tauri shell permissions pass.">Open STL · Tauri Required</Button>
-                    <Button variant="ghost" disabled title="Native folder opening requires the later Tauri shell permissions pass.">Open Folder · Tauri Required</Button>
-                    <Button variant="ghost" disabled title="Launching slicers with file arguments requires the later Tauri shell permissions pass.">Launch Slicer · Tauri Required</Button>
-                    <Button variant="ghost" disabled title="Launching Blender with file arguments requires the later Tauri shell permissions pass.">Launch Blender · Tauri Required</Button>
+                    <Button variant="ghost" disabled title="Native file opening requires the later Tauri package permissions pass.">Open STL · Tauri Required</Button>
+                    <Button variant="ghost" disabled title="Native folder opening requires the later Tauri package permissions pass.">Open Folder · Tauri Required</Button>
+                    <Button variant="ghost" disabled title="Launching slicers with file arguments requires the later Tauri package permissions pass.">Launch Slicer · Tauri Required</Button>
+                    <Button variant="ghost" disabled title="Launching Blender with file arguments requires the later Tauri package permissions pass.">Launch Blender · Tauri Required</Button>
                   </div>
                     <div className="mt-3 rounded-xl border border-sky-300/15 bg-sky-400/10 p-3 text-xs leading-5 text-slate-300">
-                      Browser mode can link files and copy references. Native opening of STLs, folders, Blender, and slicers will be enabled later through the Tauri shell/file-permission pass.
+                      Browser mode can link files and copy references. Native opening of STLs, folders, Blender, and slicers will be enabled later through the Tauri package/file-permission pass.
                     </div>
                 </Field>
                 <Field label="STL Notes" className="md:col-span-3">
