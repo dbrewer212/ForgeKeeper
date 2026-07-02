@@ -729,8 +729,15 @@ export function useForgekeeperState() {
       targetPrice: 0,
       estimatedFilamentGrams: 0,
       estimatedPrintHours: 0,
+      supportedRealmVariants: [],
+      realmVariants: [],
+      variants: [],
+      tags: [],
+      galleryImages: [],
       productImagePath: "",
       conceptImagePath: "",
+      description: `${packageName} imported from Design Package.`,
+      internalNotes: "Created from Design Package ZIP import shell.",
       notes: "Created from Design Package ZIP import shell.",
     } as Product;
 
