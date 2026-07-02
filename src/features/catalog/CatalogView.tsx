@@ -263,7 +263,7 @@ function ProductEditor({ state }: { state: ForgekeeperState }) {
       <Card title="Identity & Classification">
         <div className="grid gap-4 md:grid-cols-2">
           
-          {selectedProduct?.notes?.includes("Design Package ZIP import shell") ? (
+          {product?.notes?.includes("Design Package ZIP import shell") ? (
             <div className="rounded-2xl border border-amber-300/15 bg-amber-400/5 p-4 text-sm text-amber-100">
               <div className="font-semibold">Imported Shell Entry</div>
               <div className="mt-1 text-xs leading-5 text-slate-500">
