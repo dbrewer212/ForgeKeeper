@@ -146,6 +146,30 @@ function ProductWorkspace({ state, product }: { state: ForgekeeperState; product
 
   return (
     <div className="space-y-6">
+
+          <div className="rounded-2xl border border-amber-300/15 bg-amber-400/5 p-4">
+            <div className="text-sm font-semibold text-amber-100">Create From Design Package</div>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              Import a Design Package ZIP to create the package and linked catalog entry immediately. Assets can be attached or replaced later from the package detail panel.
+            </p>
+            <label className="mt-3 inline-flex cursor-pointer items-center rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-100 transition hover:border-amber-300/40">
+              Import Design Package
+              <input
+                className="hidden"
+                type="file"
+                accept=".zip,application/zip,application/x-zip-compressed"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  const importAction = (state as any).createDesignPackageFromZip ?? (state as any).importDesignPackageZip;
+                  await importAction?.(file);
+                  event.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+
+
       <Card
         title="Product Command Center"
         right={
@@ -456,12 +480,12 @@ function DesignPackagePanel({ state, product }: { state: ForgekeeperState; produ
             </div>
             
           <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
-            <div className="text-sm font-semibold text-slate-100">Import Design Package ZIP</div>
+            <div className="text-sm font-semibold text-slate-100">Update Package From ZIP</div>
             <div className="mt-1 text-xs leading-5 text-slate-500">
-              Upload a package ZIP to create the package shell. For full asset parsing, extract the ZIP into the ForgeKeeper Library folder and run folder import on the extracted folder.
+              Upload a package ZIP to update or refresh this package shell. Primary package creation should happen from the main Add/Create area.
             </div>
             <label className="mt-3 inline-flex cursor-pointer items-center rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-100 transition hover:border-amber-300/40">
-              Upload Package ZIP
+              Upload Update ZIP
               <input
                 id="package-zip-import"
                 className="hidden"
