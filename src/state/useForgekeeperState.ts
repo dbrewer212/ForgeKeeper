@@ -747,6 +747,10 @@ export function useForgekeeperState() {
     const costs = orders.reduce((sum, order) => sum + getCostBreakdownForOrder(order).total, 0);
     const totalFilamentKg = filament.reduce((sum, item) => sum + item.gramsAvailable, 0) / 1000;
   
+
+
+
+
   const importDesignPackageZip = async (file: File) => {
     const parsed = await parseDesignPackageZip(file);
     const id = `pkg-${Date.now()}`;
