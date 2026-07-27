@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "check": "tsc -b --pretty false",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "desktop": "tauri dev",

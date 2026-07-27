@@ -19,7 +19,7 @@ export type KeeperAction = {
   targetId?: string;
 };
 
-function priorityFromAlert(type: KeeperAlert["type"]): KeeperAction["priority"] {
+function priorityFromAlert(type: KeeperAlert["severity"]): KeeperAction["priority"] {
   if (type === "critical") return "Critical";
   if (type === "warning") return "High";
   if (type === "opportunity") return "Normal";
@@ -28,48 +28,48 @@ function priorityFromAlert(type: KeeperAlert["type"]): KeeperAction["priority"] 
 
 export function getKeeperActions(alerts: KeeperAlert[]): KeeperAction[] {
   return alerts.map((alert) => {
-    const priority = priorityFromAlert(alert.type);
+    const priority = priorityFromAlert(alert.severity);
 
-    if (alert.id.startsWith("price-")) {
+    if (alert.suggestedActionId === "set-product-price") {
       return {
         id: `action-${alert.id}`,
         alertId: alert.id,
         type: "set-price",
-        title: "Review product pricing",
-        description: "Open the related product and set a target price so cost/profit reporting becomes useful.",
+        title: "Review project costing",
+        description: "Open the related design project and set its cost assumptions so production reporting becomes useful.",
         priority,
-        targetView: "catalog",
-        targetId: alert.id.replace("price-", ""),
+        targetView: alert.section,
+        targetId: alert.relatedRecordId,
       };
     }
 
-    if (alert.id.startsWith("image-")) {
+    if (alert.suggestedActionId === "add-product-media") {
       return {
         id: `action-${alert.id}`,
         alertId: alert.id,
         type: "add-media",
-        title: "Add product media",
-        description: "Attach a concept image, product render, or prototype photo so the product is visually trackable.",
+        title: "Add design media",
+        description: "Attach a concept image, design render, or prototype photo so the project is visually trackable.",
         priority,
-        targetView: "catalog",
-        targetId: alert.id.replace("image-", ""),
+        targetView: alert.section,
+        targetId: alert.relatedRecordId,
       };
     }
 
-    if (alert.id.startsWith("notes-")) {
+    if (alert.suggestedActionId === "clean-product-notes") {
       return {
         id: `action-${alert.id}`,
         alertId: alert.id,
         type: "review-record",
         title: "Clean product notes",
-        description: "Add internal notes, production context, or launch details for this product record.",
+        description: "Add internal notes, production context, or readiness details for this design record.",
         priority,
-        targetView: "catalog",
-        targetId: alert.id.replace("notes-", ""),
+        targetView: alert.section,
+        targetId: alert.relatedRecordId,
       };
     }
 
-    if (alert.id.startsWith("filament-")) {
+    if (alert.suggestedActionId === "reorder-filament") {
       return {
         id: `action-${alert.id}`,
         alertId: alert.id,
@@ -77,21 +77,21 @@ export function getKeeperActions(alerts: KeeperAlert[]): KeeperAction[] {
         title: "Review filament reorder",
         description: "Check current stock, pending orders, and whether this material should be moved to the shopping list.",
         priority,
-        targetView: "filament",
-        targetId: alert.id.replace("filament-", ""),
+        targetView: alert.section,
+        targetId: alert.relatedRecordId,
       };
     }
 
-    if (alert.id.startsWith("printer-")) {
+    if (alert.suggestedActionId === "assign-printer") {
       return {
         id: `action-${alert.id}`,
         alertId: alert.id,
         type: "assign-printer",
         title: "Assign printer",
-        description: "Open the order board and assign a printer so production intelligence can calculate workload correctly.",
+        description: "Open Production and assign a printer so workload forecasting can calculate correctly.",
         priority,
-        targetView: "orders",
-        targetId: alert.id.replace("printer-", ""),
+        targetView: alert.section,
+        targetId: alert.relatedRecordId,
       };
     }
 

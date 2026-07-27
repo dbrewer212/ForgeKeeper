@@ -17,6 +17,9 @@ export type CostBreakdown = {
 };
 
 export const fallbackSettings: AppSettings = {
+  workspaceName: "Fenrir Forgeworks",
+  ownerName: "",
+  setupCompleted: false,
   laborRate: 18,
   electricityRate: 0.203,
   machineWatts: 250,

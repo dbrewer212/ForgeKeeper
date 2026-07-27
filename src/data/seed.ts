@@ -1,6 +1,9 @@
 import type { AppSettings, CollectionRecord, ConceptSpec, FilamentRecord, OrderRecord, PrinterRecord, Product, ProductVariant, ReleaseRecord, STLRecord } from "../types/domain";
 
 export const defaultSettings: AppSettings = {
+  workspaceName: "Fenrir Forgeworks",
+  ownerName: "",
+  setupCompleted: false,
   laborRate: 18,
   electricityRate: 0.203,
   machineWatts: 250,

@@ -8,6 +8,27 @@ import { ExternalToolsPanel } from "./ExternalToolsPanel";
 export function SettingsView({ state }: { state: ForgekeeperState }) {
   return (
     <div className="grid gap-6 xl:grid-cols-2">
+      <Card title="Workspace Setup">
+        <div className="space-y-4">
+          <Field label="Workspace Name">
+            <Input value={state.settings.workspaceName} onChange={(e) => state.updateSettings({ workspaceName: e.target.value })} />
+          </Field>
+          <Field label="Owner / Operator">
+            <Input value={state.settings.ownerName} onChange={(e) => state.updateSettings({ ownerName: e.target.value })} />
+          </Field>
+          <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4 text-sm text-slate-300">
+            This is a single-user administrative workspace. Customer accounts, customer catalogs, and
+            order intake are not part of the active application.
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className={state.settings.setupCompleted ? "text-sm text-emerald-300" : "text-sm text-amber-200"}>
+              {state.settings.setupCompleted ? "Workspace setup complete" : "Workspace setup needs review"}
+            </span>
+            <Button onClick={() => state.updateSettings({ setupCompleted: true })}>Mark Setup Complete</Button>
+          </div>
+        </div>
+      </Card>
+
       <Card title="Smart Cost Defaults">
         <div className="mb-4 rounded-2xl border border-amber-500/15 bg-amber-500/5 p-4 text-sm text-slate-300">
           Electricity is set to $0.203/kWh by default, matching the high end of your 19 to 20.3 cent range. Use $0.19 if you want the low estimate.

@@ -1,0 +1,15 @@
+node_modules/
+dist/
+target/
+src-tauri/target/
+bin/
+obj/
+
+*.tsbuildinfo
+*.zip
+*.bak
+vite.config.js
+vite.config.d.ts
+
+.DS_Store
+Thumbs.db

@@ -170,6 +170,9 @@ export type MaintenanceRecord = {
 };
 
 export type AppSettings = {
+  workspaceName: string;
+  ownerName: string;
+  setupCompleted: boolean;
   laborRate: number;
   electricityRate: number;
   machineWatts: number;
