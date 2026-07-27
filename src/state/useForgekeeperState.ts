@@ -31,189 +31,6 @@ import type { PlannedFilament, PlannedPrototype, ProductPlanningRecord, RealmMat
 import { useBatchState } from "./batchState";
 
 import JSZip from "jszip";
-
-type ParsedDesignPackageZip = {
-  packageName: string;
-  packageCode?: string;
-  pillar: Product["tier"];
-  family: string;
-  description: string;
-  catalogDescription: string;
-  notes: string;
-  conceptFile?: { name: string; dataUrl: string };
-  dataSheetFile?: { name: string; dataUrl: string };
-  stlFile?: { name: string };
-  threeMfFile?: { name: string };
-  productionImages: Array<{ name: string; dataUrl: string }>;
-  variantImages: Array<{ name: string; dataUrl: string }>;
-  textFiles: Array<{ name: string; text: string }>;
-};
-
-function fieldFromText(text: string, labels: string[]) {
-  for (const label of labels) {
-    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const regex = new RegExp(`^\\s*${escaped}\\s*[:=]\\s*(.+?)\\s*$`, "im");
-    const match = text.match(regex);
-    if (match?.[1]) return match[1].trim();
-  }
-
-  return "";
-}
-
-function inferPillarFromText(value: string): Product["tier"] {
-  const lower = value.toLowerCase();
-  if (lower.includes("relic") || lower.includes("coin") || lower.includes("realm")) return "Relics";
-  if (lower.includes("tech") || lower.includes("stand") || lower.includes("dock")) return "ForgeTech";
-  if (lower.includes("resilience") || lower.includes("memorial") || lower.includes("reforged")) return "Reforged";
-  return "Foundry";
-}
-
-function inferFamilyFromText(value: string) {
-  const lower = value.toLowerCase();
-  if (lower.includes("goblin")) return "Forge Goblins";
-  if (lower.includes("wyrm")) return "Wyrmslings";
-  if (lower.includes("mimic")) return "Mimics";
-  if (lower.includes("coin")) return "Coins";
-  if (lower.includes("resilience")) return "Resilience Collection";
-  if (lower.includes("stand")) return "ForgeTech Stands";
-  return "Unassigned";
-}
-
-function cleanPackageNameFromFileName(fileName: string) {
-  return fileName
-    .replace(/\.zip$/i, "")
-    .replace(/_DesignPackage$/i, "")
-    .replace(/_Design_Package$/i, "")
-    .replace(/[_-]+/g, " ")
-    .trim();
-}
-
-function displayNameFromFile(path: string) {
-  const file = path.split("/").pop() ?? path;
-  return file
-    .replace(/\.[^.]+$/g, "")
-    .replace(/[_-]+/g, " ")
-    .replace(/\b(concept|variant|catalog|display|image|meshy|output|generate|generation)\b/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-async function dataUrlFromZipFile(file: JSZip.JSZipObject, mimeType: string) {
-  const base64 = await file.async("base64");
-  return `data:${mimeType};base64,${base64}`;
-}
-
-async function parseDesignPackageZip(file: File): Promise<ParsedDesignPackageZip> {
-  const zip = await JSZip.loadAsync(await file.arrayBuffer());
-  const entries = Object.values(zip.files).filter((entry) => !entry.dir);
-
-  const imageEntries = entries.filter((entry) => /\.(png|jpe?g|webp)$/i.test(entry.name));
-  const textEntries = entries.filter((entry) => /\.(txt|md|json)$/i.test(entry.name));
-  const pdfEntries = entries.filter((entry) => /\.pdf$/i.test(entry.name));
-  const stlEntry = entries.find((entry) => /\.stl$/i.test(entry.name));
-  const threeMfEntry = entries.find((entry) => /\.3mf$/i.test(entry.name));
-
-  const textFiles = await Promise.all(
-    textEntries.map(async (entry) => ({
-      name: entry.name,
-      text: await entry.async("text"),
-    })),
-  );
-
-  let manifestData: Record<string, any> = {};
-  const jsonManifest = textFiles.find((entry) => /manifest/i.test(entry.name) && /\.json$/i.test(entry.name));
-  if (jsonManifest) {
-    try {
-      manifestData = JSON.parse(jsonManifest.text);
-    } catch {
-      manifestData = {};
-    }
-  }
-
-  const combinedText = textFiles.map((entry) => `# ${entry.name}\n${entry.text}`).join("\n\n");
-
-  const conceptCandidates = imageEntries.filter((entry) => /concept|sheet|display|catalog|cover/i.test(entry.name));
-  const conceptEntry = conceptCandidates[0] ?? imageEntries[0];
-  const catalogEntry = imageEntries.find((entry) => /catalog|display|cover/i.test(entry.name)) ?? conceptEntry;
-
-  const variantEntries = imageEntries.filter((entry) => entry.name !== catalogEntry?.name && !/production|print|photo|final/i.test(entry.name));
-  const productionImageEntries = imageEntries.filter((entry) => /production|print|photo|final/i.test(entry.name));
-
-  const imageToData = async (entry: JSZip.JSZipObject) => {
-    const ext = entry.name.toLowerCase().split(".").pop();
-    const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png";
-    return { name: entry.name, dataUrl: await dataUrlFromZipFile(entry, mime) };
-  };
-
-  const conceptFile = conceptEntry ? await imageToData(conceptEntry) : undefined;
-  const dataSheetEntry = pdfEntries.find((entry) => /datasheet|data_sheet|package.*sheet|spec/i.test(entry.name)) ?? pdfEntries[0];
-  const dataSheetFile = dataSheetEntry
-    ? { name: dataSheetEntry.name, dataUrl: await dataUrlFromZipFile(dataSheetEntry, "application/pdf") }
-    : undefined;
-
-  const zipName = cleanPackageNameFromFileName(file.name);
-  const packageName =
-    manifestData.packageName ||
-    manifestData.name ||
-    fieldFromText(combinedText, ["Package Name", "Package"]) ||
-    zipName;
-
-  const pillarText =
-    manifestData.pillar ||
-    fieldFromText(combinedText, ["Pillar"]) ||
-    packageName ||
-    file.name;
-
-  const familyText =
-    manifestData.family ||
-    fieldFromText(combinedText, ["Family"]) ||
-    packageName ||
-    file.name;
-
-  const pillar = inferPillarFromText(String(pillarText));
-  const family = String(manifestData.family || fieldFromText(combinedText, ["Family"]) || inferFamilyFromText(String(familyText)));
-
-  const description =
-    manifestData.description ||
-    manifestData.packageDescription ||
-    fieldFromText(combinedText, ["Package Description", "Description"]) ||
-    `${packageName} imported from Design Package ZIP.`;
-
-  const catalogDescription =
-    manifestData.catalogDescription ||
-    fieldFromText(combinedText, ["Catalog Description"]) ||
-    description;
-
-  const notes = [
-    `Imported from ZIP: ${file.name}`,
-    dataSheetFile ? `Data sheet: ${dataSheetFile.name}` : "",
-    stlEntry ? `STL: ${stlEntry.name}` : "",
-    threeMfEntry ? `3MF: ${threeMfEntry.name}` : "",
-    "",
-    combinedText.trim(),
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  return {
-    packageName: String(packageName),
-    packageCode: manifestData.packageCode || fieldFromText(combinedText, ["Package Code", "Code"]),
-    pillar,
-    family,
-    description: String(description),
-    catalogDescription: String(catalogDescription),
-    notes,
-    conceptFile,
-    dataSheetFile,
-    stlFile: stlEntry ? { name: stlEntry.name } : undefined,
-    threeMfFile: threeMfEntry ? { name: threeMfEntry.name } : undefined,
-    productionImages: await Promise.all(productionImageEntries.map(imageToData)),
-    variantImages: await Promise.all(variantEntries.map(imageToData)),
-    textFiles,
-  };
-}
-
-
 const seedData: AppData = {
   products: seedProducts,
   designPackages: seedDesignPackages,
@@ -263,6 +80,168 @@ function normalizeDesignPackageStatus(status: unknown): DesignPackage["status"] 
 
 
 
+
+
+type ParsedDesignPackageZip = {
+  packageName: string;
+  packageCode?: string;
+  pillar: Product["tier"];
+  family: string;
+  description: string;
+  catalogDescription: string;
+  notes: string;
+  conceptFile?: { name: string; dataUrl: string };
+  dataSheetFile?: { name: string; dataUrl: string };
+  stlFile?: { name: string };
+  threeMfFile?: { name: string };
+  productionImages: Array<{ name: string; dataUrl: string }>;
+  variantImages: Array<{ name: string; dataUrl: string }>;
+  textFiles: Array<{ name: string; text: string }>;
+};
+
+function fieldFromText(text: string, labels: string[]) {
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`^\\s*${escaped}\\s*[:=]\\s*(.+?)\\s*$`, "im");
+    const match = text.match(regex);
+    if (match?.[1]) return match[1].trim();
+  }
+  return "";
+}
+
+function inferPillarFromText(value: string): Product["tier"] {
+  const lower = value.toLowerCase();
+  if (lower.includes("relic") || lower.includes("coin") || lower.includes("realm")) return "Relics";
+  if (lower.includes("tech") || lower.includes("stand") || lower.includes("dock")) return "ForgeTech";
+  if (lower.includes("resilience") || lower.includes("memorial") || lower.includes("reforged")) return "Reforged";
+  return "Foundry";
+}
+
+function inferFamilyFromText(value: string) {
+  const lower = value.toLowerCase();
+  if (lower.includes("goblin")) return "Forge Goblins";
+  if (lower.includes("wyrm")) return "Wyrmslings";
+  if (lower.includes("mimic")) return "Mimics";
+  if (lower.includes("coin")) return "Coins";
+  if (lower.includes("resilience")) return "Resilience Collection";
+  if (lower.includes("stand")) return "ForgeTech Stands";
+  return "Unassigned";
+}
+
+function cleanPackageNameFromFileName(fileName: string) {
+  return fileName
+    .replace(/\.zip$/i, "")
+    .replace(/_DesignPackage$/i, "")
+    .replace(/_Design_Package$/i, "")
+    .replace(/[_-]+/g, " ")
+    .trim();
+}
+
+function displayNameFromFile(path: string) {
+  const file = path.split("/").pop() ?? path;
+  return file
+    .replace(/\.[^.]+$/g, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b(concept|variant|catalog|display|image|meshy|output|generate|generation|designpackage|data|sheet)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function dataUrlFromZipFile(file: JSZip.JSZipObject, mimeType: string) {
+  const base64 = await file.async("base64");
+  return `data:${mimeType};base64,${base64}`;
+}
+
+async function parseDesignPackageZip(file: File): Promise<ParsedDesignPackageZip> {
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const entries = Object.values(zip.files).filter((entry) => !entry.dir);
+
+  const imageEntries = entries.filter((entry) => /\.(png|jpe?g|webp)$/i.test(entry.name));
+  const textEntries = entries.filter((entry) => /\.(txt|md|json)$/i.test(entry.name));
+  const pdfEntries = entries.filter((entry) => /\.pdf$/i.test(entry.name));
+  const stlEntry = entries.find((entry) => /\.stl$/i.test(entry.name));
+  const threeMfEntry = entries.find((entry) => /\.3mf$/i.test(entry.name));
+
+  const textFiles = await Promise.all(
+    textEntries.map(async (entry) => ({ name: entry.name, text: await entry.async("text") })),
+  );
+
+  let manifestData: Record<string, any> = {};
+  const jsonManifest = textFiles.find((entry) => /manifest|package/i.test(entry.name) && /\.json$/i.test(entry.name));
+  if (jsonManifest) {
+    try {
+      manifestData = JSON.parse(jsonManifest.text);
+    } catch {
+      manifestData = {};
+    }
+  }
+
+  const combinedText = textFiles.map((entry) => `# ${entry.name}\n${entry.text}`).join("\n\n");
+  const conceptCandidates = imageEntries.filter((entry) => /concept|sheet|display|catalog|cover/i.test(entry.name));
+  const conceptEntry = conceptCandidates[0] ?? imageEntries[0];
+  const catalogEntry = imageEntries.find((entry) => /catalog|display|cover/i.test(entry.name)) ?? conceptEntry;
+  const productionImageEntries = imageEntries.filter((entry) => /production|print|photo|final/i.test(entry.name));
+  const variantEntries = imageEntries.filter(
+    (entry) => entry.name !== catalogEntry?.name && !/production|print|photo|final/i.test(entry.name),
+  );
+
+  const imageToData = async (entry: JSZip.JSZipObject) => {
+    const ext = entry.name.toLowerCase().split(".").pop();
+    const mime = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : ext === "webp" ? "image/webp" : "image/png";
+    return { name: entry.name, dataUrl: await dataUrlFromZipFile(entry, mime) };
+  };
+
+  const conceptFile = conceptEntry ? await imageToData(conceptEntry) : undefined;
+  const dataSheetEntry = pdfEntries.find((entry) => /datasheet|data_sheet|package.*sheet|spec/i.test(entry.name)) ?? pdfEntries[0];
+  const dataSheetFile = dataSheetEntry
+    ? { name: dataSheetEntry.name, dataUrl: await dataUrlFromZipFile(dataSheetEntry, "application/pdf") }
+    : undefined;
+
+  const zipName = cleanPackageNameFromFileName(file.name);
+  const packageName = String(
+    manifestData.packageName ||
+      manifestData.name ||
+      fieldFromText(combinedText, ["Package Name", "Package", "Product Name", "Character Name"]) ||
+      zipName ||
+      "Imported Design Package",
+  );
+  const pillar = inferPillarFromText(String(manifestData.pillar || fieldFromText(combinedText, ["Pillar"]) || packageName || file.name));
+  const family = String(manifestData.family || fieldFromText(combinedText, ["Family"]) || inferFamilyFromText(`${packageName} ${file.name}`));
+  const description = String(
+    manifestData.description ||
+      manifestData.packageDescription ||
+      fieldFromText(combinedText, ["Package Description", "Description"]) ||
+      `${packageName} imported from Design Package ZIP.`,
+  );
+  const catalogDescription = String(manifestData.catalogDescription || fieldFromText(combinedText, ["Catalog Description"]) || description);
+  const notes = [
+    `Imported from ZIP: ${file.name}`,
+    dataSheetFile ? `Data sheet: ${dataSheetFile.name}` : "",
+    stlEntry ? `STL: ${stlEntry.name}` : "",
+    threeMfEntry ? `3MF: ${threeMfEntry.name}` : "",
+    "",
+    combinedText.trim(),
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    packageName,
+    packageCode: manifestData.packageCode || fieldFromText(combinedText, ["Package Code", "Code"]),
+    pillar,
+    family,
+    description,
+    catalogDescription,
+    notes,
+    conceptFile,
+    dataSheetFile,
+    stlFile: stlEntry ? { name: stlEntry.name } : undefined,
+    threeMfFile: threeMfEntry ? { name: threeMfEntry.name } : undefined,
+    productionImages: await Promise.all(productionImageEntries.map(imageToData)),
+    variantImages: await Promise.all(variantEntries.map(imageToData)),
+    textFiles,
+  };
+}
 
 function normalizeProductVisibility(visibility: unknown, status?: Product["status"]): Product["visibility"] {
   if (
@@ -746,120 +725,7 @@ export function useForgekeeperState() {
     const revenue = orders.reduce((sum, order) => sum + order.quotedPrice, 0);
     const costs = orders.reduce((sum, order) => sum + getCostBreakdownForOrder(order).total, 0);
     const totalFilamentKg = filament.reduce((sum, item) => sum + item.gramsAvailable, 0) / 1000;
-  
-
-
-
-
-  const importDesignPackageZip = async (file: File) => {
-    const parsed = await parseDesignPackageZip(file);
-    const id = `pkg-${Date.now()}`;
-    const productId = `prod-${Date.now() + 1}`;
-    const packageCode = parsed.packageCode || suggestedPackageCode(parsed.pillar, parsed.family, parsed.packageName);
-
-    const nextPackage: DesignPackage = {
-      id,
-      name: parsed.packageName,
-      packageCode,
-      catalogVisibility: "Hidden",
-      pillar: parsed.pillar,
-      family: parsed.family,
-      status: parsed.stlFile || parsed.threeMfFile ? "STL Ready" : "Concept Ready",
-      description: parsed.description,
-      lore: "",
-      conceptSheetPath: parsed.conceptFile?.dataUrl ?? "",
-      promptNotes: parsed.notes,
-      referenceFolderPath: parsed.dataSheetFile?.dataUrl ?? "",
-      stlFolderPath: parsed.stlFile?.name ?? parsed.threeMfFile?.name ?? "",
-      photoFolderPath: parsed.productionImages.map((image) => image.name).join("\\n"),
-      catalogDisplayImagePath: parsed.conceptFile?.dataUrl ?? "",
-      catalogHeroImagePath: parsed.conceptFile?.dataUrl ?? "",
-      estimatedFilamentGrams: 0,
-      estimatedPrintHours: 0,
-      cleanupMinutes: 0,
-      assemblyMinutes: 0,
-      paintingMinutes: 0,
-      packagingMinutes: 0,
-      notes: parsed.notes,
-    };
-
-    const nextProduct: Product = {
-      id: productId,
-      name: parsed.packageName,
-      sku: packageCode,
-      line: parsed.family,
-      tier: parsed.pillar,
-      status: parsed.stlFile || parsed.threeMfFile ? "Ready" : "Concept",
-      visibility: "Internal",
-      designPackageId: id,
-      collection: parsed.family,
-      category: parsed.family,
-      available: 0,
-      reorderPoint: 0,
-      targetPrice: 0,
-      estimatedFilamentGrams: 0,
-      estimatedPrintHours: 0,
-      productImagePath: parsed.conceptFile?.dataUrl ?? "",
-      conceptImagePath: parsed.conceptFile?.dataUrl ?? "",
-      supportedRealmVariants: [],
-      realmVariants: [],
-      tags: ["Design Package", parsed.family, parsed.pillar],
-      galleryImages: parsed.productionImages.map((image) => image.dataUrl),
-      description: parsed.catalogDescription,
-      internalNotes: parsed.notes,
-      notes: parsed.notes,
-    } as Product;
-
-    const variantSources = parsed.variantImages.length
-      ? parsed.variantImages
-      : parsed.conceptFile
-        ? [parsed.conceptFile]
-        : [];
-
-    const nextVariants: ProductVariant[] = variantSources.map((image, index) => {
-      const name = displayNameFromFile(image.name) || (index === 0 ? "Standard" : `Variant ${index + 1}`);
-      return {
-    createDesignPackageFromZip,
-    importDesignPackageZip,
-        id: `variant-${Date.now()}-${index}`,
-        productId,
-        name,
-        variantCode: `${packageCode}-${String(index + 1).padStart(2, "0")}`,
-        realm: name,
-        imagePath: image.dataUrl,
-        notes: index === 0 ? "Default concept variant imported from Design Package." : "Variant image imported from Design Package.",
-      } as ProductVariant;
-    });
-
-    setDesignPackages((prev) => [nextPackage, ...prev]);
-    setProducts((prev) => [nextProduct, ...prev]);
-    if (nextVariants.length) {
-      setVariants((prev) => [...nextVariants, ...prev]);
-    }
-
-    if (parsed.stlFile) {
-      const stlRecord: STLRecord = {
-        id: `stl-${Date.now()}`,
-        productId,
-        fileName: parsed.stlFile.name,
-        filePath: parsed.stlFile.name,
-        version: "v1.0",
-        status: "Imported",
-        notes: "Imported from Design Package ZIP.",
-      } as STLRecord;
-      setStls((prev) => [stlRecord, ...prev]);
-    }
-
-    setSelectedDesignPackageId(id);
-    setSelectedProductId(productId);
-  };
-
-  const createDesignPackageFromZip = async (file: File) => {
-    await importDesignPackageZip(file);
-  };
-
-
-  return {
+    return {
       products: products.length,
       stls: stls.length,
       concepts: concepts.length,
@@ -944,6 +810,130 @@ export function useForgekeeperState() {
   }
 
 
+
+  const importDesignPackageZip = async (file: File) => {
+    const parsed = await parseDesignPackageZip(file);
+    const packageId = uid("PKG");
+    const productId = uid("P");
+    const packageCode = parsed.packageCode || suggestedPackageCode(parsed.pillar, parsed.family, parsed.packageName);
+
+    const nextPackage: DesignPackage = {
+      id: packageId,
+      name: parsed.packageName,
+      packageCode,
+      catalogVisibility: "Hidden",
+      pillar: parsed.pillar,
+      family: parsed.family,
+      status: parsed.stlFile || parsed.threeMfFile ? "STL Ready" : "Concept Ready",
+      description: parsed.description,
+      lore: "",
+      conceptSheetPath: parsed.conceptFile?.dataUrl ?? "",
+      promptNotes: parsed.notes,
+      referenceFolderPath: parsed.dataSheetFile?.dataUrl ?? "",
+      stlFolderPath: parsed.stlFile?.name ?? parsed.threeMfFile?.name ?? "",
+      photoFolderPath: parsed.productionImages.map((image) => image.name).join("\n"),
+      catalogDisplayImagePath: parsed.conceptFile?.dataUrl ?? "",
+      catalogHeroImagePath: parsed.conceptFile?.dataUrl ?? "",
+      estimatedFilamentGrams: 0,
+      estimatedPrintHours: 0,
+      cleanupMinutes: 0,
+      assemblyMinutes: 0,
+      paintingMinutes: 0,
+      packagingMinutes: 0,
+      notes: parsed.notes,
+    };
+
+    const nextProduct: Product = {
+      id: productId,
+      name: parsed.packageName,
+      sku: packageCode,
+      line: parsed.family,
+      tier: parsed.pillar,
+      status: parsed.stlFile || parsed.threeMfFile ? "Prototype" : "Concept",
+      visibility: "Internal",
+      designPackageId: packageId,
+      collection: parsed.family,
+      category: parsed.family,
+      available: 0,
+      reorderPoint: 0,
+      targetPrice: 0,
+      estimatedFilamentGrams: 0,
+      estimatedPrintHours: 0,
+      productImagePath: parsed.conceptFile?.dataUrl ?? "",
+      conceptImagePath: parsed.conceptFile?.dataUrl ?? "",
+      supportedRealmVariants: [],
+      realmVariants: [],
+      tags: ["Design Package", parsed.family, parsed.pillar],
+      galleryImages: parsed.productionImages.map((image) => image.dataUrl),
+      description: parsed.catalogDescription,
+      internalNotes: parsed.notes,
+      notes: parsed.notes,
+    } as Product;
+
+    const importedConcepts: ConceptSpec[] = parsed.conceptFile
+      ? [{
+          id: uid("C"),
+          productId,
+          title: `${parsed.packageName} Concept`,
+          imageName: parsed.conceptFile.name,
+          imagePath: parsed.conceptFile.dataUrl,
+          measurements: "",
+          description: parsed.description,
+          notes: parsed.notes,
+        } as ConceptSpec]
+      : [];
+
+    const variantSources = parsed.variantImages.length
+      ? parsed.variantImages
+      : parsed.conceptFile
+        ? [parsed.conceptFile]
+        : [];
+
+    const importedVariants: ProductVariant[] = variantSources.map((image, index) => {
+      const name = displayNameFromFile(image.name) || (index === 0 ? "Standard" : `Variant ${index + 1}`);
+      return {
+        id: uid("VAR"),
+        productId,
+        realm: name,
+        name,
+        productImagePath: image.dataUrl,
+        conceptImagePath: image.dataUrl,
+        priceModifier: 0,
+        estimatedFilamentGrams: 0,
+        estimatedPrintHours: 0,
+        isActive: true,
+        notes: index === 0 ? "Default concept imported from Design Package." : "Variant image imported from Design Package.",
+      } as ProductVariant;
+    });
+
+    setDesignPackages((prev) => [nextPackage, ...prev]);
+    setProducts((prev) => [nextProduct, ...prev]);
+    if (importedConcepts.length) setConcepts((prev) => [...importedConcepts, ...prev]);
+    if (importedVariants.length) setVariants((prev) => [...importedVariants, ...prev]);
+
+    if (parsed.stlFile) {
+      const stlRecord: STLRecord = {
+        id: uid("STL"),
+        productId,
+        name: displayNameFromFile(parsed.stlFile.name) || parsed.packageName,
+        fileName: parsed.stlFile.name,
+        filePath: parsed.stlFile.name,
+        folderPath: "",
+        libraryPath: "",
+        version: "v1.0",
+        isPrimary: true,
+        defaultPrinterId: printers[0]?.id,
+        defaultSlicer: printers[0] ? slicerForPrinter(printers[0].name) : settings.defaultSlicer,
+        linkedConceptId: importedConcepts[0]?.id,
+        assetStatus: "Linked",
+        notes: "Imported from Design Package ZIP.",
+      } as STLRecord;
+      setStls((prev) => [stlRecord, ...prev]);
+    }
+
+    setSelectedDesignPackageId(packageId);
+    setSelectedProductId(productId);
+  };
 
 
   async function importDesignPackageFolder(fileList: FileList | null, sourceProduct?: Product) {
