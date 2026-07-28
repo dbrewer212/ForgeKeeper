@@ -5,7 +5,7 @@ export type KeeperAlert = {
   severity: KeeperAlertSeverity;
   title: string;
   message: string;
-  section: "catalog" | "orders" | "filament" | "printers" | "planning" | "reports" | "settings";
+  section: "designs" | "production" | "filament" | "printers" | "planning" | "reports" | "settings";
   relatedRecordId?: string;
   suggestedActionId?: string;
 };
@@ -17,87 +17,87 @@ function hasText(value: unknown): boolean {
 export function getKeeperAlerts(state: any): KeeperAlert[] {
   const alerts: KeeperAlert[] = [];
 
-  const products = Array.isArray(state?.products) ? state.products : [];
+  const designProjects = Array.isArray(state?.designProjects) ? state.designProjects : [];
   const stls = Array.isArray(state?.stls) ? state.stls : [];
   const concepts = Array.isArray(state?.concepts) ? state.concepts : [];
   const variants = Array.isArray(state?.variants) ? state.variants : [];
-  const orders = Array.isArray(state?.orders) ? state.orders : [];
+  const productionJobs = Array.isArray(state?.productionJobs) ? state.productionJobs : [];
   const filament = Array.isArray(state?.filament) ? state.filament : [];
 
-  for (const product of products) {
-    const productId = product.id;
-    const productName = product.name ?? "Unnamed product";
-    const productStls = stls.filter((stl: any) => stl.productId === productId);
-    const productConcepts = concepts.filter((concept: any) => concept.productId === productId);
+  for (const design of designProjects) {
+    const designProjectId = design.id;
+    const designName = design.name ?? "Unnamed design";
+    const designStls = stls.filter((stl: any) => stl.designProjectId === designProjectId);
+    const designConcepts = concepts.filter((concept: any) => concept.designProjectId === designProjectId);
 
-    if (!product.targetPrice || Number(product.targetPrice) <= 0) {
+    if (!design.targetPrice || Number(design.targetPrice) <= 0) {
       alerts.push({
-        id: `product-price-${productId}`,
+        id: `design-price-${designProjectId}`,
         severity: "warning",
-        title: "Missing product price",
-        message: `${productName} does not have a target price set.`,
-        section: "catalog",
-        relatedRecordId: productId,
-        suggestedActionId: "set-product-price",
+        title: "Missing design price",
+        message: `${designName} does not have a target price set.`,
+        section: "designs",
+        relatedRecordId: designProjectId,
+        suggestedActionId: "set-design-price",
       });
     }
 
-    if (!product.estimatedPrintHours || Number(product.estimatedPrintHours) <= 0) {
+    if (!design.estimatedPrintHours || Number(design.estimatedPrintHours) <= 0) {
       alerts.push({
-        id: `product-print-hours-${productId}`,
+        id: `design-print-hours-${designProjectId}`,
         severity: "warning",
         title: "Missing print time estimate",
-        message: `${productName} does not have an estimated print time.`,
-        section: "catalog",
-        relatedRecordId: productId,
+        message: `${designName} does not have an estimated print time.`,
+        section: "designs",
+        relatedRecordId: designProjectId,
         suggestedActionId: "add-print-estimate",
       });
     }
 
-    if (!product.estimatedFilamentGrams || Number(product.estimatedFilamentGrams) <= 0) {
+    if (!design.estimatedFilamentGrams || Number(design.estimatedFilamentGrams) <= 0) {
       alerts.push({
-        id: `product-material-${productId}`,
+        id: `design-material-${designProjectId}`,
         severity: "warning",
         title: "Missing filament usage estimate",
-        message: `${productName} does not have a filament gram estimate.`,
-        section: "catalog",
-        relatedRecordId: productId,
+        message: `${designName} does not have a filament gram estimate.`,
+        section: "designs",
+        relatedRecordId: designProjectId,
         suggestedActionId: "add-material-estimate",
       });
     }
 
-    if (!hasText(product.notes)) {
+    if (!hasText(design.notes)) {
       alerts.push({
-        id: `product-notes-${productId}`,
+        id: `design-notes-${designProjectId}`,
         severity: "info",
-        title: "Missing product notes",
-        message: `${productName} has no internal notes or description yet.`,
-        section: "catalog",
-        relatedRecordId: productId,
-        suggestedActionId: "clean-product-notes",
+        title: "Missing design notes",
+        message: `${designName} has no internal notes or description yet.`,
+        section: "designs",
+        relatedRecordId: designProjectId,
+        suggestedActionId: "clean-design-notes",
       });
     }
 
-    if (!hasText(product.productImagePath) && !hasText(product.conceptImagePath) && productConcepts.length === 0) {
+    if (!hasText(design.designImagePath) && !hasText(design.conceptImagePath) && designConcepts.length === 0) {
       alerts.push({
-        id: `product-media-${productId}`,
+        id: `design-media-${designProjectId}`,
         severity: "info",
-        title: "Missing product media",
-        message: `${productName} has no product image, concept image, or concept spec attached.`,
-        section: "catalog",
-        relatedRecordId: productId,
-        suggestedActionId: "add-product-media",
+        title: "Missing design media",
+        message: `${designName} has no design image, concept image, or concept spec attached.`,
+        section: "designs",
+        relatedRecordId: designProjectId,
+        suggestedActionId: "add-design-media",
       });
     }
 
-    if (productStls.length === 0) {
+    if (designStls.length === 0) {
       alerts.push({
-        id: `product-stl-${productId}`,
+        id: `design-stl-${designProjectId}`,
         severity: "warning",
         title: "Missing STL record",
-        message: `${productName} has no STL file record attached.`,
-        section: "catalog",
-        relatedRecordId: productId,
+        message: `${designName} has no STL file record attached.`,
+        section: "designs",
+        relatedRecordId: designProjectId,
         suggestedActionId: "add-stl-record",
       });
     }
@@ -111,19 +111,19 @@ export function getKeeperAlerts(state: any): KeeperAlert[] {
         severity: "info",
         title: "Variant missing STL link",
         message: `${variantName} does not have a linked STL record.`,
-        section: "catalog",
+        section: "designs",
         relatedRecordId: variant.id,
         suggestedActionId: "link-variant-stl",
       });
     }
 
-    if (!hasText(variant.productImagePath) && !hasText(variant.conceptImagePath)) {
+    if (!hasText(variant.designImagePath) && !hasText(variant.conceptImagePath)) {
       alerts.push({
         id: `variant-media-${variant.id}`,
         severity: "info",
         title: "Variant missing media",
         message: `${variantName} does not have variant-specific media assigned.`,
-        section: "catalog",
+        section: "designs",
         relatedRecordId: variant.id,
         suggestedActionId: "add-variant-media",
       });
@@ -146,27 +146,27 @@ export function getKeeperAlerts(state: any): KeeperAlert[] {
     }
   }
 
-  for (const order of orders) {
-    if (!order.printerId && order.status !== "Shipped") {
+  for (const job of productionJobs) {
+    if (!job.printerId && !["Complete", "Cancelled"].includes(job.status)) {
       alerts.push({
-        id: `order-printer-${order.id}`,
+        id: `job-printer-${job.id}`,
         severity: "warning",
-        title: "Order needs printer assignment",
-        message: `${order.customer ?? order.id} is not assigned to a printer.`,
-        section: "orders",
-        relatedRecordId: order.id,
+        title: "Production Job needs printer assignment",
+        message: `${job.name ?? job.id} is not assigned to a printer.`,
+        section: "production",
+        relatedRecordId: job.id,
         suggestedActionId: "assign-printer",
       });
     }
 
-    if (!order.filamentId && order.status !== "Shipped") {
+    if (!job.filamentId && !["Complete", "Cancelled"].includes(job.status)) {
       alerts.push({
-        id: `order-filament-${order.id}`,
+        id: `job-filament-${job.id}`,
         severity: "warning",
-        title: "Order needs filament assignment",
-        message: `${order.customer ?? order.id} is not assigned to a filament spool/material.`,
-        section: "orders",
-        relatedRecordId: order.id,
+        title: "Production Job needs filament assignment",
+        message: `${job.name ?? job.id} is not assigned to a filament spool/material.`,
+        section: "production",
+        relatedRecordId: job.id,
         suggestedActionId: "assign-filament",
       });
     }

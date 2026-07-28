@@ -18,7 +18,7 @@ export function SettingsView({ state }: { state: ForgekeeperState }) {
           </Field>
           <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4 text-sm text-slate-300">
             This is a single-user administrative workspace. Customer accounts, customer catalogs, and
-            order intake are not part of the active application.
+            sales-order intake are not part of the active application.
           </div>
           <div className="flex items-center justify-between gap-3">
             <span className={state.settings.setupCompleted ? "text-sm text-emerald-300" : "text-sm text-amber-200"}>
@@ -26,6 +26,21 @@ export function SettingsView({ state }: { state: ForgekeeperState }) {
             </span>
             <Button onClick={() => state.updateSettings({ setupCompleted: true })}>Mark Setup Complete</Button>
           </div>
+        </div>
+      </Card>
+
+      <Card title="Data Core">
+        <div className="space-y-3 text-sm text-slate-300">
+          <InfoLine
+            title={state.storageBackend === "sqlite" ? "SQLite Active" : "Browser Preview"}
+            body={state.storageBackend === "sqlite"
+              ? "The versioned local SQLite database is the authoritative source for this workspace."
+              : "This preview uses browser storage. The installed desktop application uses SQLite."}
+          />
+          <InfoLine
+            title="Schema"
+            body="Workspace schema 3 · Design Projects and internal Production Jobs · legacy customer and sales fields excluded."
+          />
         </div>
       </Card>
 
@@ -60,7 +75,7 @@ export function SettingsView({ state }: { state: ForgekeeperState }) {
 
       <Card title="Cost Engine Sources">
         <div className="grid gap-3 text-sm text-slate-300">
-          <InfoLine title="Filament" body="Spool price and spool grams create cost per gram. Product/order gram use drives material cost." />
+          <InfoLine title="Filament" body="Spool price and spool grams create cost per gram. Design and job gram use drives material cost." />
           <InfoLine title="Printer" body="Printer wattage plus print hours and electricity rate create power cost." />
           <InfoLine title="Labor" body="Labor hours multiplied by your default labor rate creates labor cost." />
           <InfoLine title="Suggested Price" body="Total cost divided by target margin creates a pricing floor you can accept or override." />

@@ -1,6 +1,6 @@
 # Foundry Ecosystem Architecture
 
-**Status:** Approved Direction - implementation foundation
+**Status:** Active implementation foundation
 
 ## Objective
 
@@ -85,6 +85,40 @@ The prototype names `Product`, `OrderRecord`, and `Catalog` are migration source
 domain language. Product records become user-owned design projects. Order records that contain
 useful production data become internal production jobs. Customer and sales-only fields are not
 carried into the operational core.
+
+## Implemented Data Core
+
+The desktop application now loads one versioned SQLite database through a repository interface.
+React views never open or query the database directly.
+
+Current authoritative record:
+
+- database: `forgekeeper.db` in the Tauri application configuration directory;
+- workspace identifier: `local-foundry`;
+- schema version: `3`;
+- authoritative payload: `workspace_state`;
+- schema history: Tauri SQL migrations registered in Rust;
+- compatibility path: browser storage is limited to web preview and legacy import.
+
+The initial migration also establishes indexed tables for design projects, production jobs,
+materials, and printers. The versioned workspace snapshot remains authoritative during the
+station-by-station repository transition so a partial station conversion cannot split operational
+truth.
+
+On first desktop launch:
+
+1. SQLite migrations run atomically.
+2. ForgeKeeper checks the authoritative workspace record.
+3. If no workspace exists, it checks for the prototype `forgekeeper.app.v1` payload.
+4. Legacy products become `DesignProject` records.
+5. Legacy orders become internal `ProductionJob` records.
+6. Customer, contact, payment, tracking, and quoted-sale fields are discarded.
+7. The original legacy JSON is archived locally only after the SQLite save succeeds.
+8. A new installation opens the first-run workspace setup with no demonstration records.
+
+The first-run setup establishes workspace identity, owner/operator, asset root, cost inputs, and
+production capacity. Printers and materials are created in their owning stations so the workspace
+contains only user-defined operational records.
 
 ## Application Boundaries
 

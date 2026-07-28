@@ -5,9 +5,7 @@ import { money } from "../../lib/format";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 
 export function ReportsView({ state }: { state: ForgekeeperState }) {
-  const margin = state.metrics.revenue > 0 ? (state.metrics.profit / state.metrics.revenue) * 100 : 0;
-  const orderBreakdowns = state.orders.map((order) => ({ order, breakdown: state.getCostBreakdownForOrder(order) }));
-  const suggestedRevenue = orderBreakdowns.reduce((sum, item) => sum + item.breakdown.suggestedPrice, 0);
+  const jobBreakdowns = state.productionJobs.map((job) => ({ job, breakdown: state.getCostBreakdownForJob(job) }));
   const production = state.productionMetrics;
 
   return (
@@ -28,32 +26,32 @@ export function ReportsView({ state }: { state: ForgekeeperState }) {
               }}
             />
           </label>
-          <Button variant="ghost" onClick={state.resetWorkspace}>Reset Demo Data</Button>
+          <Button variant="ghost" onClick={state.resetWorkspace}>Reset Workspace</Button>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" onClick={state.exportProductsCsv}>Products</Button>
+          <Button variant="ghost" onClick={state.exportDesignProjectsCsv}>Design Projects</Button>
           <Button variant="ghost" onClick={state.exportStlsCsv}>STLs</Button>
           <Button variant="ghost" onClick={state.exportConceptsCsv}>Concepts</Button>
           <Button variant="ghost" onClick={state.exportVariantsCsv}>Variants</Button>
           <Button variant="ghost" onClick={state.exportCollectionsCsv}>Collections</Button>
           <Button variant="ghost" onClick={state.exportReleasesCsv}>Releases</Button>
-          <Button variant="ghost" onClick={state.exportOrdersCsv}>Orders</Button>
-          <Button variant="ghost" onClick={state.exportFilamentCsv}>Filament</Button>
+          <Button variant="ghost" onClick={state.exportProductionJobsCsv}>Production Jobs</Button>
+          <Button variant="ghost" onClick={state.exportFilamentCsv}>Materials</Button>
           <Button variant="ghost" onClick={state.exportPrintersCsv}>Printers</Button>
           <Button variant="ghost" onClick={state.exportMaintenanceCsv}>Maintenance</Button>
         </div>
       </Card>
 
-      <Card title="Business Snapshot">
+      <Card title="Operational Snapshot">
         <div className="grid gap-4 md:grid-cols-2">
-          <StatCard label="Revenue" value={money(state.metrics.revenue)} helper="Gross quoted value" />
-          <StatCard label="Direct Costs" value={money(state.metrics.costs)} helper="Material + electricity + labor + packaging" />
-          <StatCard label="Profit" value={money(state.metrics.profit)} helper={`${margin.toFixed(1)}% estimated margin`} />
-          <StatCard label="Suggested Revenue" value={money(suggestedRevenue)} helper={`${state.settings.targetMarginPercent}% target margin floor`} />
+          <StatCard label="Active Jobs" value={state.productionJobs.filter((job) => !["Complete", "Cancelled"].includes(job.status)).length} helper="Queued through finishing" />
+          <StatCard label="Estimated Direct Cost" value={money(state.metrics.costs)} helper="Material + electricity + labor + finishing" />
+          <StatCard label="Completed Jobs" value={state.metrics.done} helper="Internal work completed" />
+          <StatCard label="Design Projects" value={state.metrics.designProjects} helper="User-owned design records" />
         </div>
       </Card>
 
-      <Card title="Production Intelligence Summary">
+      <Card title="Production Intelligence">
         <div className="grid gap-4 md:grid-cols-2">
           <StatCard label="Queue Hours" value={`${production.totalQueueHours.toFixed(1)}h`} helper={`${production.unassignedQueueHours.toFixed(1)}h unassigned`} />
           <StatCard label="Completion Estimate" value={`${production.estimatedCompletionDays.toFixed(1)} days`} helper={`${production.estimatedCompletionHours.toFixed(1)} production hours`} />
@@ -86,21 +84,21 @@ export function ReportsView({ state }: { state: ForgekeeperState }) {
         </div>
       </Card>
 
-      <Card title="Cost Engine Breakdown">
+      <Card title="Job Cost Breakdown">
         <div className="space-y-3">
-          {orderBreakdowns.length === 0 ? <div className="rounded-2xl border border-dashed border-white/10 bg-[#0d131c] p-6 text-sm text-slate-500">No orders to summarize.</div> : orderBreakdowns.map(({ order, breakdown }) => (
-            <div key={order.id} className="rounded-2xl border border-white/10 bg-[#0d131c] p-4 text-sm">
+          {jobBreakdowns.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/10 bg-[#0d131c] p-6 text-sm text-slate-500">No production jobs to summarize.</div>
+          ) : jobBreakdowns.map(({ job, breakdown }) => (
+            <div key={job.id} className="rounded-2xl border border-white/10 bg-[#0d131c] p-4 text-sm">
               <div className="flex items-center justify-between gap-3">
-                <div className="font-semibold text-slate-100">{order.customer}</div>
-                <div className="text-amber-300">{money(breakdown.profit)} profit</div>
+                <div className="font-semibold text-slate-100">{job.name}</div>
+                <div className="text-amber-300">{money(breakdown.total)} estimated</div>
               </div>
-              <div className="mt-3 grid gap-2 md:grid-cols-2 text-slate-400">
+              <div className="mt-3 grid gap-2 text-slate-400 md:grid-cols-2">
                 <Line label="Material" value={money(breakdown.material)} />
                 <Line label="Electricity" value={money(breakdown.electricity)} />
                 <Line label="Labor" value={money(breakdown.labor)} />
-                <Line label="Total Cost" value={money(breakdown.total)} />
-                <Line label="Suggested" value={money(breakdown.suggestedPrice)} />
-                <Line label="Actual Margin" value={`${breakdown.marginPercent.toFixed(1)}%`} />
+                <Line label="Finishing / Other" value={money(breakdown.packaging + breakdown.other)} />
               </div>
             </div>
           ))}
@@ -109,10 +107,9 @@ export function ReportsView({ state }: { state: ForgekeeperState }) {
 
       <Card title="System Cohesion">
         <div className="grid gap-3 text-sm text-slate-300">
-          <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">Catalog owns product identity. Orders, releases, collections, STL records, variants, and concept specs reference catalog products.</div>
-          <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">Smart costs pull from Settings, Filament spool cost, Printer wattage, Product estimates, and Order overrides.</div>
-          <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">Production intelligence estimates queue load, printer bottlenecks, material demand, and completion time.</div>
-          <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">Use JSON backup before major edits or before moving to a desktop/local-file version.</div>
+          <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">Design Library owns design identity. Production, Planning, Materials, and Reports reference those stable design records.</div>
+          <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">All station data persists through one repository. The desktop build uses the versioned SQLite workspace.</div>
+          <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">No customer accounts, customer catalog, sales intake, or order processing are part of this workspace.</div>
         </div>
       </Card>
     </div>

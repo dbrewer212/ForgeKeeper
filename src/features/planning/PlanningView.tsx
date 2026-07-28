@@ -14,13 +14,13 @@ function statusClass(value: string) {
 export function PlanningView({ state }: { state: any }) {
   const prototypes: PlannedPrototype[] = state.prototypes ?? [];
   const plannedFilament: PlannedFilament[] = state.plannedFilament ?? [];
-  const productPlanning = state.productPlanning ?? [];
+  const designPlanning = state.designPlanning ?? [];
   const realmMaterials = state.realmMaterials ?? [];
 
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card title="Planned Products"><div className="text-3xl font-semibold">{productPlanning.length}</div><div className="mt-1 text-xs text-slate-500">Architecture records</div></Card>
+        <Card title="Planned Design Projects"><div className="text-3xl font-semibold">{designPlanning.length}</div><div className="mt-1 text-xs text-slate-500">Architecture records</div></Card>
         <Card title="Prototype Backlog"><div className="text-3xl font-semibold">{prototypes.length}</div><div className="mt-1 text-xs text-slate-500">Ideas and active tests</div></Card>
         <Card title="Filament To Order"><div className="text-3xl font-semibold">{plannedFilament.filter((f) => f.status === "Need to Order").length}</div><div className="mt-1 text-xs text-slate-500">Planned material library</div></Card>
         <Card title="Realm Profiles"><div className="text-3xl font-semibold">{realmMaterials.length}</div><div className="mt-1 text-xs text-slate-500">Material / finish guides</div></Card>
@@ -39,7 +39,7 @@ export function PlanningView({ state }: { state: any }) {
                 <div className="space-y-3">
                   {items.map((prototype) => (
                     <div key={prototype.id} className="rounded-xl border border-white/10 bg-[#111722] p-3">
-                      <div className="font-medium text-slate-100">{prototype.productName}</div>
+                      <div className="font-medium text-slate-100">{prototype.designName}</div>
                       <div className="mt-1 text-xs text-slate-500">{prototype.family} · {prototype.collection}</div>
                       <div className="mt-2 flex flex-wrap gap-2">
                         <span className={`rounded-full border px-2 py-0.5 text-xs ${statusClass(prototype.priority)}`}>{prototype.priority}</span>
@@ -108,14 +108,14 @@ export function PlanningView({ state }: { state: any }) {
         </Card>
       </div>
 
-      <Card title="Product Planning Board">
+      <Card title="Design Planning Board">
         <div className="grid gap-3 xl:grid-cols-2">
-          {productPlanning.map((item: any) => (
+          {designPlanning.map((item: any) => (
             <div key={item.id} className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <div className="font-semibold text-slate-100">{item.baseProduct}</div>
-                  <div className="mt-1 text-xs text-slate-500">{item.productFamily} · {item.collection} · {item.tier}</div>
+                  <div className="font-semibold text-slate-100">{item.baseDesign}</div>
+                  <div className="mt-1 text-xs text-slate-500">{item.designFamily} · {item.collection} · {item.tier}</div>
                 </div>
                 <span className={`rounded-full border px-3 py-1 text-xs ${statusClass(item.prototypePriority)}`}>{item.prototypePriority}</span>
               </div>

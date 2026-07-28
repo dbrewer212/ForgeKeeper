@@ -1,9 +1,9 @@
-import type { PlannedFilament, PlannedPrototype, ProductPlanningRecord, RealmMaterialReference } from "../types/planning";
+import type { PlannedFilament, PlannedPrototype, DesignPlanningRecord, RealmMaterialReference } from "../types/planning";
 
 export const seedPrototypes: PlannedPrototype[] = [
   {
     id: "P-001",
-    productName: "Svartalfheim Headset Stand",
+    designName: "Svartalfheim Headset Stand",
     family: "Modular Desk Chassis",
     collection: "ForgeTech",
     tier: "Hero",
@@ -16,7 +16,7 @@ export const seedPrototypes: PlannedPrototype[] = [
   },
   {
     id: "P-002",
-    productName: "Dual Controller Base Add-on",
+    designName: "Dual Controller Base Add-on",
     family: "Modular Desk Chassis",
     collection: "ForgeTech",
     tier: "Hero",
@@ -29,7 +29,7 @@ export const seedPrototypes: PlannedPrototype[] = [
   },
   {
     id: "P-003",
-    productName: "Alternate Top Cradle Set",
+    designName: "Alternate Top Cradle Set",
     family: "Modular Desk Chassis",
     collection: "ForgeTech",
     tier: "Hero",
@@ -42,7 +42,7 @@ export const seedPrototypes: PlannedPrototype[] = [
   },
   {
     id: "P-004",
-    productName: "Yggdrasil Pillar Conversion",
+    designName: "Yggdrasil Pillar Conversion",
     family: "Modular Desk Chassis",
     collection: "Relics of the Nine Realms",
     tier: "Hero",
@@ -55,7 +55,7 @@ export const seedPrototypes: PlannedPrototype[] = [
   },
   {
     id: "P-005",
-    productName: "Helheim Coin Medallion",
+    designName: "Helheim Coin Medallion",
     family: "Relic Series",
     collection: "Relics of the Nine Realms",
     tier: "Hero",
@@ -68,7 +68,7 @@ export const seedPrototypes: PlannedPrototype[] = [
   },
   {
     id: "P-006",
-    productName: "Vanaheim Offering Tray",
+    designName: "Vanaheim Offering Tray",
     family: "Relic Series",
     collection: "Relics of the Nine Realms",
     tier: "Hero",
@@ -94,8 +94,8 @@ export const seedRealmMaterials: RealmMaterialReference[] = [
 ];
 
 export const seedPlannedFilament: PlannedFilament[] = [
-  { id: "PF-001", name: "Marble", brand: "Amolen", materialFamily: "Stone", realms: ["Midgard", "Alfheim", "Asgard", "Jotunheim", "Niflheim", "Helheim", "Svartalfheim"], batchGroup: "Stone batch", status: "Need to Order", priority: "High", finishDirection: "General stone base for cold, ancient, ceremonial, and shrine products.", notes: "Starter stone-family material." },
-  { id: "PF-002", name: "Cement Grey", brand: "Amolen", materialFamily: "Stone", realms: ["Midgard", "Svartalfheim", "Jotunheim", "Niflheim", "Helheim"], batchGroup: "Stone batch / Forge dark batch", status: "Need to Order", priority: "High", finishDirection: "Excellent black wash and metallic drybrush base.", notes: "High priority for Svartalfheim and rugged products." },
+  { id: "PF-001", name: "Marble", brand: "Amolen", materialFamily: "Stone", realms: ["Midgard", "Alfheim", "Asgard", "Jotunheim", "Niflheim", "Helheim", "Svartalfheim"], batchGroup: "Stone batch", status: "Need to Order", priority: "High", finishDirection: "General stone base for cold, ancient, ceremonial, and shrine designs.", notes: "Starter stone-family material." },
+  { id: "PF-002", name: "Cement Grey", brand: "Amolen", materialFamily: "Stone", realms: ["Midgard", "Svartalfheim", "Jotunheim", "Niflheim", "Helheim"], batchGroup: "Stone batch / Forge dark batch", status: "Need to Order", priority: "High", finishDirection: "Excellent black wash and metallic drybrush base.", notes: "High priority for Svartalfheim and rugged designs." },
   { id: "PF-003", name: "Fossil Gradient", brand: "Amolen", materialFamily: "Stone", realms: ["Midgard", "Jotunheim", "Niflheim", "Helheim"], batchGroup: "Stone batch", status: "Need to Order", priority: "Medium", finishDirection: "Ancient stone, cold relic, and weathered shrine feel.", notes: "Useful for realm coins, plaques, and altar pieces." },
   { id: "PF-004", name: "Bamboo Wood", brand: "Amolen", materialFamily: "Wood", realms: ["Vanaheim"], batchGroup: "Wood / organic batch", status: "Need to Order", priority: "High", finishDirection: "Rooted, living, altar-object base.", notes: "Starter organic Vanaheim material." },
   { id: "PF-005", name: "Walnut Wood", brand: "Amolen", materialFamily: "Wood", realms: ["Vanaheim", "Midgard"], batchGroup: "Wood / organic batch", status: "Need to Order", priority: "Medium", finishDirection: "Darker natural base with brown highlights and moss accents.", notes: "Good for Yggdrasil and ritual pieces." },
@@ -105,9 +105,9 @@ export const seedPlannedFilament: PlannedFilament[] = [
   { id: "PF-009", name: "Green Schist", brand: "Amolen", materialFamily: "Wood", realms: ["Vanaheim"], batchGroup: "Wood / organic batch", status: "Need to Order", priority: "Medium", finishDirection: "Mossy green aging and living-stone surfaces.", notes: "Good for Vanaheim accents." }
 ];
 
-export const seedProductPlanning: ProductPlanningRecord[] = [
-  { id: "PP-001", productFamily: "Modular Desk Chassis", baseProduct: "Headset Stand", collection: "ForgeTech", tier: "Hero", sharedChassis: "Yes", coreFunction: "Headphone / headset display", realmVariantSupport: "Yes", coreParts: "Base, pillar, top cradle", variantParts: "Side panels, crest insert, top cradle variants", baseAddOns: "Controller mounts, side-base expansions", topModuleOptions: "Standard cradle, wolf/crest cradle, premium cradle", attachmentTypes: "Finger-bolt, magnets, slide/tab", bestPrinterFit: "Neptune chassis, Kobra panels/inserts", prototypePriority: "High", notes: "Primary pilot concept" },
-  { id: "PP-002", productFamily: "Modular Desk Chassis", baseProduct: "Helmet Holder", collection: "ForgeTech", tier: "Hero", sharedChassis: "Yes", coreFunction: "Display stand for helmets/headwear", realmVariantSupport: "Yes", coreParts: "Base, pillar, top support", variantParts: "Side panels, crest insert, top holder variants", baseAddOns: "Controller mounts, side-base expansions", topModuleOptions: "Helmet crown support, display neck, themed top", attachmentTypes: "Finger-bolt, magnets, slide/tab", bestPrinterFit: "Neptune chassis, Kobra inserts", prototypePriority: "High", notes: "Same family as headset stand" },
-  { id: "PP-003", productFamily: "Modular Desk Chassis", baseProduct: "Yggdrasil Pillar Display", collection: "Relics of the Nine Realms", tier: "Hero", sharedChassis: "Yes", coreFunction: "Symbolic centerpiece / display object", realmVariantSupport: "Yes", coreParts: "Base, pillar, world-tree top", variantParts: "Side panels, crest insert, realm ring inserts", baseAddOns: "Side-base relic wings, trays, medallion holders", topModuleOptions: "Branch crown, realm-ring top, hanging medallion top", attachmentTypes: "Finger-bolt, magnets, slide/tab", bestPrinterFit: "Neptune main body, Kobra accents", prototypePriority: "High", notes: "Crosses desk decor and altar/display" },
-  { id: "PP-004", productFamily: "Relic Series", baseProduct: "Coin / Medallion Insert", collection: "Relics of the Nine Realms", tier: "Hero", sharedChassis: "No", coreFunction: "Collectible / display insert", realmVariantSupport: "Yes", coreParts: "Main coin body", variantParts: "Realm face, reverse design, stand option", baseAddOns: "Optional display stand", topModuleOptions: "N/A", attachmentTypes: "Standard assembly or single-piece", bestPrinterFit: "Kobra", prototypePriority: "High", notes: "Realm identity lives in full face design" }
+export const seedDesignPlanning: DesignPlanningRecord[] = [
+  { id: "PP-001", designFamily: "Modular Desk Chassis", baseDesign: "Headset Stand", collection: "ForgeTech", tier: "Hero", sharedChassis: "Yes", coreFunction: "Headphone / headset display", realmVariantSupport: "Yes", coreParts: "Base, pillar, top cradle", variantParts: "Side panels, crest insert, top cradle variants", baseAddOns: "Controller mounts, side-base expansions", topModuleOptions: "Standard cradle, wolf/crest cradle, premium cradle", attachmentTypes: "Finger-bolt, magnets, slide/tab", bestPrinterFit: "Neptune chassis, Kobra panels/inserts", prototypePriority: "High", notes: "Primary pilot concept" },
+  { id: "PP-002", designFamily: "Modular Desk Chassis", baseDesign: "Helmet Holder", collection: "ForgeTech", tier: "Hero", sharedChassis: "Yes", coreFunction: "Display stand for helmets/headwear", realmVariantSupport: "Yes", coreParts: "Base, pillar, top support", variantParts: "Side panels, crest insert, top holder variants", baseAddOns: "Controller mounts, side-base expansions", topModuleOptions: "Helmet crown support, display neck, themed top", attachmentTypes: "Finger-bolt, magnets, slide/tab", bestPrinterFit: "Neptune chassis, Kobra inserts", prototypePriority: "High", notes: "Same family as headset stand" },
+  { id: "PP-003", designFamily: "Modular Desk Chassis", baseDesign: "Yggdrasil Pillar Display", collection: "Relics of the Nine Realms", tier: "Hero", sharedChassis: "Yes", coreFunction: "Symbolic centerpiece / display object", realmVariantSupport: "Yes", coreParts: "Base, pillar, world-tree top", variantParts: "Side panels, crest insert, realm ring inserts", baseAddOns: "Side-base relic wings, trays, medallion holders", topModuleOptions: "Branch crown, realm-ring top, hanging medallion top", attachmentTypes: "Finger-bolt, magnets, slide/tab", bestPrinterFit: "Neptune main body, Kobra accents", prototypePriority: "High", notes: "Crosses desk decor and altar/display" },
+  { id: "PP-004", designFamily: "Relic Series", baseDesign: "Coin / Medallion Insert", collection: "Relics of the Nine Realms", tier: "Hero", sharedChassis: "No", coreFunction: "Collectible / display insert", realmVariantSupport: "Yes", coreParts: "Main coin body", variantParts: "Realm face, reverse design, stand option", baseAddOns: "Optional display stand", topModuleOptions: "N/A", attachmentTypes: "Standard assembly or single-piece", bestPrinterFit: "Kobra", prototypePriority: "High", notes: "Realm identity lives in full face design" }
 ];

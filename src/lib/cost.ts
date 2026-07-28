@@ -1,4 +1,4 @@
-import type { AppSettings, FilamentRecord, OrderRecord, PrinterRecord, Product } from "../types/domain";
+import type { AppSettings, FilamentRecord, ProductionJob, PrinterRecord, DesignProject } from "../types/domain";
 
 export type CostBreakdown = {
   material: number;
@@ -8,9 +8,6 @@ export type CostBreakdown = {
   other: number;
   total: number;
   suggestedPrice: number;
-  quotedPrice: number;
-  profit: number;
-  marginPercent: number;
   gramsUsed: number;
   printHours: number;
   costPerGram: number;
@@ -42,37 +39,33 @@ export function suggestedPriceFromCost(totalCost: number, targetMarginPercent: n
   return totalCost / (1 - margin);
 }
 
-export function getOrderCostBreakdown(
-  order: OrderRecord,
-  product?: Product,
+export function getProductionJobCostBreakdown(
+  job: ProductionJob,
+  design?: DesignProject,
   filament?: FilamentRecord,
   printer?: PrinterRecord,
   settings: AppSettings = fallbackSettings,
 ): CostBreakdown {
-  const quantity = Math.max(1, Number(order.quantity) || 1);
-  const gramsPerUnit = Number(order.materialGrams ?? product?.estimatedFilamentGrams ?? 0) || 0;
+  const quantity = Math.max(1, Number(job.quantity) || 1);
+  const gramsPerUnit = Number(job.materialGrams ?? design?.estimatedFilamentGrams ?? 0) || 0;
   const gramsUsed = gramsPerUnit * quantity;
   const costPerGram = filamentCostPerGram(filament);
   const material = gramsUsed * costPerGram;
 
-  const printHoursPerUnit = Number(order.estimatedPrintHours || product?.estimatedPrintHours || 0) || 0;
+  const printHoursPerUnit = Number(job.estimatedPrintHours || design?.estimatedPrintHours || 0) || 0;
   const printHours = printHoursPerUnit * quantity;
-  const watts = Number(order.machineWatts || printer?.watts || settings.machineWatts || 0) || 0;
-  const electricityRate = Number(order.electricityRate || settings.electricityRate || 0) || 0;
+  const watts = Number(job.machineWatts || printer?.watts || settings.machineWatts || 0) || 0;
+  const electricityRate = Number(job.electricityRate || settings.electricityRate || 0) || 0;
   const electricity = (watts / 1000) * printHours * electricityRate;
 
-  const laborHours = Number(order.laborHours || 0) || 0;
-  const laborRate = Number(order.laborRate || settings.laborRate || 0) || 0;
+  const laborHours = Number(job.laborHours || 0) || 0;
+  const laborRate = Number(job.laborRate || settings.laborRate || 0) || 0;
   const labor = laborHours * laborRate;
 
-  const packaging = Number(order.packagingCost ?? settings.packagingCost ?? 0) || 0;
-  const other = Number(order.otherCost ?? settings.otherCost ?? 0) || 0;
+  const packaging = Number(job.packagingCost ?? settings.packagingCost ?? 0) || 0;
+  const other = Number(job.otherCost ?? settings.otherCost ?? 0) || 0;
   const total = material + electricity + labor + packaging + other;
   const suggestedPrice = suggestedPriceFromCost(total, settings.targetMarginPercent);
-  const quotedPrice = Number(order.quotedPrice || 0) || 0;
-  const profit = quotedPrice - total;
-  const marginPercent = quotedPrice > 0 ? (profit / quotedPrice) * 100 : 0;
-
   return {
     material,
     electricity,
@@ -81,9 +74,6 @@ export function getOrderCostBreakdown(
     other,
     total,
     suggestedPrice,
-    quotedPrice,
-    profit,
-    marginPercent,
     gramsUsed,
     printHours,
     costPerGram,
@@ -91,11 +81,11 @@ export function getOrderCostBreakdown(
 }
 
 export function directCost(
-  order: OrderRecord,
-  product?: Product,
+  job: ProductionJob,
+  design?: DesignProject,
   settings: AppSettings = fallbackSettings,
   filament?: FilamentRecord,
   printer?: PrinterRecord,
 ): number {
-  return getOrderCostBreakdown(order, product, filament, printer, settings).total;
+  return getProductionJobCostBreakdown(job, design, filament, printer, settings).total;
 }

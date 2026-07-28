@@ -26,7 +26,7 @@ export const foundryStations: FoundryStation[] = [
   },
   {
     id: "design-library",
-    view: "catalog",
+    view: "designs",
     label: "Design Library",
     description: "User-owned projects, concepts, STLs, variants, and reference assets.",
   },
@@ -38,7 +38,7 @@ export const foundryStations: FoundryStation[] = [
   },
   {
     id: "production",
-    view: "orders",
+    view: "production",
     label: "Production",
     description: "Internal jobs, print batches, assignments, and completion outcomes.",
   },

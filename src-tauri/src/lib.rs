@@ -1,5 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tauri_plugin_sql::{Migration, MigrationKind};
+
+const DATABASE_URL: &str = "sqlite:forgekeeper.db";
 
 #[tauri::command]
 fn open_path(path: String) -> Result<(), String> {
@@ -82,7 +85,19 @@ fn open_with_windows_shell(target: &str, asset_path: Option<&str>) -> Result<(),
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let migrations = vec![Migration {
+        version: 1,
+        description: "create_foundry_core",
+        sql: include_str!("../migrations/0001_foundry_core.sql"),
+        kind: MigrationKind::Up,
+    }];
+
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_sql::Builder::default()
+                .add_migrations(DATABASE_URL, migrations)
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![open_path, launch_external_tool])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

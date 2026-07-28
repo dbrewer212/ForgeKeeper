@@ -1,4 +1,4 @@
-export type ForgekeeperAssetKind = "stl" | "concept" | "productImage" | "export" | "backup" | "reference";
+export type ForgekeeperAssetKind = "stl" | "concept" | "designImage" | "export" | "backup" | "reference";
 
 export function sanitizeFolderName(value: string): string {
   return (
@@ -16,17 +16,17 @@ export function normalizeLibraryRoot(libraryRoot?: string): string {
 
 export function suggestedLibraryPath(
   libraryRoot: string | undefined,
-  productName: string,
+  designName: string,
   kind: ForgekeeperAssetKind,
   version = "v001",
 ): string {
-  const product = sanitizeFolderName(productName);
+  const design = sanitizeFolderName(designName);
   const root = normalizeLibraryRoot(libraryRoot);
 
-  if (kind === "stl") return `${root}\\STLs\\${product}\\${version}`;
-  if (kind === "concept") return `${root}\\Concepts\\${product}\\concept-art`;
-  if (kind === "reference") return `${root}\\Concepts\\${product}\\reference`;
-  if (kind === "productImage") return `${root}\\ProductImages\\${product}`;
+  if (kind === "stl") return `${root}\\STLs\\${design}\\${version}`;
+  if (kind === "concept") return `${root}\\Concepts\\${design}\\concept-art`;
+  if (kind === "reference") return `${root}\\Concepts\\${design}\\reference`;
+  if (kind === "designImage") return `${root}\\DesignImages\\${design}`;
   if (kind === "export") return `${root}\\Exports`;
   return `${root}\\Backups`;
 }

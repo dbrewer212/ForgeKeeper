@@ -18,7 +18,7 @@ export type PrototypePriority = "High" | "Medium" | "Low";
 
 export type PlannedPrototype = {
   id: string;
-  productName: string;
+  designName: string;
   family: string;
   collection: string;
   tier: "Hero" | "Utility";
@@ -51,10 +51,10 @@ export type RealmMaterialReference = {
   batchGroup: string;
 };
 
-export type ProductPlanningRecord = {
+export type DesignPlanningRecord = {
   id: string;
-  productFamily: string;
-  baseProduct: string;
+  designFamily: string;
+  baseDesign: string;
   collection: string;
   tier: "Hero" | "Utility";
   sharedChassis: "Yes" | "No" | "Partial";

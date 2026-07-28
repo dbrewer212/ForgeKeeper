@@ -2,7 +2,6 @@ import { Card } from "../../components/ui/Card";
 import { StatCard } from "../../components/ui/StatCard";
 import { KeeperAlertPanel } from "../../components/keeper/KeeperAlertPanel";
 import { KeeperActionPanel } from "../../components/keeper/KeeperActionPanel";
-import { money } from "../../lib/format";
 import { inventoryState, pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 
@@ -13,8 +12,8 @@ export function DashboardView({ state }: { state: ForgekeeperState }) {
     <div className="space-y-6">
       <Card title="Quick Actions" right={<span className="text-xs text-slate-500">Fast Entry</span>}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <QuickAction title="New Order" helper="Jump to order intake" onClick={() => state.triggerQuickAction("newOrder")} />
-          <QuickAction title="Add Product" helper="Open catalog entry" onClick={() => state.triggerQuickAction("newProduct")} />
+          <QuickAction title="New Production Job" helper="Jump to job intake" onClick={() => state.triggerQuickAction("newJob")} />
+          <QuickAction title="Add Design Project" helper="Open the Design Library" onClick={() => state.triggerQuickAction("newDesign")} />
           <QuickAction title="Add Filament" helper="Update material pool" onClick={() => state.triggerQuickAction("newFilament")} />
           <QuickAction title="Add Printer" helper="Expand machine roster" onClick={() => state.triggerQuickAction("newPrinter")} />
         </div>
@@ -26,10 +25,10 @@ export function DashboardView({ state }: { state: ForgekeeperState }) {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="Total Orders" value={state.metrics.orders} helper={`${state.queueCounts.Queued} queued`} />
-        <StatCard label="Revenue" value={money(state.metrics.revenue)} helper={`${state.metrics.paid} paid orders`} />
+        <StatCard label="Total Production Jobs" value={state.metrics.productionJobs} helper={`${state.queueCounts.Queued} queued`} />
+        <StatCard label="Estimated Job Cost" value={`$${state.metrics.costs.toFixed(2)}`} helper="Direct workshop cost" />
         <StatCard label="In Production" value={state.queueCounts.Printing} helper={`${state.queueCounts.Finishing} finishing`} />
-        <StatCard label="Completed" value={state.metrics.done} helper="Packed + shipped" />
+        <StatCard label="Completed" value={state.metrics.done} helper="Finished internal jobs" />
         <StatCard label="Filament Available" value={`${state.metrics.totalFilamentKg.toFixed(2)} kg`} helper="Across loaded inventory" />
       </div>
 
@@ -38,7 +37,7 @@ export function DashboardView({ state }: { state: ForgekeeperState }) {
           <StatCard label="Queue Hours" value={`${production.totalQueueHours.toFixed(1)}h`} helper={`${production.unassignedQueueHours.toFixed(1)}h unassigned`} />
           <StatCard label="Completion Est." value={`${production.estimatedCompletionHours.toFixed(1)}h`} helper={`${production.estimatedCompletionDays.toFixed(1)} shop days`} />
           <StatCard label="Filament Needed" value={`${(production.filamentNeededGrams / 1000).toFixed(2)}kg`} helper="Active queue demand" />
-          <StatCard label="Unassigned Jobs" value={production.unassignedOrders} helper="Needs printer assignment" />
+          <StatCard label="Unassigned Jobs" value={production.unassignedJobs} helper="Needs printer assignment" />
           <StatCard label="Bottlenecks" value={production.bottlenecks.length} helper="Load / offline warnings" />
         </div>
 
@@ -89,32 +88,32 @@ export function DashboardView({ state }: { state: ForgekeeperState }) {
           </div>
           <div className="mt-5 grid gap-4 lg:grid-cols-2">
             <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
-              <div className="text-sm font-semibold text-slate-100">Recent Orders</div>
+              <div className="text-sm font-semibold text-slate-100">Recent Production Jobs</div>
               <div className="mt-4 space-y-3">
-                {state.orders.slice(0, 4).map((order) => {
-                  const product = state.products.find((p) => p.id === order.productId);
+                {state.productionJobs.slice(0, 4).map((job) => {
+                  const design = state.designProjects.find((p) => p.id === job.designProjectId);
                   return (
-                    <div key={order.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-[#111722] px-3 py-3">
+                    <div key={job.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-[#111722] px-3 py-3">
                       <div>
-                        <div className="text-sm font-medium text-slate-100">{order.customer}</div>
-                        <div className="text-xs text-slate-500">{product?.name || order.productId}</div>
+                        <div className="text-sm font-medium text-slate-100">{job.name}</div>
+                        <div className="text-xs text-slate-500">{design?.name || job.designProjectId}</div>
                       </div>
-                      <span className={`rounded-full border px-3 py-1 text-xs ${pillClass(order.status)}`}>{order.status}</span>
+                      <span className={`rounded-full border px-3 py-1 text-xs ${pillClass(job.status)}`}>{job.status}</span>
                     </div>
                   );
                 })}
               </div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
-              <div className="text-sm font-semibold text-slate-100">Top Products</div>
+              <div className="text-sm font-semibold text-slate-100">Design Workload</div>
               <div className="mt-4 space-y-3">
-                {state.products.map((product) => (
-                  <div key={product.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-[#111722] px-3 py-3">
+                {state.designProjects.map((design) => (
+                  <div key={design.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-[#111722] px-3 py-3">
                     <div>
-                      <div className="text-sm font-medium text-slate-100">{product.name}</div>
-                      <div className="text-xs text-slate-500">{product.collection}</div>
+                      <div className="text-sm font-medium text-slate-100">{design.name}</div>
+                      <div className="text-xs text-slate-500">{design.collection}</div>
                     </div>
-                    <div className="text-sm font-semibold text-amber-300">{state.orders.filter((o) => o.productId === product.id).length}</div>
+                    <div className="text-sm font-semibold text-amber-300">{state.productionJobs.filter((o) => o.designProjectId === design.id).length}</div>
                   </div>
                 ))}
               </div>

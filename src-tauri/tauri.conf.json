@@ -23,6 +23,11 @@
       "csp": null
     }
   },
+  "plugins": {
+    "sql": {
+      "preload": ["sqlite:forgekeeper.db"]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

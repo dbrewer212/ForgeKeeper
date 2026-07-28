@@ -30,7 +30,7 @@ export function getKeeperActions(alerts: KeeperAlert[]): KeeperAction[] {
   return alerts.map((alert) => {
     const priority = priorityFromAlert(alert.severity);
 
-    if (alert.suggestedActionId === "set-product-price") {
+    if (alert.suggestedActionId === "set-design-price") {
       return {
         id: `action-${alert.id}`,
         alertId: alert.id,
@@ -43,7 +43,7 @@ export function getKeeperActions(alerts: KeeperAlert[]): KeeperAction[] {
       };
     }
 
-    if (alert.suggestedActionId === "add-product-media") {
+    if (alert.suggestedActionId === "add-design-media") {
       return {
         id: `action-${alert.id}`,
         alertId: alert.id,
@@ -56,12 +56,12 @@ export function getKeeperActions(alerts: KeeperAlert[]): KeeperAction[] {
       };
     }
 
-    if (alert.suggestedActionId === "clean-product-notes") {
+    if (alert.suggestedActionId === "clean-design-notes") {
       return {
         id: `action-${alert.id}`,
         alertId: alert.id,
         type: "review-record",
-        title: "Clean product notes",
+        title: "Clean design notes",
         description: "Add internal notes, production context, or readiness details for this design record.",
         priority,
         targetView: alert.section,
@@ -75,7 +75,7 @@ export function getKeeperActions(alerts: KeeperAlert[]): KeeperAction[] {
         alertId: alert.id,
         type: "reorder-filament",
         title: "Review filament reorder",
-        description: "Check current stock, pending orders, and whether this material should be moved to the shopping list.",
+        description: "Check current stock, pending production jobs, and whether this material should be moved to the shopping list.",
         priority,
         targetView: alert.section,
         targetId: alert.relatedRecordId,

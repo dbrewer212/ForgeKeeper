@@ -8,13 +8,13 @@ export function Topbar({ state }: { state: ForgekeeperState }) {
       <div>
         <div className="text-[11px] uppercase tracking-[0.28em] text-amber-400">Forgekeeper</div>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-100">{state.view.charAt(0).toUpperCase() + state.view.slice(1)}</h1>
-        <p className="mt-1 text-sm text-slate-400">Workshop command layer for products, production, filament, printers, and planning.</p>
+        <p className="mt-1 text-sm text-slate-400">Workshop command layer for designs, production, materials, printers, and planning.</p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Input value={state.searchTerm} onChange={(e) => state.setSearchTerm(e.target.value)} placeholder="Search products..." className="w-56" />
-        <Button variant="ghost" onClick={state.exportOrdersCsv}>Export Orders</Button>
-        <Button variant="ghost" onClick={() => state.triggerQuickAction("newOrder")}>New Order</Button>
-        <Button onClick={() => state.setView("catalog")}>Open Catalog</Button>
+        <Input value={state.searchTerm} onChange={(e) => state.setSearchTerm(e.target.value)} placeholder="Search designs..." className="w-56" />
+        <Button variant="ghost" onClick={state.exportProductionJobsCsv}>Export Production Jobs</Button>
+        <Button variant="ghost" onClick={() => state.triggerQuickAction("newJob")}>New Production Job</Button>
+        <Button onClick={() => state.setView("designs")}>Open Design Library</Button>
       </div>
     </div>
   );

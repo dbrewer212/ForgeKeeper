@@ -1,18 +1,18 @@
-import type { PlannedFilament, PlannedPrototype, ProductPlanningRecord, RealmMaterialReference } from "./planning";
+import type { PlannedFilament, PlannedPrototype, DesignPlanningRecord, RealmMaterialReference } from "./planning";
 
-export type ProductTier = "Hero" | "Utility";
-export type ProductLine = "ForgeTech" | "Foundry" | "Relics of the Nine Realms" | "Runehallow Relics";
-export type ProductStatus = "Concept" | "Prototype" | "Active" | "Production" | "Archived";
-export type OrderStatus = "Queued" | "Printing" | "Finishing" | "Packed" | "Shipped";
-export type OrderPriority = "Low" | "Normal" | "High" | "Rush";
+export type DesignTier = "Hero" | "Utility";
+export type DesignLine = "ForgeTech" | "Foundry" | "Relics of the Nine Realms" | "Runehallow Relics";
+export type DesignStatus = "Concept" | "Prototype" | "Active" | "Production" | "Archived";
+export type ProductionStatus = "Queued" | "Printing" | "Finishing" | "Complete" | "Cancelled";
+export type ProductionPriority = "Low" | "Normal" | "High" | "Rush";
 export type ReleaseStatus = "Planning" | "Scheduled" | "Live";
 export type FilamentMaterial = "PLA" | "PLA+" | "PETG" | "ABS" | "TPU";
 export type PrinterStatus = "Available" | "Printing" | "Maintenance" | "Offline";
-export type ProductTab = "overview" | "stls" | "concepts" | "variants" | "orders";
+export type DesignTab = "overview" | "stls" | "concepts" | "variants" | "jobs";
 export type AssetStatus = "Planned" | "Linked" | "Needs Update" | "Archived";
 export type SlicerKey = "orca" | "anycubic";
-export type ViewKey = "dashboard" | "catalog" | "collections" | "releases" | "orders" | "filament" | "printers" | "planning" | "reports" | "settings";
-export type QuickActionKey = "newProduct" | "newOrder" | "newFilament" | "newPrinter";
+export type ViewKey = "dashboard" | "designs" | "collections" | "releases" | "production" | "filament" | "printers" | "planning" | "reports" | "settings";
+export type QuickActionKey = "newDesign" | "newJob" | "newFilament" | "newPrinter";
 
 export type RealmVariant =
   | "Midgard"
@@ -25,20 +25,20 @@ export type RealmVariant =
   | "Niflheim"
   | "Helheim";
 
-export type Product = {
+export type DesignProject = {
   id: string;
   name: string;
-  tier: ProductTier;
-  line: ProductLine;
+  tier: DesignTier;
+  line: DesignLine;
   category: string;
   collection: string;
-  status: ProductStatus;
+  status: DesignStatus;
   targetPrice: number;
   estimatedFilamentGrams: number;
   estimatedPrintHours: number;
   available: number;
   reorderPoint: number;
-  productImagePath: string;
+  designImagePath: string;
   conceptImagePath: string;
   supportedRealmVariants: RealmVariant[];
   notes: string;
@@ -46,7 +46,7 @@ export type Product = {
 
 export type STLRecord = {
   id: string;
-  productId: string;
+  designProjectId: string;
   name: string;
   fileName: string;
   filePath?: string;
@@ -63,7 +63,7 @@ export type STLRecord = {
 
 export type ConceptSpec = {
   id: string;
-  productId: string;
+  designProjectId: string;
   title: string;
   imageName: string;
   imagePath?: string;
@@ -76,12 +76,12 @@ export type ConceptSpec = {
   linkedStlIds?: string[];
 };
 
-export type ProductVariant = {
+export type DesignVariant = {
   id: string;
-  productId: string;
+  designProjectId: string;
   realm: RealmVariant;
   name: string;
-  productImagePath: string;
+  designImagePath: string;
   conceptImagePath: string;
   stlId?: string;
   conceptId?: string;
@@ -96,9 +96,9 @@ export type ProductVariant = {
 export type CollectionRecord = {
   id: string;
   name: string;
-  line: ProductLine;
+  line: DesignLine;
   description: string;
-  heroProductId?: string;
+  heroDesignProjectId?: string;
 };
 
 export type ReleaseRecord = {
@@ -107,23 +107,20 @@ export type ReleaseRecord = {
   wave: string;
   targetDate: string;
   status: ReleaseStatus;
-  productIds: string[];
+  designProjectIds: string[];
   notes: string;
 };
 
-export type OrderRecord = {
+export type ProductionJob = {
   id: string;
-  productId: string;
+  name: string;
+  designProjectId: string;
   filamentId?: string;
   materialGrams?: number;
-  customer: string;
-  contact: string;
   quantity: number;
-  dueDate: string;
-  status: OrderStatus;
-  priority: OrderPriority;
-  paid: boolean;
-  tracking: string;
+  targetDate: string;
+  status: ProductionStatus;
+  priority: ProductionPriority;
   printerId?: string;
   materialConsumed?: boolean;
   estimatedPrintHours: number;
@@ -133,7 +130,6 @@ export type OrderRecord = {
   electricityRate: number;
   packagingCost: number;
   otherCost: number;
-  quotedPrice: number;
   notes: string;
 };
 
@@ -191,20 +187,20 @@ export type AppSettings = {
 };
 
 export type AppData = {
-  products: Product[];
+  designProjects: DesignProject[];
   stls: STLRecord[];
   concepts: ConceptSpec[];
-  variants: ProductVariant[];
+  variants: DesignVariant[];
   collections: CollectionRecord[];
   releases: ReleaseRecord[];
-  orders: OrderRecord[];
+  productionJobs: ProductionJob[];
   filament: FilamentRecord[];
   printers: PrinterRecord[];
   maintenance: MaintenanceRecord[];
   settings: AppSettings;
   prototypes: PlannedPrototype[];
   plannedFilament: PlannedFilament[];
-  productPlanning: ProductPlanningRecord[];
+  designPlanning: DesignPlanningRecord[];
   realmMaterials: RealmMaterialReference[];
 };
 
@@ -235,5 +231,5 @@ export type ProductionMetrics = {
   printerLoads: PrinterLoad[];
   filamentDemand: FilamentDemand[];
   bottlenecks: PrinterLoad[];
-  unassignedOrders: number;
+  unassignedJobs: number;
 };
