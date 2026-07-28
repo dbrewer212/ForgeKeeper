@@ -11,7 +11,7 @@ this application.
 
 - Command: workshop health, alerts, suggested actions, forecasts, and recent activity.
 - Design Library: projects, concepts, STL links, variants, collections, and releases.
-- Planning: prototypes, material planning, design architecture, and promotion into the library.
+- Planning: prototypes, material planning, design architecture, verified `.forgepack` intake, and promotion into the library.
 - Production: internal jobs, batches, assignments, material consumption, and completion outcomes.
 - Materials: spool inventory, thresholds, costs, demand forecasts, and movement history.
 - Printer Pool: capabilities, availability, workload, and maintenance records.
@@ -25,6 +25,10 @@ updates the authoritative workspace snapshot and the indexed station tables insi
 transaction. Invalid cross-station references are rejected before persistence.
 
 Browser development uses a separate preview repository. It is not the desktop source of truth.
+
+Foundry product packets are validated before import, checksum-verified, copied into a managed local
+intake directory, and routed to Planning or the Design Library according to explicit canon,
+forgeability, and physical-test gates.
 
 Legacy `forgekeeper.app.v1` data is imported once. Product records become user-owned Design
 Projects; useful order-production fields become internal Production Jobs. Customer, contact,
@@ -55,4 +59,6 @@ npm run desktop:build
 ```
 
 See `docs/DEVELOPMENT.md` for the complete release gate and
-`docs/architecture/FOUNDRY_ECOSYSTEM.md` for record ownership and migration rules.
+`docs/architecture/FOUNDRY_ECOSYSTEM.md` for record ownership and migration rules. The packet
+contract and native safety boundary are documented in
+`docs/architecture/FOUNDRY_INTAKE_BRIDGE.md`.

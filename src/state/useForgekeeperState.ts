@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { defaultSettings, seedCollections, seedConcepts, seedFilament, seedProductionJobs, seedPrinters, seedDesignProjects, seedReleases, seedStls, seedVariants } from "../data/seed";
 import {
   createCustomPrinter,
@@ -19,6 +20,7 @@ import { getWorkspaceRepository } from "../infrastructure/persistence/createWork
 import type { StorageBackend } from "../core/persistence/workspaceRepository";
 import { migrateWorkspaceData } from "../core/persistence/legacyMigration";
 import { createEmptyWorkspaceData, inspectWorkspaceIntegrity, isForgekeeperBackup } from "../core/domain/workspaceData";
+import { applyForgepackImport, type NativeForgepackImport } from "../core/forgepack/forgepack";
 import type {
   ActivityEvent,
   AppData,
@@ -27,6 +29,7 @@ import type {
   ConceptSpec,
   CostSnapshot,
   FilamentRecord,
+  ForgepackImportRecord,
   MaintenanceRecord,
   MaterialMovement,
   MaterialMovementType,
@@ -59,6 +62,7 @@ const seedData: AppData = {
   maintenance: [],
   costSnapshots: [],
   activityLog: [],
+  intakePackets: [],
   settings: { ...defaultExternalTools, ...defaultSettings },
   prototypes: seedPrototypes,
   plannedFilament: seedPlannedFilament,
@@ -136,6 +140,7 @@ export function hydrateData(stored: AppData | null): AppData {
     maintenance: stored.maintenance ?? [],
     costSnapshots: stored.costSnapshots ?? [],
     activityLog: [...profileActivity, ...(stored.activityLog ?? [])],
+    intakePackets: stored.intakePackets ?? [],
     settings: {
       ...defaultExternalTools,
       ...defaultSettings,
@@ -187,6 +192,7 @@ export function useForgekeeperState() {
   const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>(initial.maintenance);
   const [costSnapshots, setCostSnapshots] = useState<CostSnapshot[]>(initial.costSnapshots);
   const [activityLog, setActivityLog] = useState<ActivityEvent[]>(initial.activityLog);
+  const [intakePackets, setIntakePackets] = useState<ForgepackImportRecord[]>(initial.intakePackets);
   const [settings, setSettings] = useState<AppSettings>(initial.settings);
   const [prototypes, setPrototypes] = useState<PlannedPrototype[]>(initial.prototypes);
   const [plannedFilament, setPlannedFilament] = useState<PlannedFilament[]>(initial.plannedFilament);
@@ -225,6 +231,7 @@ export function useForgekeeperState() {
     maintenance,
     costSnapshots,
     activityLog,
+    intakePackets,
     settings,
     prototypes,
     plannedFilament,
@@ -253,6 +260,7 @@ export function useForgekeeperState() {
         setMaintenance(restored.maintenance);
         setCostSnapshots(restored.costSnapshots);
         setActivityLog(restored.activityLog);
+        setIntakePackets(restored.intakePackets);
         setSettings(restored.settings);
         setPrototypes(restored.prototypes);
         setPlannedFilament(restored.plannedFilament);
@@ -288,7 +296,7 @@ export function useForgekeeperState() {
     }, 250);
 
     return () => window.clearTimeout(timeout);
-  }, [isReady, repository, designProjects, stls, concepts, variants, collections, releases, productionJobs, productionBatches, filament, materialMovements, printers, maintenance, costSnapshots, activityLog, settings, prototypes, plannedFilament, designPlanning, realmMaterials]);
+  }, [isReady, repository, designProjects, stls, concepts, variants, collections, releases, productionJobs, productionBatches, filament, materialMovements, printers, maintenance, costSnapshots, activityLog, intakePackets, settings, prototypes, plannedFilament, designPlanning, realmMaterials]);
 
   useEffect(() => {
     setPrinters((prev) => prev.map((printer) => printerStatusFromJobs(printer, productionJobs, designProjects)));
@@ -396,7 +404,7 @@ export function useForgekeeperState() {
   ), [productionJobs, designProjects, printers, filament, settings]);
   const integrityIssues = useMemo(() => inspectWorkspaceIntegrity(appData), [
     designProjects, stls, concepts, variants, collections, releases, productionJobs, productionBatches,
-    filament, materialMovements, printers, maintenance, costSnapshots, activityLog, settings,
+    filament, materialMovements, printers, maintenance, costSnapshots, activityLog, intakePackets, settings,
     prototypes, plannedFilament, designPlanning, realmMaterials,
   ]);
 
@@ -1121,6 +1129,63 @@ export function useForgekeeperState() {
     setSettings((prev) => ({ ...prev, ...patch }));
   }
 
+  function replaceWorkspaceData(next: AppData) {
+    setDesignProjects(next.designProjects);
+    setStls(next.stls);
+    setConcepts(next.concepts);
+    setVariants(next.variants);
+    setCollections(next.collections);
+    setReleases(next.releases);
+    setProductionJobs(next.productionJobs);
+    setProductionBatches(next.productionBatches);
+    setFilament(next.filament);
+    setMaterialMovements(next.materialMovements);
+    setPrinters(next.printers);
+    setMaintenance(next.maintenance);
+    setCostSnapshots(next.costSnapshots);
+    setActivityLog(next.activityLog);
+    setIntakePackets(next.intakePackets);
+    setSettings(next.settings);
+    setPrototypes(next.prototypes);
+    setPlannedFilament(next.plannedFilament);
+    setDesignPlanning(next.designPlanning);
+    setRealmMaterials(next.realmMaterials);
+  }
+
+  async function importForgepack() {
+    if (!isTauri()) {
+      window.alert(".forgepack intake is available in the installed Forgekeeper desktop application.");
+      return;
+    }
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const packagePath = await open({
+        multiple: false,
+        directory: false,
+        filters: [{ name: "Foundry Product Packet", extensions: ["forgepack"] }],
+      });
+      if (!packagePath || Array.isArray(packagePath)) return;
+
+      const assetRootPath = settings.forgekeeperLibraryPath || settings.assetRootPath || undefined;
+      const nativeImport = await invoke<NativeForgepackImport>("import_forgepack", {
+        packagePath,
+        assetRootPath,
+      });
+      const result = applyForgepackImport(appData, nativeImport);
+      replaceWorkspaceData(result.data);
+      setSelectedDesignProjectId(result.record.productId);
+      setView(result.record.stage === "Planning" ? "planning" : "designs");
+      if (result.record.stage !== "Planning") setDesignTab("concepts");
+      window.alert(
+        `${result.record.productName} imported at ${result.record.stage}. `
+        + `${result.importedAssetCount} asset${result.importedAssetCount === 1 ? "" : "s"} copied into the Foundry.`,
+      );
+    } catch (error) {
+      console.error("Forgekeeper could not import the Foundry packet", error);
+      window.alert(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   function exportDesignProjectsCsv() { downloadCsv("designProjects.csv", designProjects); }
   function exportStlsCsv() { downloadCsv("stls.csv", stls); }
   function exportConceptsCsv() { downloadCsv("concepts.csv", concepts); }
@@ -1149,7 +1214,7 @@ export function useForgekeeperState() {
   function exportBackupJson() {
     downloadJson(`forgekeeper-backup-${Date.now()}.json`, {
       format: "forgekeeper-workspace",
-      schemaVersion: 5,
+      schemaVersion: 6,
       exportedAt: new Date().toISOString(),
       data: appData,
     });
@@ -1170,19 +1235,6 @@ export function useForgekeeperState() {
           window.alert(`The backup was not restored because it has ${issues.length} broken record relationship${issues.length === 1 ? "" : "s"}.`);
           return;
         }
-        setDesignProjects(parsed.designProjects ?? []);
-        setStls(parsed.stls ?? []);
-        setConcepts(parsed.concepts ?? []);
-        setVariants(parsed.variants ?? []);
-        setCollections(parsed.collections ?? []);
-        setReleases(parsed.releases ?? []);
-        setProductionJobs(parsed.productionJobs ?? []);
-        setProductionBatches(parsed.productionBatches ?? []);
-        setFilament(parsed.filament ?? []);
-        setMaterialMovements(parsed.materialMovements ?? []);
-        setPrinters(parsed.printers ?? []);
-        setMaintenance(parsed.maintenance ?? []);
-        setCostSnapshots(parsed.costSnapshots ?? []);
         const importEvent: ActivityEvent = {
           id: uid("ACT"),
           occurredAt: new Date().toISOString(),
@@ -1190,12 +1242,16 @@ export function useForgekeeperState() {
           station: "administration",
           summary: `Restored backup from ${file.name}.`,
         };
-        setActivityLog([importEvent, ...(parsed.activityLog ?? [])].slice(0, 500));
-        setSettings({ ...defaultExternalTools, ...defaultSettings, ...(parsed.settings ?? {}) });
-        setPrototypes(parsed.prototypes ?? seedPrototypes);
-        setPlannedFilament(parsed.plannedFilament ?? seedPlannedFilament);
-        setDesignPlanning(parsed.designPlanning ?? seedDesignPlanning);
-        setRealmMaterials(parsed.realmMaterials ?? seedRealmMaterials);
+        replaceWorkspaceData({
+          ...parsed,
+          activityLog: [importEvent, ...(parsed.activityLog ?? [])].slice(0, 500),
+          settings: { ...defaultExternalTools, ...defaultSettings, ...(parsed.settings ?? {}) },
+          prototypes: parsed.prototypes ?? seedPrototypes,
+          plannedFilament: parsed.plannedFilament ?? seedPlannedFilament,
+          designPlanning: parsed.designPlanning ?? seedDesignPlanning,
+          realmMaterials: parsed.realmMaterials ?? seedRealmMaterials,
+          intakePackets: parsed.intakePackets ?? [],
+        });
         setSelectedDesignProjectId(parsed.designProjects?.[0]?.id ?? "");
         window.alert("Forgekeeper backup restored.");
       } catch (error) {
@@ -1265,7 +1321,7 @@ export function useForgekeeperState() {
 
   return {
     view, setView, isReady, storageBackend, storageError, legacyImported,
-    designProjects, stls, concepts, variants, collections, releases, productionJobs, productionBatches, filament, materialMovements, printers, maintenance, costSnapshots, activityLog, settings,
+    designProjects, stls, concepts, variants, collections, releases, productionJobs, productionBatches, filament, materialMovements, printers, maintenance, costSnapshots, activityLog, intakePackets, settings,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, designPlanning, setDesignPlanning, realmMaterials, setRealmMaterials,
     selectedDesignProjectId, setSelectedDesignProjectId, designTab, setDesignTab,
     newDesignName, setNewDesignName, newStlName, setNewStlName, newConceptTitle, setNewConceptTitle,
@@ -1286,7 +1342,7 @@ export function useForgekeeperState() {
     addFilament, updateFilament, adjustFilament, removeFilament,
     addPrinter, updatePrinter, restoreWorkshopPrinterProfiles, removePrinter,
     addMaintenance, updateMaintenance, removeMaintenance,
-    updateSettings, completeSetup,
+    updateSettings, completeSetup, importForgepack,
     addPrototype, updatePrototype, removePrototype, promotePrototypeToDesign,
     addPlannedFilament, updatePlannedFilament, removePlannedFilament, movePlannedFilamentToInventory,
     addDesignPlanning, updateDesignPlanning, removeDesignPlanning,

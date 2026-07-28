@@ -148,6 +148,7 @@ export function migrateWorkspaceData(raw: unknown): AppData {
     maintenance: list(source.maintenance) as AppData["maintenance"],
     costSnapshots: list(source.costSnapshots) as AppData["costSnapshots"],
     activityLog: list(source.activityLog) as AppData["activityLog"],
+    intakePackets: list(source.intakePackets) as AppData["intakePackets"],
     settings: {
       ...defaultExternalTools,
       ...defaultSettings,

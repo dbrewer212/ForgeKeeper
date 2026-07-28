@@ -101,6 +101,7 @@ export class SqliteWorkspaceRepository implements WorkspaceRepository {
       "printers",
       "cost_snapshots",
       "activity_events",
+      "intake_packets",
     ];
     for (const table of tables) {
       await database.execute(`DELETE FROM ${table} WHERE workspace_id = $1`, [WORKSPACE_ID]);
@@ -168,6 +169,14 @@ export class SqliteWorkspaceRepository implements WorkspaceRepository {
           (id, workspace_id, occurred_at, station, kind, summary, payload_json)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [item.id, WORKSPACE_ID, item.occurredAt, item.station, item.kind, item.summary, JSON.stringify(item)],
+      );
+    }
+    for (const item of data.intakePackets) {
+      await database.execute(
+        `INSERT INTO intake_packets
+          (packet_id, workspace_id, product_id, product_name, stage, imported_at, payload_json)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [item.packetId, WORKSPACE_ID, item.productId, item.productName, item.stage, item.importedAt, JSON.stringify(item)],
       );
     }
   }

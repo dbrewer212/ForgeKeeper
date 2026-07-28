@@ -31,6 +31,24 @@ export type ActivityKind = "create" | "update" | "complete" | "inventory" | "mai
 export type DesignTab = "overview" | "stls" | "concepts" | "variants" | "jobs";
 export type AssetStatus = "Planned" | "Linked" | "Needs Update" | "Archived";
 export type SlicerKey = "orca" | "anycubic";
+export type ForgepackStage =
+  | "Planning"
+  | "Concept Approved"
+  | "Engineering"
+  | "Prototype"
+  | "Print Trial"
+  | "Production Approved"
+  | "Released";
+export type ForgepackGateStatus = "Pending" | "Approved" | "Changes Required" | "Blocked";
+export type ForgepackTrialStatus = "Not Started" | "In Progress" | "Passed" | "Failed";
+export type ForgepackAssetKind =
+  | "concept-image"
+  | "measurement-image"
+  | "reference"
+  | "stl"
+  | "3mf"
+  | "document"
+  | "other";
 export type ViewKey = "dashboard" | "designs" | "collections" | "releases" | "production" | "filament" | "printers" | "planning" | "reports" | "settings";
 export type QuickActionKey = "newDesign" | "newJob" | "newFilament" | "newPrinter";
 
@@ -272,6 +290,62 @@ export type ActivityEvent = {
   recordId?: string;
 };
 
+export type ForgepackAsset = {
+  id: string;
+  kind: ForgepackAssetKind;
+  label: string;
+  archivePath: string;
+  importedPath: string;
+  sha256: string;
+  version: string;
+  primary: boolean;
+};
+
+export type ForgepackGate = {
+  status: ForgepackGateStatus;
+  summary: string;
+  approvedBy?: string;
+  approvedAt?: string;
+};
+
+export type ForgepackEngineeringReview = ForgepackGate & {
+  assessedAt?: string;
+  risks: string[];
+  requirements: string[];
+  unknowns: string[];
+};
+
+export type ForgepackPipeline = {
+  nextGate: string;
+  nextAction: string;
+  blockedBy: string[];
+  physicalTestStatus: ForgepackTrialStatus;
+  targetPrinters: string[];
+  intendedMaterials: string[];
+};
+
+export type ForgepackImportRecord = {
+  packetId: string;
+  formatVersion: number;
+  productId: string;
+  productName: string;
+  stage: ForgepackStage;
+  sourcePackagePath: string;
+  assetRoot: string;
+  importedAt: string;
+  conceptRevision: string;
+  canonGate: ForgepackGate;
+  forgeability: ForgepackEngineeringReview;
+  pipeline: ForgepackPipeline;
+  assets: ForgepackAsset[];
+  provenance: {
+    createdAt: string;
+    createdBy: string;
+    conversationRef: string;
+    notes: string;
+  };
+};
+
 export type AppSettings = {
   workspaceName: string;
   ownerName: string;
@@ -309,6 +383,7 @@ export type AppData = {
   maintenance: MaintenanceRecord[];
   costSnapshots: CostSnapshot[];
   activityLog: ActivityEvent[];
+  intakePackets: ForgepackImportRecord[];
   settings: AppSettings;
   prototypes: PlannedPrototype[];
   plannedFilament: PlannedFilament[];

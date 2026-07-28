@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 describe("browser preview repository", () => {
-  it("round-trips schema-five operational records", async () => {
+  it("round-trips schema-six operational and intake records", async () => {
     vi.stubGlobal("window", { localStorage: new MemoryStorage() });
     const repository = new BrowserWorkspaceRepository();
     const data = createEmptyWorkspaceData();
@@ -41,12 +41,47 @@ describe("browser preview repository", () => {
       station: "administration",
       summary: "Workspace established.",
     });
+    data.intakePackets.push({
+      packetId: "FP-TEST-V001",
+      formatVersion: 1,
+      productId: "DESIGN-TEST",
+      productName: "Test Product",
+      stage: "Planning",
+      sourcePackagePath: "test.forgepack",
+      assetRoot: "Intake/DESIGN-TEST/FP-TEST-V001",
+      importedAt: "2026-07-27T00:00:00.000Z",
+      conceptRevision: "v001",
+      canonGate: { status: "Pending", summary: "" },
+      forgeability: {
+        status: "Pending",
+        summary: "",
+        risks: [],
+        requirements: [],
+        unknowns: ["Geometry"],
+      },
+      pipeline: {
+        nextGate: "Canon review",
+        nextAction: "Review the concept.",
+        blockedBy: [],
+        physicalTestStatus: "Not Started",
+        targetPrinters: [],
+        intendedMaterials: [],
+      },
+      assets: [],
+      provenance: {
+        createdAt: "2026-07-27T00:00:00.000Z",
+        createdBy: "Test",
+        conversationRef: "",
+        notes: "",
+      },
+    });
 
     await repository.save(data);
     const restored = await repository.load();
 
     expect(restored.data?.productionBatches[0].name).toBe("First Batch");
     expect(restored.data?.activityLog[0].summary).toBe("Workspace established.");
+    expect(restored.data?.intakePackets[0].packetId).toBe("FP-TEST-V001");
     expect(restored.backend).toBe("browser-preview");
   });
 

@@ -39,7 +39,7 @@ export function SettingsView({ state }: { state: ForgekeeperState }) {
           />
           <InfoLine
             title="Schema"
-            body="Workspace schema 5 · synchronized station tables, researched printer profiles, production batches, movement ledger, cost snapshots, and activity history."
+            body="Workspace schema 6 · synchronized station tables, researched printer profiles, production history, and verified Foundry packet intake."
           />
           <InfoLine
             title={state.integrityIssues.length === 0 ? "Integrity Check Passed" : `${state.integrityIssues.length} Integrity Issue${state.integrityIssues.length === 1 ? "" : "s"}`}
@@ -47,6 +47,40 @@ export function SettingsView({ state }: { state: ForgekeeperState }) {
               ? "All operational references currently resolve to valid workspace records."
               : "Open Reports to review broken record relationships before creating a backup."}
           />
+          <div className="flex flex-wrap items-center gap-3 pt-1">
+            <Button onClick={state.importForgepack}>Import Foundry Packet</Button>
+            <span className="text-xs text-slate-500">Accepts verified .forgepack product packets in the installed app.</span>
+          </div>
+        </div>
+      </Card>
+
+      <Card title="Foundry Intake">
+        <div className="space-y-3">
+          {state.intakePackets.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/10 p-5 text-sm text-slate-400">
+              No product packets have entered the Foundry yet.
+            </div>
+          ) : state.intakePackets.slice(0, 6).map((packet) => (
+            <div key={packet.packetId} className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-slate-100">{packet.productName}</div>
+                  <div className="mt-1 text-xs text-slate-500">{packet.packetId} · {packet.conceptRevision}</div>
+                </div>
+                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs text-amber-200">
+                  {packet.stage}
+                </span>
+              </div>
+              <div className="mt-3 grid gap-2 text-xs text-slate-400 sm:grid-cols-3">
+                <span>Canon: {packet.canonGate.status}</span>
+                <span>Forgeability: {packet.forgeability.status}</span>
+                <span>Print trial: {packet.pipeline.physicalTestStatus}</span>
+              </div>
+              <div className="mt-3 text-sm text-slate-300">
+                {packet.pipeline.nextAction || packet.pipeline.nextGate || "No next action recorded."}
+              </div>
+            </div>
+          ))}
         </div>
       </Card>
 

@@ -1,6 +1,9 @@
 # Foundry Ecosystem Architecture
 
-**Status:** Implemented rollout candidate; native Windows acceptance pending
+**Status:** Operational core validated; schema 6 intake bridge awaiting Windows acceptance
+
+Schema 6 adds verified `.forgepack` intake records and the local asset bridge described in
+[FOUNDRY_INTAKE_BRIDGE.md](FOUNDRY_INTAKE_BRIDGE.md).
 
 ## Objective
 

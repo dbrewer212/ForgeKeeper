@@ -20,6 +20,7 @@ describe("workspace data", () => {
     expect(data.designProjects).toEqual([]);
     expect(data.productionJobs).toEqual([]);
     expect(data.productionBatches).toEqual([]);
+    expect(data.intakePackets).toEqual([]);
     expect(data.filament).toEqual([]);
     expect(data.printers.map((printer) => printer.name)).toEqual([
       "Kobra S1 Max Combo",

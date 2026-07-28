@@ -3,7 +3,7 @@ import { workshopPrinterProfiles } from "../../data/printerProfiles";
 import { defaultExternalTools } from "../../lib/externalTools";
 import type { AppData } from "../../types/domain";
 
-export const CURRENT_WORKSPACE_SCHEMA = 5;
+export const CURRENT_WORKSPACE_SCHEMA = 6;
 
 export function createEmptyWorkspaceData(): AppData {
   return {
@@ -25,6 +25,7 @@ export function createEmptyWorkspaceData(): AppData {
     maintenance: [],
     costSnapshots: [],
     activityLog: [],
+    intakePackets: [],
     settings: { ...defaultExternalTools, ...defaultSettings },
     prototypes: [],
     plannedFilament: [],
@@ -46,6 +47,7 @@ export function inspectWorkspaceIntegrity(data: AppData): WorkspaceIntegrityIssu
   const filamentIds = new Set(data.filament.map((item) => item.id));
   const batchIds = new Set(data.productionBatches.map((item) => item.id));
   const jobIds = new Set(data.productionJobs.map((item) => item.id));
+  const intakePacketIds = new Set<string>();
 
   const checkDuplicates = (label: string, values: string[]) => {
     const seen = new Set<string>();
@@ -62,6 +64,32 @@ export function inspectWorkspaceIntegrity(data: AppData): WorkspaceIntegrityIssu
   checkDuplicates("batch", data.productionBatches.map((item) => item.id));
   checkDuplicates("filament", data.filament.map((item) => item.id));
   checkDuplicates("printer", data.printers.map((item) => item.id));
+
+  for (const packet of data.intakePackets) {
+    if (!packet.packetId || intakePacketIds.has(packet.packetId)) {
+      issues.push({
+        code: "duplicate-intake-packet",
+        message: "Foundry packet identifiers must be present and unique.",
+        recordId: packet.packetId || undefined,
+      });
+    }
+    intakePacketIds.add(packet.packetId);
+    if (packet.stage !== "Planning" && packet.canonGate.status !== "Approved") {
+      issues.push({
+        code: "intake-canon-gate",
+        message: `${packet.productName} cannot advance beyond Planning without an approved canon gate.`,
+        recordId: packet.packetId,
+      });
+    }
+    if ((packet.stage === "Production Approved" || packet.stage === "Released")
+      && (packet.forgeability.status !== "Approved" || packet.pipeline.physicalTestStatus !== "Passed")) {
+      issues.push({
+        code: "intake-production-gate",
+        message: `${packet.productName} requires approved forgeability and a passed print trial before production approval.`,
+        recordId: packet.packetId,
+      });
+    }
+  }
 
   for (const job of data.productionJobs) {
     if (!designIds.has(job.designProjectId)) {

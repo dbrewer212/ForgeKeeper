@@ -32,7 +32,7 @@ export function PlanningView({ state }: { state: ForgekeeperState }) {
       </div>
 
       <Card title="Add Prototype">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),auto]">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),auto,auto]">
           <Input
             value={state.newPrototypeName}
             onChange={(event) => state.setNewPrototypeName(event.target.value)}
@@ -40,6 +40,7 @@ export function PlanningView({ state }: { state: ForgekeeperState }) {
             placeholder="Prototype or experiment name"
           />
           <Button onClick={state.addPrototype}>Add Prototype</Button>
+          <Button variant="ghost" onClick={state.importForgepack}>Import .forgepack</Button>
         </div>
       </Card>
 
