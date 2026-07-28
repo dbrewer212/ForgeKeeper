@@ -1,8 +1,9 @@
 import { defaultSettings } from "../../data/seed";
+import { workshopPrinterProfiles } from "../../data/printerProfiles";
 import { defaultExternalTools } from "../../lib/externalTools";
 import type { AppData } from "../../types/domain";
 
-export const CURRENT_WORKSPACE_SCHEMA = 4;
+export const CURRENT_WORKSPACE_SCHEMA = 5;
 
 export function createEmptyWorkspaceData(): AppData {
   return {
@@ -16,7 +17,11 @@ export function createEmptyWorkspaceData(): AppData {
     productionBatches: [],
     filament: [],
     materialMovements: [],
-    printers: [],
+    printers: workshopPrinterProfiles.map((printer) => ({
+      ...printer,
+      supportedMaterials: [...printer.supportedMaterials],
+      nozzleOptions: [...printer.nozzleOptions],
+    })),
     maintenance: [],
     costSnapshots: [],
     activityLog: [],

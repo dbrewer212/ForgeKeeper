@@ -154,6 +154,7 @@ function emptyState(): ForgekeeperState {
     removeFilament: noop,
     addPrinter: noop,
     updatePrinter: noop,
+    restoreWorkshopPrinterProfiles: noop,
     removePrinter: noop,
     addMaintenance: noop,
     updateMaintenance: noop,

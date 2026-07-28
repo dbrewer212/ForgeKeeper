@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { defaultSettings, seedCollections, seedConcepts, seedFilament, seedProductionJobs, seedPrinters, seedDesignProjects, seedReleases, seedStls, seedVariants } from "../data/seed";
+import {
+  createCustomPrinter,
+  installWorkshopPrinterProfiles,
+  normalizePrinterRecord,
+  WORKSHOP_PRINTER_PROFILE_REVISION,
+} from "../data/printerProfiles";
 import { seedPlannedFilament, seedDesignPlanning, seedPrototypes, seedRealmMaterials } from "../data/planningSeed";
 import { directCost, getProductionJobCostBreakdown } from "../lib/cost";
 import { calculateProductionMetrics, jobMaterialGrams } from "../lib/production";
@@ -62,6 +68,22 @@ const seedData: AppData = {
 
 export function hydrateData(stored: AppData | null): AppData {
   if (!stored) return createEmptyWorkspaceData();
+  const storedPrinterProfileRevision = stored.settings?.workshopPrinterProfileRevision ?? 0;
+  const normalizedPrinters = (stored.printers ?? seedData.printers).map(normalizePrinterRecord);
+  const printerProfilesUpgraded = storedPrinterProfileRevision < WORKSHOP_PRINTER_PROFILE_REVISION;
+  const hydratedPrinters = printerProfilesUpgraded
+    ? installWorkshopPrinterProfiles(normalizedPrinters)
+    : normalizedPrinters;
+  const profileActivity = printerProfilesUpgraded
+    && !(stored.activityLog ?? []).some((event) => event.id === `ACT-WORKSHOP-FLEET-V${WORKSHOP_PRINTER_PROFILE_REVISION}`)
+    ? [{
+        id: `ACT-WORKSHOP-FLEET-V${WORKSHOP_PRINTER_PROFILE_REVISION}`,
+        occurredAt: new Date().toISOString(),
+        kind: "system" as const,
+        station: "printer-pool" as const,
+        summary: "Installed researched profiles for the Kobra S1 Max Combo, Neptune 4 Max, and Kobra 3 Combo.",
+      }]
+    : [];
   return {
     designProjects: (stored.designProjects ?? seedData.designProjects).map((design) => ({
       ...design,
@@ -110,17 +132,16 @@ export function hydrateData(stored: AppData | null): AppData {
       spoolWeightGrams: item.spoolWeightGrams ?? 1000,
     })),
     materialMovements: stored.materialMovements ?? [],
-    printers: (stored.printers ?? seedData.printers).map((printer) => ({
-      ...printer,
-      watts: printer.watts ?? defaultSettings.machineWatts,
-      nozzleDiameter: printer.nozzleDiameter ?? 0.4,
-      supportedMaterials: printer.supportedMaterials ?? ["PLA", "PLA+", "PETG"],
-      maintenanceIntervalDays: printer.maintenanceIntervalDays ?? 30,
-    })),
+    printers: hydratedPrinters,
     maintenance: stored.maintenance ?? [],
     costSnapshots: stored.costSnapshots ?? [],
-    activityLog: stored.activityLog ?? [],
-    settings: { ...defaultExternalTools, ...defaultSettings, ...(stored.settings ?? {}) },
+    activityLog: [...profileActivity, ...(stored.activityLog ?? [])],
+    settings: {
+      ...defaultExternalTools,
+      ...defaultSettings,
+      ...(stored.settings ?? {}),
+      workshopPrinterProfileRevision: WORKSHOP_PRINTER_PROFILE_REVISION,
+    },
     prototypes: stored.prototypes ?? seedData.prototypes,
     plannedFilament: stored.plannedFilament ?? seedData.plannedFilament,
     designPlanning: stored.designPlanning ?? seedData.designPlanning,
@@ -470,7 +491,7 @@ export function useForgekeeperState() {
       version: `v${designStls.length + 1}`,
       isPrimary: designStls.length === 0,
       defaultPrinterId: printers[0]?.id,
-      defaultSlicer: printers[0] ? slicerForPrinter(printers[0].name) : settings.defaultSlicer,
+      defaultSlicer: printers[0]?.preferredSlicer ?? (printers[0] ? slicerForPrinter(printers[0].name) : settings.defaultSlicer),
       linkedConceptId: designConcepts[0]?.id,
       assetStatus: "Planned",
       notes: "",
@@ -846,7 +867,7 @@ export function useForgekeeperState() {
   function addPrinter() {
     if (!newPrinterName.trim()) return;
     const id = uid("PR");
-    setPrinters((prev) => [{ id, name: newPrinterName.trim(), model: newPrinterName.trim(), status: "Available", buildVolume: "", watts: settings.machineWatts, nozzleDiameter: 0.4, supportedMaterials: ["PLA", "PLA+", "PETG"], maintenanceIntervalDays: 30, activeJob: "", notes: "" }, ...prev]);
+    setPrinters((prev) => [createCustomPrinter(id, newPrinterName.trim(), settings.machineWatts), ...prev]);
     logActivity("create", "printer-pool", `Added printer ${newPrinterName.trim()}.`, id);
     setNewPrinterName("");
     clearQuickAction("newPrinter");
@@ -854,6 +875,12 @@ export function useForgekeeperState() {
 
   function updatePrinter(id: string, patch: Partial<PrinterRecord>) {
     setPrinters((prev) => prev.map((printer) => (printer.id === id ? { ...printer, ...patch } : printer)));
+  }
+
+  function restoreWorkshopPrinterProfiles() {
+    setPrinters((prev) => installWorkshopPrinterProfiles(prev));
+    setSettings((prev) => ({ ...prev, workshopPrinterProfileRevision: WORKSHOP_PRINTER_PROFILE_REVISION }));
+    logActivity("system", "printer-pool", "Restored the researched Fenrir Forgeworks printer profiles.");
   }
 
   function removePrinter(id: string) {
@@ -1038,12 +1065,13 @@ export function useForgekeeperState() {
   }
 
   function getDefaultSlicerForPrinter(printerName?: string) {
-    return slicerForPrinter(printerName) || settings.defaultSlicer || "orca";
+    const printer = printers.find((item) => item.name === printerName || item.model === printerName);
+    return printer?.preferredSlicer || slicerForPrinter(printerName) || settings.defaultSlicer || "orca";
   }
 
   function getPreferredSlicerForStl(stl: STLRecord) {
     const printer = printers.find((item) => item.id === stl.defaultPrinterId);
-    return stl.defaultSlicer || slicerForPrinter(printer?.name || "") || settings.defaultSlicer || "orca";
+    return stl.defaultSlicer || printer?.preferredSlicer || slicerForPrinter(printer?.name || "") || settings.defaultSlicer || "orca";
   }
 
   function suggestStlLibraryFolder(designProjectId: string, version = "v001") {
@@ -1121,7 +1149,7 @@ export function useForgekeeperState() {
   function exportBackupJson() {
     downloadJson(`forgekeeper-backup-${Date.now()}.json`, {
       format: "forgekeeper-workspace",
-      schemaVersion: 4,
+      schemaVersion: 5,
       exportedAt: new Date().toISOString(),
       data: appData,
     });
@@ -1201,21 +1229,12 @@ export function useForgekeeperState() {
       ownerName: patch.ownerName?.trim() || prev.ownerName,
       setupCompleted: true,
     }));
-    if (initial?.printerName?.trim() && printers.length === 0) {
+    if (initial?.printerName?.trim() && !printers.some((printer) => printer.name.toLowerCase() === initial.printerName?.trim().toLowerCase())) {
       const printerId = uid("PR");
-      setPrinters([{
-        id: printerId,
-        name: initial.printerName.trim(),
-        model: initial.printerName.trim(),
-        status: "Available",
-        buildVolume: "",
-        watts: Number(patch.machineWatts ?? settings.machineWatts),
-        nozzleDiameter: 0.4,
-        supportedMaterials: ["PLA", "PLA+", "PETG"],
-        maintenanceIntervalDays: 30,
-        activeJob: "",
-        notes: "",
-      }]);
+      setPrinters((prev) => [
+        createCustomPrinter(printerId, initial.printerName!.trim(), Number(patch.machineWatts ?? settings.machineWatts)),
+        ...prev,
+      ]);
     }
     if (initial?.materialName?.trim() && filament.length === 0) {
       const filamentId = uid("FIL");
@@ -1265,7 +1284,7 @@ export function useForgekeeperState() {
     addProductionJob, updateProductionJob, removeProductionJob, consumeFilamentForJob,
     addProductionBatch, updateProductionBatch, removeProductionBatch,
     addFilament, updateFilament, adjustFilament, removeFilament,
-    addPrinter, updatePrinter, removePrinter,
+    addPrinter, updatePrinter, restoreWorkshopPrinterProfiles, removePrinter,
     addMaintenance, updateMaintenance, removeMaintenance,
     updateSettings, completeSetup,
     addPrototype, updatePrototype, removePrototype, promotePrototypeToDesign,

@@ -26,6 +26,7 @@ export const fallbackSettings: AppSettings = {
   targetMarginPercent: 50,
   assetRootPath: "FenrirForgeworks/assets",
   productionHoursPerDay: 8,
+  workshopPrinterProfileRevision: 1,
 };
 
 export function filamentCostPerGram(filament?: FilamentRecord): number {

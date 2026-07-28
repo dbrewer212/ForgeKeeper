@@ -112,6 +112,7 @@ function migrateProductionJob(source: UnknownRecord, projects: DesignProject[]):
 
 export function migrateWorkspaceData(raw: unknown): AppData {
   const source = unwrap(raw);
+  const sourceSettings = record(source.settings);
   const projects = list(source.designProjects ?? source.products).map(migrateDesignProject);
   const mapProjectId = (item: UnknownRecord) => ({
     ...item,
@@ -150,7 +151,8 @@ export function migrateWorkspaceData(raw: unknown): AppData {
     settings: {
       ...defaultExternalTools,
       ...defaultSettings,
-      ...record(source.settings),
+      ...sourceSettings,
+      workshopPrinterProfileRevision: numberValue(sourceSettings.workshopPrinterProfileRevision, 0),
     },
     prototypes: list(source.prototypes).map((item) => ({
       ...item,

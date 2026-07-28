@@ -1,6 +1,6 @@
 import type { AppData } from "../../types/domain";
 
-export const WORKSPACE_SCHEMA_VERSION = 4;
+export const WORKSPACE_SCHEMA_VERSION = 5;
 export const WORKSPACE_ID = "local-foundry";
 
 export type StorageBackend = "sqlite" | "browser-preview";

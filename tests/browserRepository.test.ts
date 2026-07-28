@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 describe("browser preview repository", () => {
-  it("round-trips schema-four operational records", async () => {
+  it("round-trips schema-five operational records", async () => {
     vi.stubGlobal("window", { localStorage: new MemoryStorage() });
     const repository = new BrowserWorkspaceRepository();
     const data = createEmptyWorkspaceData();

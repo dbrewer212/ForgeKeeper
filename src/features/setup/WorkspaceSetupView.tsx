@@ -11,7 +11,6 @@ export function WorkspaceSetupView({ state }: { state: ForgekeeperState }) {
   const [laborRate, setLaborRate] = useState(state.settings.laborRate);
   const [electricityRate, setElectricityRate] = useState(state.settings.electricityRate);
   const [productionHoursPerDay, setProductionHoursPerDay] = useState(state.settings.productionHoursPerDay);
-  const [printerName, setPrinterName] = useState("");
   const [materialName, setMaterialName] = useState("");
   const [materialGrams, setMaterialGrams] = useState(1000);
 
@@ -27,7 +26,7 @@ export function WorkspaceSetupView({ state }: { state: ForgekeeperState }) {
         electricityRate,
         productionHoursPerDay,
       },
-      { printerName, materialName, materialGrams },
+      { materialName, materialGrams },
     );
   }
 
@@ -82,13 +81,18 @@ export function WorkspaceSetupView({ state }: { state: ForgekeeperState }) {
               </div>
             </Card>
 
-            <Card title="First Printer">
-              <div className="space-y-4">
-                <Field label="Printer Name / Model">
-                  <Input value={printerName} onChange={(event) => setPrinterName(event.target.value)} placeholder="Neptune 4 Max" />
-                </Field>
-                <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4 text-sm text-slate-400">
-                  Optional. If entered, ForgeKeeper creates the first Printer Pool record with editable defaults.
+            <Card title="Workshop Printer Fleet">
+              <div className="space-y-3">
+                {state.printers.map((printer) => (
+                  <div key={printer.id} className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
+                    <div className="font-medium text-slate-100">{printer.name}</div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      {printer.buildVolume} · {printer.preferredSlicer === "anycubic" ? "Anycubic Slicer Next" : "OrcaSlicer"}
+                    </div>
+                  </div>
+                ))}
+                <div className="text-sm text-slate-400">
+                  These researched profiles are installed into Printer Pool and remain fully editable.
                 </div>
               </div>
             </Card>

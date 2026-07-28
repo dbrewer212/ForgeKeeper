@@ -9,7 +9,10 @@ import { inventoryState, pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 import type { FilamentMaterial } from "../../types/domain";
 
-const materialOptions: FilamentMaterial[] = ["PLA", "PLA+", "PETG", "ABS", "TPU"];
+const materialOptions: FilamentMaterial[] = [
+  "PLA", "PLA+", "PLA-CF", "PETG", "PETG-CF", "PET", "ABS", "ASA",
+  "TPU", "PVA", "PC", "PC-CF/GF", "PA", "PA6-CF", "PET-CF", "Nylon",
+];
 
 export function FilamentView({ state }: { state: ForgekeeperState }) {
   return (

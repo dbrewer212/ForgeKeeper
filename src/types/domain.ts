@@ -7,8 +7,25 @@ export type ProductionStatus = "Queued" | "Printing" | "Finishing" | "Complete" 
 export type ProductionPriority = "Low" | "Normal" | "High" | "Rush";
 export type ProductionBatchStatus = "Planned" | "Ready" | "Running" | "Complete" | "Cancelled";
 export type ReleaseStatus = "Planning" | "Scheduled" | "Live";
-export type FilamentMaterial = "PLA" | "PLA+" | "PETG" | "ABS" | "TPU";
+export type FilamentMaterial =
+  | "PLA"
+  | "PLA+"
+  | "PLA-CF"
+  | "PETG"
+  | "PETG-CF"
+  | "PET"
+  | "ABS"
+  | "ASA"
+  | "TPU"
+  | "PVA"
+  | "PC"
+  | "PC-CF/GF"
+  | "PA"
+  | "PA6-CF"
+  | "PET-CF"
+  | "Nylon";
 export type PrinterStatus = "Available" | "Printing" | "Maintenance" | "Offline";
+export type PrinterConnectionType = "Anycubic Cloud / LAN" | "Moonraker / Fluidd" | "Local / USB";
 export type MaterialMovementType = "Purchase" | "Adjustment" | "Production" | "Waste" | "Correction";
 export type ActivityKind = "create" | "update" | "complete" | "inventory" | "maintenance" | "import" | "system";
 export type DesignTab = "overview" | "stls" | "concepts" | "variants" | "jobs";
@@ -182,11 +199,44 @@ export type PrinterRecord = {
   id: string;
   name: string;
   model: string;
+  manufacturer: string;
+  profileId?: string;
+  profileRevision?: number;
   status: PrinterStatus;
   buildVolume: string;
+  buildVolumeX: number;
+  buildVolumeY: number;
+  buildVolumeZ: number;
+  machineDimensions: string;
   watts: number;
+  ratedPowerWatts: number;
+  accessoryPowerWatts: number;
   nozzleDiameter: number;
+  nozzleOptions: number[];
+  nozzleMaterial: string;
+  maxNozzleTemperatureC: number;
+  maxBedTemperatureC: number;
+  maxChamberTemperatureC: number;
+  recommendedPrintSpeedMmS: number;
+  maxPrintSpeedMmS: number;
+  maxAccelerationMmS2: number;
   supportedMaterials: FilamentMaterial[];
+  motionSystem: string;
+  extruder: string;
+  firmware: string;
+  levelingSystem: string;
+  enclosed: boolean;
+  heatedChamber: boolean;
+  multicolorSystem: string;
+  includedColorCount: number;
+  maxColorCount: number;
+  filamentDrying: boolean;
+  camera: string;
+  preferredSlicer: SlicerKey;
+  connectionType: PrinterConnectionType;
+  connectionEndpoint: string;
+  profileSource: string;
+  profileUpdatedAt: string;
   maintenanceIntervalDays: number;
   activeJob: string;
   notes: string;
@@ -241,6 +291,7 @@ export type AppSettings = {
   blenderPath?: string;
   meshyUrl?: string;
   defaultSlicer?: "orca" | "anycubic";
+  workshopPrinterProfileRevision: number;
 };
 
 export type AppData = {

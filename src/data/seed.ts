@@ -10,6 +10,7 @@ import type {
   ReleaseRecord,
   STLRecord,
 } from "../types/domain";
+import { WORKSHOP_PRINTER_PROFILE_REVISION } from "./printerProfiles";
 
 export const defaultSettings: AppSettings = {
   workspaceName: "Fenrir Forgeworks",
@@ -24,6 +25,7 @@ export const defaultSettings: AppSettings = {
   targetMarginPercent: 50,
   assetRootPath: "",
   productionHoursPerDay: 8,
+  workshopPrinterProfileRevision: WORKSHOP_PRINTER_PROFILE_REVISION,
 };
 
 // A new ForgeKeeper workspace belongs entirely to its user. Starter records

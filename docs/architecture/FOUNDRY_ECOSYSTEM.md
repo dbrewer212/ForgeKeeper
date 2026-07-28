@@ -96,7 +96,7 @@ Current authoritative record:
 
 - database: `forgekeeper.db` in the Tauri application configuration directory;
 - workspace identifier: `local-foundry`;
-- schema version: `4`;
+- schema version: `5`;
 - authoritative payload: `workspace_state`;
 - schema history: Tauri SQL migrations registered in Rust;
 - compatibility path: browser storage is limited to web preview and legacy import.
@@ -116,12 +116,18 @@ On first desktop launch:
 5. Legacy orders become internal `ProductionJob` records.
 6. Customer, contact, payment, tracking, and quoted-sale fields are discarded.
 7. The original legacy JSON is archived locally only after the SQLite save succeeds.
-8. A new installation opens the first-run workspace setup with no demonstration records.
+8. A new installation opens the first-run workspace setup with no demonstration production records.
+9. The three user-approved Fenrir Forgeworks machines are installed as researched Printer Pool profiles.
 
 The first-run setup establishes workspace identity, owner/operator, asset root, cost inputs,
-production capacity, and optional first printer and material records. A starting material balance
-creates the first movement-ledger entry. Blank fields remain blank; no demonstration operational
-records are injected.
+production capacity, the approved workshop printer fleet, and an optional first material record.
+A starting material balance creates the first movement-ledger entry. Blank fields remain blank;
+no demonstration design, production, inventory, or sales records are injected.
+
+Schema five expands each printer into a real machine profile: structured build volume, thermal and
+motion limits, nozzle options, supported materials, enclosure and multicolor capabilities, slicer
+routing, and connection method. The Kobra S1 Max Combo, Neptune 4 Max, and Kobra 3 Combo profiles
+are documented in `docs/printers/WORKSHOP_PRINTER_PROFILES.md`.
 
 ## Operational Guarantees
 

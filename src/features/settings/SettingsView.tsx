@@ -39,7 +39,7 @@ export function SettingsView({ state }: { state: ForgekeeperState }) {
           />
           <InfoLine
             title="Schema"
-            body="Workspace schema 4 · synchronized station tables, production batches, movement ledger, cost snapshots, and activity history."
+            body="Workspace schema 5 · synchronized station tables, researched printer profiles, production batches, movement ledger, cost snapshots, and activity history."
           />
           <InfoLine
             title={state.integrityIssues.length === 0 ? "Integrity Check Passed" : `${state.integrityIssues.length} Integrity Issue${state.integrityIssues.length === 1 ? "" : "s"}`}

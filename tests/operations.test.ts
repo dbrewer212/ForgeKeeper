@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fallbackSettings, getProductionJobCostBreakdown } from "../src/lib/cost";
 import { calculateProductionMetrics } from "../src/lib/production";
+import { createCustomPrinter } from "../src/data/printerProfiles";
 import type { FilamentRecord, PrinterRecord, ProductionJob, DesignProject } from "../src/types/domain";
 
 const design: DesignProject = {
@@ -36,17 +37,8 @@ const spool: FilamentRecord = {
 };
 
 const printer: PrinterRecord = {
-  id: "PR-1",
-  name: "Printer",
-  model: "Printer",
-  status: "Available",
-  buildVolume: "",
-  watts: 200,
-  nozzleDiameter: 0.4,
+  ...createCustomPrinter("PR-1", "Printer", 200),
   supportedMaterials: ["PLA"],
-  maintenanceIntervalDays: 30,
-  activeJob: "",
-  notes: "",
 };
 
 const job: ProductionJob = {
