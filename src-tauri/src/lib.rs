@@ -10,7 +10,7 @@ fn open_path(path: String) -> Result<(), String> {
         return Err("No path was provided.".to_string());
     }
 
-    open_with_windows_shell(&path, None)
+    open_path_native(&path)
 }
 
 #[tauri::command]
@@ -20,7 +20,7 @@ fn launch_external_tool(tool_path: String, asset_path: Option<String>) -> Result
     }
 
     let resolved_tool = resolve_tool_path(&tool_path);
-    open_with_windows_shell(&resolved_tool, asset_path.as_deref())
+    launch_tool_native(&resolved_tool, asset_path.as_deref())
 }
 
 fn resolve_tool_path(tool_path: &str) -> String {
@@ -50,47 +50,61 @@ fn resolve_tool_path(tool_path: &str) -> String {
 }
 
 #[cfg(target_os = "windows")]
-fn open_with_windows_shell(target: &str, asset_path: Option<&str>) -> Result<(), String> {
-    let mut command = Command::new("cmd");
-    command.arg("/C").arg("start").arg("").arg(target);
-
-    if let Some(asset) = asset_path {
-        if !asset.trim().is_empty() {
-            command.arg(asset);
-        }
-    }
-
-    command
+fn open_path_native(target: &str) -> Result<(), String> {
+    Command::new("explorer")
+        .arg(target)
         .spawn()
         .map(|_| ())
-        .map_err(|error| format!("Failed to open launch target: {error}"))
+        .map_err(|error| format!("Failed to open path: {error}"))
 }
 
-#[cfg(not(target_os = "windows"))]
-fn open_with_windows_shell(target: &str, asset_path: Option<&str>) -> Result<(), String> {
+#[cfg(target_os = "macos")]
+fn open_path_native(target: &str) -> Result<(), String> {
     let mut command = Command::new("open");
     command.arg(target);
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Failed to open path: {error}"))
+}
 
-    if let Some(asset) = asset_path {
-        if !asset.trim().is_empty() {
-            command.arg(asset);
-        }
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+fn open_path_native(target: &str) -> Result<(), String> {
+    Command::new("xdg-open")
+        .arg(target)
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Failed to open path: {error}"))
+}
+
+fn launch_tool_native(tool: &str, asset_path: Option<&str>) -> Result<(), String> {
+    let mut command = Command::new(tool);
+    if let Some(asset) = asset_path.filter(|value| !value.trim().is_empty()) {
+        command.arg(asset);
     }
 
     command
         .spawn()
         .map(|_| ())
-        .map_err(|error| format!("Failed to open launch target: {error}"))
+        .map_err(|error| format!("Failed to launch external tool: {error}"))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let migrations = vec![Migration {
-        version: 1,
-        description: "create_foundry_core",
-        sql: include_str!("../migrations/0001_foundry_core.sql"),
-        kind: MigrationKind::Up,
-    }];
+    let migrations = vec![
+        Migration {
+            version: 1,
+            description: "create_foundry_core",
+            sql: include_str!("../migrations/0001_foundry_core.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "create_operational_records",
+            sql: include_str!("../migrations/0002_operational_records.sql"),
+            kind: MigrationKind::Up,
+        },
+    ];
 
     tauri::Builder::default()
         .plugin(

@@ -1,12 +1,14 @@
 import { Button } from "../ui/Button";
-import { copyText, describeLaunchTarget, getToolPath, openLocalPathBestEffort, openWebUrl, slicerForPrinter, toolLabel } from "../../lib/externalTools";
+import { copyText, getToolPath, openWebUrl, slicerForPrinter, toolLabel } from "../../lib/externalTools";
+import { launchExternalTool, openPath } from "../../lib/tauriLaunchpad";
+import type { AppSettings } from "../../types/domain";
 
 type AssetLaunchpadProps = {
   stlPath?: string;
   folderPath?: string;
   printerName?: string;
   slicer?: "orca" | "anycubic";
-  settings: any;
+  settings: AppSettings;
 };
 
 async function copyOrAlert(value: string, label: string) {
@@ -38,12 +40,12 @@ export function AssetLaunchpad({ stlPath, folderPath, printerName, slicer, setti
         <Button variant="ghost" onClick={() => openWebUrl(settings?.meshyUrl || "https://www.meshy.ai/")}>Open Meshy.ai</Button>
         <Button variant="ghost" onClick={() => copyOrAlert(stlPath || "", "STL path")}>Copy STL Path</Button>
         <Button variant="ghost" onClick={() => copyOrAlert(folderPath || "", "STL folder")}>Copy Folder Path</Button>
-        <Button variant="ghost" onClick={() => openLocalPathBestEffort(stlPath || "")}>Open STL</Button>
-        <Button variant="ghost" onClick={() => openLocalPathBestEffort(folderPath || "")}>Open Folder</Button>
-        <Button variant="ghost" onClick={() => window.alert(`Launch target copied as reference:\n${describeLaunchTarget(preferred, stlPath)}\n\nConfigured app path:\n${preferredPath}\n\nFull app launching with file arguments will be enabled in the next Tauri shell-permission pass.`)}>
+        <Button variant="ghost" onClick={() => openPath(stlPath || "", "STL")}>Open STL</Button>
+        <Button variant="ghost" onClick={() => openPath(folderPath || "", "STL folder")}>Open Folder</Button>
+        <Button variant="ghost" onClick={() => launchExternalTool(preferredPath, stlPath, preferredLabel)}>
           Open in {preferredLabel}
         </Button>
-        <Button variant="ghost" onClick={() => window.alert(`Blender path:\n${getToolPath(settings, "blender")}\n\nSTL path:\n${stlPath || "No STL linked yet."}`)}>
+        <Button variant="ghost" onClick={() => launchExternalTool(getToolPath(settings, "blender"), stlPath, "Blender")}>
           Open in Blender
         </Button>
       </div>

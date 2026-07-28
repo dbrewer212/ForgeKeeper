@@ -36,9 +36,13 @@ export function ReportsView({ state }: { state: ForgekeeperState }) {
           <Button variant="ghost" onClick={state.exportCollectionsCsv}>Collections</Button>
           <Button variant="ghost" onClick={state.exportReleasesCsv}>Releases</Button>
           <Button variant="ghost" onClick={state.exportProductionJobsCsv}>Production Jobs</Button>
+          <Button variant="ghost" onClick={state.exportProductionBatchesCsv}>Production Batches</Button>
           <Button variant="ghost" onClick={state.exportFilamentCsv}>Materials</Button>
+          <Button variant="ghost" onClick={state.exportMaterialMovementsCsv}>Material Movements</Button>
           <Button variant="ghost" onClick={state.exportPrintersCsv}>Printers</Button>
           <Button variant="ghost" onClick={state.exportMaintenanceCsv}>Maintenance</Button>
+          <Button variant="ghost" onClick={state.exportCostSnapshotsCsv}>Cost Snapshots</Button>
+          <Button variant="ghost" onClick={state.exportActivityLogCsv}>Activity Log</Button>
         </div>
       </Card>
 
@@ -110,6 +114,57 @@ export function ReportsView({ state }: { state: ForgekeeperState }) {
           <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">Design Library owns design identity. Production, Planning, Materials, and Reports reference those stable design records.</div>
           <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">All station data persists through one repository. The desktop build uses the versioned SQLite workspace.</div>
           <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">No customer accounts, customer catalog, sales intake, or order processing are part of this workspace.</div>
+        </div>
+      </Card>
+
+      <Card title="Data Integrity">
+        {state.integrityIssues.length === 0 ? (
+          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-200">
+            All operational record relationships are valid.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {state.integrityIssues.map((issue, index) => (
+              <div key={`${issue.code}-${issue.recordId ?? index}`} className="rounded-2xl border border-rose-500/25 bg-rose-500/10 p-4 text-sm text-rose-100">
+                <div className="font-semibold">{issue.code}</div>
+                <div className="mt-1 text-rose-100/75">{issue.message}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card title="Completed Cost Snapshots">
+        <div className="space-y-3">
+          {state.costSnapshots.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/10 bg-[#0d131c] p-6 text-sm text-slate-500">No completed-job snapshots yet.</div>
+          ) : state.costSnapshots.slice(0, 20).map((snapshot) => {
+            const job = state.productionJobs.find((item) => item.id === snapshot.productionJobId);
+            return (
+              <div key={snapshot.id} className="rounded-2xl border border-white/10 bg-[#0d131c] p-4 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-semibold text-slate-100">{job?.name ?? snapshot.productionJobId}</div>
+                  <div className="text-amber-300">{money(snapshot.totalCost)}</div>
+                </div>
+                <div className="mt-2 text-xs text-slate-500">
+                  {snapshot.gramsUsed.toFixed(0)}g · {snapshot.printHours.toFixed(1)}h · {new Date(snapshot.capturedAt).toLocaleString()}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card title="Recent Activity">
+        <div className="space-y-3">
+          {state.activityLog.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/10 bg-[#0d131c] p-6 text-sm text-slate-500">No activity recorded yet.</div>
+          ) : state.activityLog.slice(0, 25).map((event) => (
+            <div key={event.id} className="rounded-2xl border border-white/10 bg-[#0d131c] p-4 text-sm">
+              <div className="font-medium text-slate-100">{event.summary}</div>
+              <div className="mt-1 text-xs text-slate-500">{event.station} · {new Date(event.occurredAt).toLocaleString()}</div>
+            </div>
+          ))}
         </div>
       </Card>
     </div>

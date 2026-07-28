@@ -1,3 +1,6 @@
+import type { WorkspaceIntegrityIssue } from "../../core/domain/workspaceData";
+import type { AppData } from "../../types/domain";
+
 export type KeeperAlertSeverity = "info" | "warning" | "critical" | "opportunity";
 
 export type KeeperAlert = {
@@ -14,7 +17,11 @@ function hasText(value: unknown): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-export function getKeeperAlerts(state: any): KeeperAlert[] {
+type AlertState = Pick<AppData, "designProjects" | "stls" | "concepts" | "variants" | "productionJobs" | "filament"> & {
+  integrityIssues?: WorkspaceIntegrityIssue[];
+};
+
+export function getKeeperAlerts(state: AlertState): KeeperAlert[] {
   const alerts: KeeperAlert[] = [];
 
   const designProjects = Array.isArray(state?.designProjects) ? state.designProjects : [];
@@ -27,8 +34,8 @@ export function getKeeperAlerts(state: any): KeeperAlert[] {
   for (const design of designProjects) {
     const designProjectId = design.id;
     const designName = design.name ?? "Unnamed design";
-    const designStls = stls.filter((stl: any) => stl.designProjectId === designProjectId);
-    const designConcepts = concepts.filter((concept: any) => concept.designProjectId === designProjectId);
+    const designStls = stls.filter((stl) => stl.designProjectId === designProjectId);
+    const designConcepts = concepts.filter((concept) => concept.designProjectId === designProjectId);
 
     if (!design.targetPrice || Number(design.targetPrice) <= 0) {
       alerts.push({
@@ -170,6 +177,18 @@ export function getKeeperAlerts(state: any): KeeperAlert[] {
         suggestedActionId: "assign-filament",
       });
     }
+  }
+
+  for (const issue of state.integrityIssues ?? []) {
+    alerts.push({
+      id: `integrity-${issue.code}-${issue.recordId ?? "workspace"}`,
+      severity: "critical",
+      title: "Workspace integrity issue",
+      message: issue.message,
+      section: "reports",
+      relatedRecordId: issue.recordId,
+      suggestedActionId: "review-integrity",
+    });
   }
 
   return alerts;

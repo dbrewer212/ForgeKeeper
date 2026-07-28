@@ -4,6 +4,7 @@
 
 ```bash
 npm ci
+npm test
 npm run check
 npm run dev
 ```
@@ -17,6 +18,7 @@ Before committing application changes:
 
 ```bash
 npm run check
+npm test
 npm run build
 ```
 
@@ -54,4 +56,30 @@ Run desktop verification on a machine with the Rust toolchain and Tauri prerequi
 ```bash
 cargo check --manifest-path src-tauri/Cargo.toml
 npm run desktop
+npm run desktop:build
 ```
+
+## Desktop Acceptance Gate
+
+A desktop checkpoint is accepted only after all of the following pass on Windows:
+
+1. A fresh launch opens Establish Your Foundry with no demonstration operational records.
+2. Workspace identity, first printer, and first material can be created.
+3. Closing and reopening preserves the workspace through SQLite.
+4. A Design Project can be created and promoted from Planning.
+5. A Production Job can be assigned to a printer, spool, and batch.
+6. Material consumption creates one negative movement and cannot exceed available stock.
+7. Completing a job records actual outcome fields and one cost snapshot.
+8. Reports show zero integrity issues.
+9. JSON backup export, restore, and post-restore restart preserve all records.
+10. The platform installer produced by `npm run desktop:build` installs and launches normally.
+
+Do not merge the rollout branch until this native gate is complete.
+
+## Continuous Verification
+
+`.github/workflows/verify.yml` runs the complete frontend gate on Linux and the Rust/Tauri build on
+Windows for rollout-branch pushes and pull requests. The Windows job uploads the generated bundle
+directory as the `ForgeKeeper-Windows` workflow artifact. A green workflow proves compilation and
+installer generation; the interactive persistence and workflow checks above remain the final
+operator acceptance gate.

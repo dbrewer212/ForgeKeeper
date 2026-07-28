@@ -5,10 +5,12 @@ import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Textarea } from "../../components/ui/Textarea";
+import { CollectionsView } from "../collections/CollectionsView";
+import { ReleasesView } from "../releases/ReleasesView";
 import { money } from "../../lib/format";
 import { inventoryState, pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
-import type { ProductionStatus, DesignProject, DesignLine, DesignStatus, DesignTab, DesignTier, DesignVariant, RealmVariant } from "../../types/domain";
+import type { AssetStatus, ProductionStatus, DesignProject, DesignLine, DesignStatus, DesignTab, DesignTier, DesignVariant, RealmVariant, SlicerKey } from "../../types/domain";
 
 const designTabs: DesignTab[] = ["overview", "stls", "concepts", "variants", "jobs"];
 const realmOptions: RealmVariant[] = ["Midgard", "Alfheim", "Svartalfheim", "Vanaheim", "Asgard", "Jotunheim", "Muspelheim", "Niflheim", "Helheim"];
@@ -17,16 +19,20 @@ export function DesignLibraryView({ state }: { state: ForgekeeperState }) {
   const design = state.selectedDesignProject;
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[360px,minmax(0,1fr)]">
-      <DesignRail state={state} />
+    <div className="space-y-6">
+      <div className="grid gap-6 xl:grid-cols-[360px,minmax(0,1fr)]">
+        <DesignRail state={state} />
 
-      {!design ? (
-        <Card title="Design Project">
-          <Empty text="No design selected. Add or select a design to begin." />
-        </Card>
-      ) : (
-        <DesignWorkspace state={state} design={design} />
-      )}
+        {!design ? (
+          <Card title="Design Project">
+            <Empty text="No design selected. Add or select a design to begin." />
+          </Card>
+        ) : (
+          <DesignWorkspace state={state} design={design} />
+        )}
+      </div>
+      <CollectionsView state={state} />
+      <ReleasesView state={state} />
     </div>
   );
 }
@@ -386,7 +392,7 @@ function StlPanel({ state }: { state: ForgekeeperState }) {
                   <Input value={stl.filePath || ""} onChange={(e) => state.linkStlPath(stl.id, e.target.value)} placeholder="C:\ForgekeeperLibrary\STLs\DesignProject\v001\part.stl" />
                 </Field>
                 <Field label="Asset Status">
-                  <Select value={stl.assetStatus || "Planned"} onChange={(e) => state.updateStl(stl.id, { assetStatus: e.target.value as any })}>
+                  <Select value={stl.assetStatus || "Planned"} onChange={(e) => state.updateStl(stl.id, { assetStatus: e.target.value as AssetStatus })}>
                     <option value="Planned">Planned</option>
                     <option value="Linked">Linked</option>
                     <option value="Needs Update">Needs Update</option>
@@ -408,7 +414,7 @@ function StlPanel({ state }: { state: ForgekeeperState }) {
                   </Select>
                 </Field>
                 <Field label="Default Slicer">
-                  <Select value={stl.defaultSlicer || state.getPreferredSlicerForStl(stl)} onChange={(e) => state.updateStl(stl.id, { defaultSlicer: e.target.value as any })}>
+                  <Select value={stl.defaultSlicer || state.getPreferredSlicerForStl(stl)} onChange={(e) => state.updateStl(stl.id, { defaultSlicer: e.target.value as SlicerKey })}>
                     <option value="orca">OrcaSlicer</option>
                     <option value="anycubic">Anycubic Slicer Next</option>
                   </Select>

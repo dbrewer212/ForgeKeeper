@@ -24,12 +24,13 @@ export function DashboardView({ state }: { state: ForgekeeperState }) {
         <KeeperActionPanel state={state} title="Keeper Suggested Actions" />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <StatCard label="Total Production Jobs" value={state.metrics.productionJobs} helper={`${state.queueCounts.Queued} queued`} />
         <StatCard label="Estimated Job Cost" value={`$${state.metrics.costs.toFixed(2)}`} helper="Direct workshop cost" />
         <StatCard label="In Production" value={state.queueCounts.Printing} helper={`${state.queueCounts.Finishing} finishing`} />
         <StatCard label="Completed" value={state.metrics.done} helper="Finished internal jobs" />
         <StatCard label="Filament Available" value={`${state.metrics.totalFilamentKg.toFixed(2)} kg`} helper="Across loaded inventory" />
+        <StatCard label="Data Integrity" value={state.integrityIssues.length === 0 ? "Healthy" : state.integrityIssues.length} helper={state.integrityIssues.length === 0 ? "All references valid" : "Review Reports"} />
       </div>
 
       <Card title="Production Intelligence" right={<span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">Forecast</span>}>
@@ -148,6 +149,21 @@ export function DashboardView({ state }: { state: ForgekeeperState }) {
           </Card>
         </div>
       </div>
+
+      <Card title="Recent Foundry Activity" right={<span className="text-xs text-slate-500">Last 8 recorded changes</span>}>
+        <div className="grid gap-3 md:grid-cols-2">
+          {state.activityLog.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/10 bg-[#0d131c] p-6 text-sm text-slate-500">
+              Activity will appear as the workspace is used.
+            </div>
+          ) : state.activityLog.slice(0, 8).map((event) => (
+            <div key={event.id} className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
+              <div className="text-sm font-medium text-slate-100">{event.summary}</div>
+              <div className="mt-1 text-xs text-slate-500">{event.station} · {new Date(event.occurredAt).toLocaleString()}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }

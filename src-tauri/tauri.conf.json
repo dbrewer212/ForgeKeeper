@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Forgekeeper",
+  "productName": "ForgeKeeper",
   "version": "0.1.0",
   "identifier": "com.fenrirforgeworks.forgekeeper",
   "build": {
@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "Forgekeeper",
-        "width": 800,
-        "height": 600,
+        "title": "ForgeKeeper",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1100,
+        "minHeight": 700,
         "resizable": true,
         "fullscreen": false
       }

@@ -1,3 +1,5 @@
+import { openPath } from "./tauriLaunchpad";
+
 export type ExternalToolKey = "orca" | "anycubic" | "blender" | "meshy";
 export type SlicerKey = "orca" | "anycubic";
 
@@ -54,16 +56,5 @@ export function openWebUrl(url: string) {
 }
 
 export function openLocalPathBestEffort(path: string) {
-  if (!path) {
-    window.alert("No local path has been linked yet.");
-    return;
-  }
-
-  const fileUrl = path.startsWith("file://") ? path : `file:///${path.replace(/\\/g, "/")}`;
-  window.open(fileUrl, "_blank");
-}
-
-export function describeLaunchTarget(tool: ExternalToolKey | SlicerKey, filePath?: string): string {
-  const label = toolLabel(tool);
-  return filePath ? `${label} -> ${filePath}` : label;
+  return openPath(path, "Local path");
 }

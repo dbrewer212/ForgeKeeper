@@ -3,8 +3,10 @@ import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Button } from "../../components/ui/Button";
 import { openLocalPathBestEffort, openWebUrl } from "../../lib/externalTools";
+import type { ForgekeeperState } from "../../state/useForgekeeperState";
+import type { SlicerKey } from "../../types/domain";
 
-export function ExternalToolsPanel({ state }: { state: any }) {
+export function ExternalToolsPanel({ state }: { state: ForgekeeperState }) {
   const settings = state.settings;
   const update = state.updateSettings;
 
@@ -17,7 +19,7 @@ export function ExternalToolsPanel({ state }: { state: any }) {
         </label>
         <label className="space-y-2">
           <div className="text-xs uppercase tracking-wide text-slate-500">Default Slicer</div>
-          <Select value={settings.defaultSlicer ?? "orca"} onChange={(e) => update({ defaultSlicer: e.target.value })}>
+          <Select value={settings.defaultSlicer ?? "orca"} onChange={(e) => update({ defaultSlicer: e.target.value as SlicerKey })}>
             <option value="orca">OrcaSlicer</option>
             <option value="anycubic">Anycubic Slicer Next</option>
           </Select>

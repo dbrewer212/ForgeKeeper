@@ -5,7 +5,7 @@ import { Select } from "../../components/ui/Select";
 import { Textarea } from "../../components/ui/Textarea";
 import { pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
-import type { PrinterStatus } from "../../types/domain";
+import type { FilamentMaterial, PrinterStatus } from "../../types/domain";
 
 const statuses: PrinterStatus[] = ["Available", "Printing", "Maintenance", "Offline"];
 
@@ -44,6 +44,15 @@ export function PrintersView({ state }: { state: ForgekeeperState }) {
                 <Input value={printer.model} onChange={(e) => state.updatePrinter(printer.id, { model: e.target.value })} placeholder="Model" />
                 <Input value={printer.buildVolume} onChange={(e) => state.updatePrinter(printer.id, { buildVolume: e.target.value })} placeholder="Build volume" />
                 <Input type="number" value={printer.watts} onChange={(e) => state.updatePrinter(printer.id, { watts: Number(e.target.value) })} placeholder="Watts while printing" />
+                <Input type="number" min={0.1} step={0.1} value={printer.nozzleDiameter} onChange={(e) => state.updatePrinter(printer.id, { nozzleDiameter: Number(e.target.value) })} placeholder="Nozzle diameter (mm)" />
+                <Input type="number" min={1} step={1} value={printer.maintenanceIntervalDays} onChange={(e) => state.updatePrinter(printer.id, { maintenanceIntervalDays: Number(e.target.value) })} placeholder="Maintenance interval days" />
+                <Input
+                  value={printer.supportedMaterials.join(", ")}
+                  onChange={(e) => state.updatePrinter(printer.id, {
+                    supportedMaterials: e.target.value.split(",").map((value) => value.trim()).filter(Boolean) as FilamentMaterial[],
+                  })}
+                  placeholder="Supported materials, comma separated"
+                />
                 <Select value={printer.status} onChange={(e) => state.updatePrinter(printer.id, { status: e.target.value as PrinterStatus })}>
                   {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
                 </Select>

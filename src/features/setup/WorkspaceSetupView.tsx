@@ -11,18 +11,24 @@ export function WorkspaceSetupView({ state }: { state: ForgekeeperState }) {
   const [laborRate, setLaborRate] = useState(state.settings.laborRate);
   const [electricityRate, setElectricityRate] = useState(state.settings.electricityRate);
   const [productionHoursPerDay, setProductionHoursPerDay] = useState(state.settings.productionHoursPerDay);
+  const [printerName, setPrinterName] = useState("");
+  const [materialName, setMaterialName] = useState("");
+  const [materialGrams, setMaterialGrams] = useState(1000);
 
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!workspaceName.trim() || !ownerName.trim()) return;
-    state.completeSetup({
-      workspaceName,
-      ownerName,
-      assetRootPath,
-      laborRate,
-      electricityRate,
-      productionHoursPerDay,
-    });
+    state.completeSetup(
+      {
+        workspaceName,
+        ownerName,
+        assetRootPath,
+        laborRate,
+        electricityRate,
+        productionHoursPerDay,
+      },
+      { printerName, materialName, materialGrams },
+    );
   }
 
   return (
@@ -73,6 +79,31 @@ export function WorkspaceSetupView({ state }: { state: ForgekeeperState }) {
               </div>
               <div className="mt-5 rounded-2xl border border-white/10 bg-[#0d131c] p-4 text-sm text-slate-400">
                 Printers and materials are added from their own stations after setup so every record reflects your actual workshop.
+              </div>
+            </Card>
+
+            <Card title="First Printer">
+              <div className="space-y-4">
+                <Field label="Printer Name / Model">
+                  <Input value={printerName} onChange={(event) => setPrinterName(event.target.value)} placeholder="Neptune 4 Max" />
+                </Field>
+                <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4 text-sm text-slate-400">
+                  Optional. If entered, ForgeKeeper creates the first Printer Pool record with editable defaults.
+                </div>
+              </div>
+            </Card>
+
+            <Card title="First Material">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Spool / Color Name">
+                  <Input value={materialName} onChange={(event) => setMaterialName(event.target.value)} placeholder="Obsidian Black" />
+                </Field>
+                <Field label="Starting Grams">
+                  <Input type="number" min={0} step={1} value={materialGrams} onChange={(event) => setMaterialGrams(Number(event.target.value))} />
+                </Field>
+              </div>
+              <div className="mt-5 rounded-2xl border border-white/10 bg-[#0d131c] p-4 text-sm text-slate-400">
+                Optional. Starting stock is recorded as the first material movement, keeping inventory history traceable from setup.
               </div>
             </Card>
           </div>

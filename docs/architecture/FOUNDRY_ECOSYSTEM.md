@@ -1,6 +1,6 @@
 # Foundry Ecosystem Architecture
 
-**Status:** Active implementation foundation
+**Status:** Implemented rollout candidate; native Windows acceptance pending
 
 ## Objective
 
@@ -42,9 +42,9 @@ workstreams and may not drive the current data model.
 
 ## Source of Truth
 
-The authoritative store will be a versioned SQLite database owned by the desktop application.
-The current browser localStorage implementation is a temporary compatibility adapter used only
-while the SQLite repository and legacy-data importer are completed.
+The authoritative store is a versioned SQLite database owned by the desktop application.
+Browser localStorage is a separate development-preview adapter and a one-time legacy import
+source. It is never the installed application's operational source of truth.
 
 The data core owns identity, relationships, migration, validation, and persistence. No view or
 station may maintain a competing copy of operational truth.
@@ -79,7 +79,8 @@ Every record has one owning station. Other stations reference the record by stab
 - `MaterialMovement`
 - `CostProfile`
 - `CostSnapshot`
-- `SystemAlert`
+- `ActivityEvent`
+- derived `SystemAlert`
 
 The prototype names `Product`, `OrderRecord`, and `Catalog` are migration sources, not the final
 domain language. Product records become user-owned design projects. Order records that contain
@@ -95,15 +96,16 @@ Current authoritative record:
 
 - database: `forgekeeper.db` in the Tauri application configuration directory;
 - workspace identifier: `local-foundry`;
-- schema version: `3`;
+- schema version: `4`;
 - authoritative payload: `workspace_state`;
 - schema history: Tauri SQL migrations registered in Rust;
 - compatibility path: browser storage is limited to web preview and legacy import.
 
-The initial migration also establishes indexed tables for design projects, production jobs,
-materials, and printers. The versioned workspace snapshot remains authoritative during the
-station-by-station repository transition so a partial station conversion cannot split operational
-truth.
+The migrations establish indexed tables for design projects, production jobs, production batches,
+materials, material movements, printers, cost snapshots, and activity events. The versioned
+workspace snapshot remains the rehydration record while every save synchronizes the station tables
+inside the same serialized SQLite transaction. An integrity check rejects broken cross-station
+references before either the desktop or browser-preview repository saves.
 
 On first desktop launch:
 
@@ -116,9 +118,23 @@ On first desktop launch:
 7. The original legacy JSON is archived locally only after the SQLite save succeeds.
 8. A new installation opens the first-run workspace setup with no demonstration records.
 
-The first-run setup establishes workspace identity, owner/operator, asset root, cost inputs, and
-production capacity. Printers and materials are created in their owning stations so the workspace
-contains only user-defined operational records.
+The first-run setup establishes workspace identity, owner/operator, asset root, cost inputs,
+production capacity, and optional first printer and material records. A starting material balance
+creates the first movement-ledger entry. Blank fields remain blank; no demonstration operational
+records are injected.
+
+## Operational Guarantees
+
+- Saves are serialized so rapid React updates cannot create overlapping SQLite transactions.
+- The workspace snapshot and indexed station tables commit or roll back together.
+- Inventory changes create signed `MaterialMovement` records.
+- Material consumption cannot exceed the selected spool's available grams.
+- Completed jobs preserve outcome, actual time, actual material, units completed, and an immutable
+  completion cost snapshot.
+- Records with production or inventory history cannot be silently deleted.
+- Backup imports are migrated, hydrated, and integrity-checked before replacing live state.
+- Reset downloads a complete recovery backup before clearing the workspace.
+- Activity history retains the 500 most recent meaningful workspace events.
 
 ## Application Boundaries
 

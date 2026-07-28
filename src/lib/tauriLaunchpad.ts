@@ -1,3 +1,5 @@
+import { invoke, isTauri } from "@tauri-apps/api/core";
+
 export type LaunchToolKey = "orca" | "anycubic" | "blender" | "meshy";
 
 type InvokeFn = (command: string, args?: Record<string, unknown>) => Promise<unknown>;
@@ -7,19 +9,12 @@ function isLikelyWebUrl(value: string) {
 }
 
 function isTauriRuntime() {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  return typeof window !== "undefined" && isTauri();
 }
 
 async function getTauriInvoke(): Promise<InvokeFn | null> {
   if (!isTauriRuntime()) return null;
-
-  try {
-    const api = await import("@tauri-apps/api/core");
-    return api.invoke as InvokeFn;
-  } catch (error) {
-    console.error("Tauri API could not be loaded.", error);
-    return null;
-  }
+  return invoke as InvokeFn;
 }
 
 export async function copyToClipboard(value: string, label = "Value") {

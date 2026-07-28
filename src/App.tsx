@@ -10,7 +10,6 @@ import { ReportsView } from "./features/reports/ReportsView";
 import { SettingsView } from "./features/settings/SettingsView";
 import { WorkspaceSetupView } from "./features/setup/WorkspaceSetupView";
 
-// ✅ NEW
 import { PlanningView } from "./features/planning/PlanningView";
 
 export default function App() {
@@ -56,7 +55,7 @@ export default function App() {
         return <ReportsView state={state} />;
       case "settings":
         return <SettingsView state={state} />;
-      case "planning": // ✅ NEW
+      case "planning":
         return <PlanningView state={state} />;
       default:
         return <DashboardView state={state} />;

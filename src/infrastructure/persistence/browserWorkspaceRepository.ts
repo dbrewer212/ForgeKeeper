@@ -1,4 +1,5 @@
 import type { AppData } from "../../types/domain";
+import { inspectWorkspaceIntegrity } from "../../core/domain/workspaceData";
 import { archiveLegacyWorkspace, migrateWorkspaceData, readLegacyWorkspace } from "../../core/persistence/legacyMigration";
 import {
   WORKSPACE_SCHEMA_VERSION,
@@ -36,6 +37,10 @@ export class BrowserWorkspaceRepository implements WorkspaceRepository {
   }
 
   async save(data: AppData): Promise<void> {
+    const issues = inspectWorkspaceIntegrity(data);
+    if (issues.length > 0) {
+      throw new Error(`Workspace integrity check failed: ${issues[0].message}`);
+    }
     const envelope: PreviewEnvelope = {
       schemaVersion: WORKSPACE_SCHEMA_VERSION,
       savedAt: new Date().toISOString(),

@@ -8,16 +8,23 @@ import { uid } from "../lib/ids";
 import { downloadJson } from "../lib/storage";
 import { defaultExternalTools, getToolPath, openLocalPathBestEffort, openWebUrl, slicerForPrinter } from "../lib/externalTools";
 import { filenameFromPath, folderFromPath, suggestedLibraryPath } from "../lib/assetLibrary";
+import { launchExternalTool } from "../lib/tauriLaunchpad";
 import { getWorkspaceRepository } from "../infrastructure/persistence/createWorkspaceRepository";
 import type { StorageBackend } from "../core/persistence/workspaceRepository";
 import { migrateWorkspaceData } from "../core/persistence/legacyMigration";
+import { createEmptyWorkspaceData, inspectWorkspaceIntegrity, isForgekeeperBackup } from "../core/domain/workspaceData";
 import type {
+  ActivityEvent,
   AppData,
   AppSettings,
   CollectionRecord,
   ConceptSpec,
+  CostSnapshot,
   FilamentRecord,
   MaintenanceRecord,
+  MaterialMovement,
+  MaterialMovementType,
+  ProductionBatch,
   ProductionJob,
   ProductionStatus,
   PrinterRecord,
@@ -39,9 +46,13 @@ const seedData: AppData = {
   collections: seedCollections,
   releases: seedReleases,
   productionJobs: seedProductionJobs,
+  productionBatches: [],
   filament: seedFilament,
+  materialMovements: [],
   printers: seedPrinters,
   maintenance: [],
+  costSnapshots: [],
+  activityLog: [],
   settings: { ...defaultExternalTools, ...defaultSettings },
   prototypes: seedPrototypes,
   plannedFilament: seedPlannedFilament,
@@ -49,8 +60,8 @@ const seedData: AppData = {
   realmMaterials: seedRealmMaterials,
 };
 
-function hydrateData(stored: AppData | null): AppData {
-  if (!stored) return seedData;
+export function hydrateData(stored: AppData | null): AppData {
+  if (!stored) return createEmptyWorkspaceData();
   return {
     designProjects: (stored.designProjects ?? seedData.designProjects).map((design) => ({
       ...design,
@@ -90,17 +101,25 @@ function hydrateData(stored: AppData | null): AppData {
       materialGrams: job.materialGrams ?? (stored.designProjects ?? seedData.designProjects).find((p) => p.id === job.designProjectId)?.estimatedFilamentGrams ?? 0,
       electricityRate: job.electricityRate ?? defaultSettings.electricityRate,
       materialConsumed: job.materialConsumed ?? false,
+      unitsCompleted: job.unitsCompleted ?? (job.status === "Complete" ? job.quantity : 0),
     })),
+    productionBatches: stored.productionBatches ?? [],
     filament: (stored.filament ?? seedData.filament).map((item) => ({
       ...item,
       spoolPrice: item.spoolPrice ?? 22,
       spoolWeightGrams: item.spoolWeightGrams ?? 1000,
     })),
+    materialMovements: stored.materialMovements ?? [],
     printers: (stored.printers ?? seedData.printers).map((printer) => ({
       ...printer,
       watts: printer.watts ?? defaultSettings.machineWatts,
+      nozzleDiameter: printer.nozzleDiameter ?? 0.4,
+      supportedMaterials: printer.supportedMaterials ?? ["PLA", "PLA+", "PETG"],
+      maintenanceIntervalDays: printer.maintenanceIntervalDays ?? 30,
     })),
     maintenance: stored.maintenance ?? [],
+    costSnapshots: stored.costSnapshots ?? [],
+    activityLog: stored.activityLog ?? [],
     settings: { ...defaultExternalTools, ...defaultSettings, ...(stored.settings ?? {}) },
     prototypes: stored.prototypes ?? seedData.prototypes,
     plannedFilament: stored.plannedFilament ?? seedData.plannedFilament,
@@ -140,9 +159,13 @@ export function useForgekeeperState() {
   const [collections, setCollections] = useState<CollectionRecord[]>(initial.collections);
   const [releases, setReleases] = useState<ReleaseRecord[]>(initial.releases);
   const [productionJobs, setProductionJobs] = useState<ProductionJob[]>(initial.productionJobs);
+  const [productionBatches, setProductionBatches] = useState<ProductionBatch[]>(initial.productionBatches);
   const [filament, setFilament] = useState<FilamentRecord[]>(initial.filament);
+  const [materialMovements, setMaterialMovements] = useState<MaterialMovement[]>(initial.materialMovements);
   const [printers, setPrinters] = useState<PrinterRecord[]>(initial.printers);
   const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>(initial.maintenance);
+  const [costSnapshots, setCostSnapshots] = useState<CostSnapshot[]>(initial.costSnapshots);
+  const [activityLog, setActivityLog] = useState<ActivityEvent[]>(initial.activityLog);
   const [settings, setSettings] = useState<AppSettings>(initial.settings);
   const [prototypes, setPrototypes] = useState<PlannedPrototype[]>(initial.prototypes);
   const [plannedFilament, setPlannedFilament] = useState<PlannedFilament[]>(initial.plannedFilament);
@@ -157,8 +180,12 @@ export function useForgekeeperState() {
   const [newCollectionName, setNewCollectionName] = useState("");
   const [newReleaseName, setNewReleaseName] = useState("");
   const [newJobName, setNewJobName] = useState("");
+  const [newBatchName, setNewBatchName] = useState("");
   const [newFilamentName, setNewFilamentName] = useState("");
   const [newPrinterName, setNewPrinterName] = useState("");
+  const [newPrototypeName, setNewPrototypeName] = useState("");
+  const [newPlannedFilamentName, setNewPlannedFilamentName] = useState("");
+  const [newDesignPlanningName, setNewDesignPlanningName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [quickAction, setQuickAction] = useState<QuickActionKey | null>(null);
 
@@ -170,9 +197,13 @@ export function useForgekeeperState() {
     collections,
     releases,
     productionJobs,
+    productionBatches,
     filament,
+    materialMovements,
     printers,
     maintenance,
+    costSnapshots,
+    activityLog,
     settings,
     prototypes,
     plannedFilament,
@@ -194,9 +225,13 @@ export function useForgekeeperState() {
         setCollections(restored.collections);
         setReleases(restored.releases);
         setProductionJobs(restored.productionJobs);
+        setProductionBatches(restored.productionBatches);
         setFilament(restored.filament);
+        setMaterialMovements(restored.materialMovements);
         setPrinters(restored.printers);
         setMaintenance(restored.maintenance);
+        setCostSnapshots(restored.costSnapshots);
+        setActivityLog(restored.activityLog);
         setSettings(restored.settings);
         setPrototypes(restored.prototypes);
         setPlannedFilament(restored.plannedFilament);
@@ -232,7 +267,7 @@ export function useForgekeeperState() {
     }, 250);
 
     return () => window.clearTimeout(timeout);
-  }, [isReady, repository, designProjects, stls, concepts, variants, collections, releases, productionJobs, filament, printers, maintenance, settings, prototypes, plannedFilament, designPlanning, realmMaterials]);
+  }, [isReady, repository, designProjects, stls, concepts, variants, collections, releases, productionJobs, productionBatches, filament, materialMovements, printers, maintenance, costSnapshots, activityLog, settings, prototypes, plannedFilament, designPlanning, realmMaterials]);
 
   useEffect(() => {
     setPrinters((prev) => prev.map((printer) => printerStatusFromJobs(printer, productionJobs, designProjects)));
@@ -338,6 +373,27 @@ export function useForgekeeperState() {
   const productionMetrics = useMemo(() => (
     calculateProductionMetrics(productionJobs, designProjects, printers, filament, settings)
   ), [productionJobs, designProjects, printers, filament, settings]);
+  const integrityIssues = useMemo(() => inspectWorkspaceIntegrity(appData), [
+    designProjects, stls, concepts, variants, collections, releases, productionJobs, productionBatches,
+    filament, materialMovements, printers, maintenance, costSnapshots, activityLog, settings,
+    prototypes, plannedFilament, designPlanning, realmMaterials,
+  ]);
+
+  function logActivity(
+    kind: ActivityEvent["kind"],
+    station: ActivityEvent["station"],
+    summary: string,
+    recordId?: string,
+  ) {
+    setActivityLog((prev) => [{
+      id: uid("ACT"),
+      occurredAt: new Date().toISOString(),
+      kind,
+      station,
+      summary,
+      recordId,
+    }, ...prev].slice(0, 500));
+  }
 
   function triggerQuickAction(action: QuickActionKey) {
     setQuickAction(action);
@@ -375,6 +431,7 @@ export function useForgekeeperState() {
     setSelectedDesignProjectId(id);
     setNewDesignName("");
     clearQuickAction("newDesign");
+    logActivity("create", "design-library", `Created design project ${newDesignName.trim()}.`, id);
   }
 
   function updateDesign(id: string, patch: Partial<DesignProject>) {
@@ -384,6 +441,10 @@ export function useForgekeeperState() {
   function removeDesign(id: string) {
     const design = designProjects.find((p) => p.id === id);
     if (!design) return;
+    if (productionJobs.some((job) => job.designProjectId === id)) {
+      window.alert(`${design.name} has production history and cannot be deleted. Archive the design instead.`);
+      return;
+    }
     const confirmed = window.confirm(`Remove ${design.name}? This also removes linked STL records, concept specs, production jobs, and release links.`);
     if (!confirmed) return;
     setDesignProjects((prev) => prev.filter((p) => p.id !== id));
@@ -393,6 +454,7 @@ export function useForgekeeperState() {
     setProductionJobs((prev) => prev.filter((job) => job.designProjectId !== id));
     setReleases((prev) => prev.map((release) => ({ ...release, designProjectIds: release.designProjectIds.filter((designProjectId) => designProjectId !== id) })));
     setCollections((prev) => prev.map((collection) => ({ ...collection, heroDesignProjectId: collection.heroDesignProjectId === id ? undefined : collection.heroDesignProjectId })));
+    logActivity("update", "design-library", `Removed design project ${design.name}.`, id);
   }
 
   function addStl() {
@@ -557,8 +619,9 @@ export function useForgekeeperState() {
 
   function addProductionJob() {
     if (!newJobName.trim() || !selectedDesignProject) return;
+    const id = uid("JOB");
     setProductionJobs((prev) => [{
-      id: uid("JOB"),
+      id,
       name: newJobName.trim(),
       designProjectId: selectedDesignProject.id,
       filamentId: filament[0]?.id,
@@ -580,21 +643,66 @@ export function useForgekeeperState() {
     }, ...prev]);
     setNewJobName("");
     clearQuickAction("newJob");
+    logActivity("create", "production", `Created production job ${newJobName.trim()}.`, id);
   }
 
   function updateProductionJob(id: string, patch: Partial<ProductionJob>) {
+    const current = productionJobs.find((job) => job.id === id);
+    if (!current) return;
+    const transitionPatch: Partial<ProductionJob> = { ...patch };
+    if (patch.status === "Printing" && current.status !== "Printing" && !current.startedAt) {
+      transitionPatch.startedAt = new Date().toISOString();
+    }
+    if (patch.status === "Complete" && current.status !== "Complete") {
+      const completedAt = new Date().toISOString();
+      const completedJob: ProductionJob = {
+        ...current,
+        ...transitionPatch,
+        completedAt,
+        unitsCompleted: transitionPatch.unitsCompleted ?? current.unitsCompleted ?? current.quantity,
+        actualPrintHours: transitionPatch.actualPrintHours ?? current.actualPrintHours ?? current.estimatedPrintHours * current.quantity,
+        actualMaterialGrams: transitionPatch.actualMaterialGrams ?? current.actualMaterialGrams ?? jobMaterialGrams(current, designProjects.find((item) => item.id === current.designProjectId)),
+        outcome: transitionPatch.outcome ?? current.outcome ?? "Success",
+      };
+      const breakdown = getCostBreakdownForJob({
+        ...completedJob,
+        estimatedPrintHours: completedJob.actualPrintHours || completedJob.estimatedPrintHours,
+        materialGrams: completedJob.actualMaterialGrams || completedJob.materialGrams,
+        quantity: 1,
+      });
+      const snapshotId = uid("COST");
+      transitionPatch.completedAt = completedAt;
+      transitionPatch.unitsCompleted = completedJob.unitsCompleted;
+      transitionPatch.actualPrintHours = completedJob.actualPrintHours;
+      transitionPatch.actualMaterialGrams = completedJob.actualMaterialGrams;
+      transitionPatch.outcome = completedJob.outcome;
+      transitionPatch.costSnapshotId = snapshotId;
+      setCostSnapshots((prev) => [{
+        id: snapshotId,
+        productionJobId: id,
+        capturedAt: completedAt,
+        materialCost: breakdown.material,
+        electricityCost: breakdown.electricity,
+        laborCost: breakdown.labor,
+        finishingCost: breakdown.packaging + breakdown.other,
+        totalCost: breakdown.total,
+        gramsUsed: breakdown.gramsUsed,
+        printHours: breakdown.printHours,
+      }, ...prev.filter((item) => item.productionJobId !== id)]);
+      logActivity("complete", "production", `Completed production job ${current.name}.`, id);
+    }
     setProductionJobs((prev) => prev.map((job) => {
       if (job.id !== id) return job;
-      const next = { ...job, ...patch };
-      if (patch.designProjectId) {
-        const design = designProjects.find((item) => item.id === patch.designProjectId);
+      const next = { ...job, ...transitionPatch };
+      if (transitionPatch.designProjectId) {
+        const design = designProjects.find((item) => item.id === transitionPatch.designProjectId);
         if (design) {
           next.estimatedPrintHours = design.estimatedPrintHours;
           next.materialGrams = design.estimatedFilamentGrams;
         }
       }
-      if (patch.printerId) {
-        const printer = printers.find((item) => item.id === patch.printerId);
+      if (transitionPatch.printerId) {
+        const printer = printers.find((item) => item.id === transitionPatch.printerId);
         next.machineWatts = printer?.watts ?? settings.machineWatts;
         if (next.status === "Queued") next.status = "Printing";
       }
@@ -603,7 +711,49 @@ export function useForgekeeperState() {
   }
 
   function removeProductionJob(id: string) {
+    const job = productionJobs.find((item) => item.id === id);
+    if (!job) return;
+    if (job.status === "Complete" || job.materialConsumed || costSnapshots.some((snapshot) => snapshot.productionJobId === id)) {
+      window.alert(`${job.name} has production history and cannot be deleted. Keep it as Complete or Cancelled so reports remain accurate.`);
+      return;
+    }
+    if (!window.confirm(`Remove production job ${job.name}?`)) return;
     setProductionJobs((prev) => prev.filter((job) => job.id !== id));
+    setMaterialMovements((prev) => prev.filter((movement) => movement.productionJobId !== id));
+    setCostSnapshots((prev) => prev.filter((snapshot) => snapshot.productionJobId !== id));
+    logActivity("update", "production", `Removed production job ${job.name}.`, id);
+  }
+
+  function addProductionBatch() {
+    if (!newBatchName.trim()) return;
+    const id = uid("BATCH");
+    setProductionBatches((prev) => [{
+      id,
+      name: newBatchName.trim(),
+      status: "Planned",
+      scheduledStart: "",
+      notes: "",
+    }, ...prev]);
+    setNewBatchName("");
+    logActivity("create", "production", `Created production batch ${newBatchName.trim()}.`, id);
+  }
+
+  function updateProductionBatch(id: string, patch: Partial<ProductionBatch>) {
+    setProductionBatches((prev) => prev.map((batch) => {
+      if (batch.id !== id) return batch;
+      const next = { ...batch, ...patch };
+      if (patch.status === "Complete" && !batch.completedAt) next.completedAt = new Date().toISOString();
+      return next;
+    }));
+  }
+
+  function removeProductionBatch(id: string) {
+    const batch = productionBatches.find((item) => item.id === id);
+    if (!batch) return;
+    if (!window.confirm(`Remove batch ${batch.name}? Jobs will remain and become unbatched.`)) return;
+    setProductionBatches((prev) => prev.filter((item) => item.id !== id));
+    setProductionJobs((prev) => prev.map((job) => job.batchId === id ? { ...job, batchId: undefined } : job));
+    logActivity("update", "production", `Removed production batch ${batch.name}.`, id);
   }
 
   function consumeFilamentForJob(id: string) {
@@ -624,15 +774,39 @@ export function useForgekeeperState() {
       window.alert("Selected filament could not be found.");
       return;
     }
+    if (grams > spool.gramsAvailable) {
+      window.alert(`${spool.colorName} is short ${(grams - spool.gramsAvailable).toFixed(0)}g. Add stock or select another material before consuming it.`);
+      return;
+    }
     const confirmed = window.confirm(`Deduct ${grams.toFixed(0)}g from ${spool.colorName}?`);
     if (!confirmed) return;
     setFilament((prev) => prev.map((item) => item.id === job.filamentId ? { ...item, gramsAvailable: Math.max(0, item.gramsAvailable - grams) } : item));
     setProductionJobs((prev) => prev.map((item) => item.id === id ? { ...item, materialConsumed: true } : item));
+    setMaterialMovements((prev) => [{
+      id: uid("MOVE"),
+      filamentId: job.filamentId as string,
+      type: "Production",
+      grams: -grams,
+      occurredAt: new Date().toISOString(),
+      productionJobId: id,
+      notes: `Consumed for ${job.name}`,
+    }, ...prev]);
+    logActivity("inventory", "materials", `Consumed ${grams.toFixed(0)}g of ${spool.colorName} for ${job.name}.`, job.filamentId);
   }
 
   function addFilament() {
     if (!newFilamentName.trim()) return;
-    setFilament((prev) => [{ id: uid("FIL"), brand: "Generic", material: "PLA", colorName: newFilamentName.trim(), colorFamily: "Unknown", gramsAvailable: 1000, reorderPointGrams: 250, spoolPrice: 22, spoolWeightGrams: 1000, notes: "" }, ...prev]);
+    const id = uid("FIL");
+    setFilament((prev) => [{ id, brand: "Generic", material: "PLA", colorName: newFilamentName.trim(), colorFamily: "Unknown", gramsAvailable: 1000, reorderPointGrams: 250, spoolPrice: 22, spoolWeightGrams: 1000, notes: "" }, ...prev]);
+    setMaterialMovements((prev) => [{
+      id: uid("MOVE"),
+      filamentId: id,
+      type: "Purchase",
+      grams: 1000,
+      occurredAt: new Date().toISOString(),
+      notes: "Initial spool inventory",
+    }, ...prev]);
+    logActivity("inventory", "materials", `Added material spool ${newFilamentName.trim()}.`, id);
     setNewFilamentName("");
     clearQuickAction("newFilament");
   }
@@ -641,20 +815,39 @@ export function useForgekeeperState() {
     setFilament((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }
 
-  function adjustFilament(id: string, delta: number) {
+  function adjustFilament(id: string, delta: number, type: MaterialMovementType = "Adjustment", notes = "Manual inventory adjustment") {
+    if (!Number.isFinite(delta) || delta === 0) return;
+    const item = filament.find((record) => record.id === id);
+    if (!item) return;
+    const applied = Math.max(-item.gramsAvailable, delta);
     setFilament((prev) => prev.map((item) => (item.id === id ? { ...item, gramsAvailable: Math.max(0, item.gramsAvailable + delta) } : item)));
+    setMaterialMovements((prev) => [{
+      id: uid("MOVE"),
+      filamentId: id,
+      type,
+      grams: applied,
+      occurredAt: new Date().toISOString(),
+      notes,
+    }, ...prev]);
+    logActivity("inventory", "materials", `${applied >= 0 ? "Added" : "Removed"} ${Math.abs(applied).toFixed(0)}g ${item.colorName}.`, id);
   }
 
   function removeFilament(id: string) {
     const item = filament.find((record) => record.id === id);
     if (!item) return;
+    if (productionJobs.some((job) => job.filamentId === id) || materialMovements.some((movement) => movement.filamentId === id)) {
+      window.alert(`${item.colorName} has production or movement history and cannot be deleted. Set its available grams to zero and archive it in notes instead.`);
+      return;
+    }
     if (!window.confirm(`Remove filament ${item.colorName}?`)) return;
     setFilament((prev) => prev.filter((record) => record.id !== id));
   }
 
   function addPrinter() {
     if (!newPrinterName.trim()) return;
-    setPrinters((prev) => [{ id: uid("PR"), name: newPrinterName.trim(), model: newPrinterName.trim(), status: "Available", buildVolume: "", watts: settings.machineWatts, activeJob: "", notes: "" }, ...prev]);
+    const id = uid("PR");
+    setPrinters((prev) => [{ id, name: newPrinterName.trim(), model: newPrinterName.trim(), status: "Available", buildVolume: "", watts: settings.machineWatts, nozzleDiameter: 0.4, supportedMaterials: ["PLA", "PLA+", "PETG"], maintenanceIntervalDays: 30, activeJob: "", notes: "" }, ...prev]);
+    logActivity("create", "printer-pool", `Added printer ${newPrinterName.trim()}.`, id);
     setNewPrinterName("");
     clearQuickAction("newPrinter");
   }
@@ -673,7 +866,10 @@ export function useForgekeeperState() {
   }
 
   function addMaintenance(printerId: string) {
-    setMaintenance((prev) => [{ id: uid("M"), printerId, title: "General Maintenance", performedOn: new Date().toLocaleDateString(), notes: "" }, ...prev]);
+    const id = uid("M");
+    setMaintenance((prev) => [{ id, printerId, title: "General Maintenance", performedOn: new Date().toISOString().slice(0, 10), notes: "" }, ...prev]);
+    const printer = printers.find((item) => item.id === printerId);
+    logActivity("maintenance", "printer-pool", `Logged maintenance for ${printer?.name ?? printerId}.`, id);
   }
 
   function updateMaintenance(id: string, patch: Partial<MaintenanceRecord>) {
@@ -688,6 +884,65 @@ export function useForgekeeperState() {
     setPrototypes((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }
 
+  function addPrototype() {
+    if (!newPrototypeName.trim()) return;
+    const id = uid("PROTO");
+    setPrototypes((prev) => [{
+      id,
+      designName: newPrototypeName.trim(),
+      family: "Unassigned",
+      collection: "Unassigned",
+      tier: "Utility",
+      status: "Active Idea",
+      priority: "Medium",
+      printerFit: "",
+      nextStep: "Define the next concrete test.",
+      notes: "",
+    }, ...prev]);
+    setNewPrototypeName("");
+    logActivity("create", "planning", `Added prototype plan ${newPrototypeName.trim()}.`, id);
+  }
+
+  function removePrototype(id: string) {
+    const prototype = prototypes.find((item) => item.id === id);
+    if (!prototype) return;
+    if (!window.confirm(`Remove prototype plan ${prototype.designName}?`)) return;
+    setPrototypes((prev) => prev.filter((item) => item.id !== id));
+  }
+
+  function promotePrototypeToDesign(id: string) {
+    const prototype = prototypes.find((item) => item.id === id);
+    if (!prototype) return;
+    const existing = designProjects.find((item) => item.name.toLowerCase() === prototype.designName.toLowerCase());
+    if (existing) {
+      setSelectedDesignProjectId(existing.id);
+      setView("designs");
+      return;
+    }
+    const designId = uid("P");
+    setDesignProjects((prev) => [{
+      id: designId,
+      name: prototype.designName,
+      tier: prototype.tier,
+      line: "Foundry",
+      category: prototype.family,
+      collection: prototype.collection,
+      status: "Prototype",
+      targetPrice: 0,
+      estimatedFilamentGrams: 0,
+      estimatedPrintHours: 0,
+      available: 0,
+      reorderPoint: 0,
+      designImagePath: "",
+      conceptImagePath: "",
+      supportedRealmVariants: [],
+      notes: [prototype.nextStep, prototype.notes].filter(Boolean).join("\n"),
+    }, ...prev]);
+    setSelectedDesignProjectId(designId);
+    setView("designs");
+    logActivity("create", "design-library", `Promoted ${prototype.designName} from Planning to the Design Library.`, designId);
+  }
+
   function updatePlannedFilament(id: string, patch: Partial<PlannedFilament>) {
     setPlannedFilament((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }
@@ -696,13 +951,69 @@ export function useForgekeeperState() {
     setPlannedFilament((prev) => prev.filter((item) => item.id !== id));
   }
 
+  function addPlannedFilament() {
+    if (!newPlannedFilamentName.trim()) return;
+    const id = uid("PF");
+    setPlannedFilament((prev) => [{
+      id,
+      name: newPlannedFilamentName.trim(),
+      brand: "",
+      materialFamily: "Other",
+      realms: [],
+      batchGroup: "",
+      status: "Planned",
+      priority: "Medium",
+      finishDirection: "",
+      notes: "",
+    }, ...prev]);
+    setNewPlannedFilamentName("");
+    logActivity("create", "planning", `Added planned material ${newPlannedFilamentName.trim()}.`, id);
+  }
+
+  function addDesignPlanning() {
+    if (!newDesignPlanningName.trim()) return;
+    const id = uid("PLAN");
+    setDesignPlanning((prev) => [{
+      id,
+      designFamily: "Unassigned",
+      baseDesign: newDesignPlanningName.trim(),
+      collection: "Unassigned",
+      tier: "Utility",
+      sharedChassis: "No",
+      coreFunction: "",
+      realmVariantSupport: "Optional",
+      coreParts: "",
+      variantParts: "",
+      baseAddOns: "",
+      topModuleOptions: "",
+      attachmentTypes: "",
+      bestPrinterFit: "",
+      prototypePriority: "Medium",
+      notes: "",
+    }, ...prev]);
+    setNewDesignPlanningName("");
+    logActivity("create", "planning", `Added design architecture record ${newDesignPlanningName.trim()}.`, id);
+  }
+
+  function updateDesignPlanning(id: string, patch: Partial<DesignPlanningRecord>) {
+    setDesignPlanning((prev) => prev.map((item) => item.id === id ? { ...item, ...patch } : item));
+  }
+
+  function removeDesignPlanning(id: string) {
+    const item = designPlanning.find((record) => record.id === id);
+    if (!item) return;
+    if (!window.confirm(`Remove design planning record ${item.baseDesign}?`)) return;
+    setDesignPlanning((prev) => prev.filter((record) => record.id !== id));
+  }
+
   function movePlannedFilamentToInventory(id: string) {
     const planned = plannedFilament.find((item) => item.id === id);
     if (!planned) return;
+    const filamentId = uid("FIL");
     setFilament((prev) => [
       {
-        id: uid("FIL"),
-        brand: planned.brand || "Amolen",
+        id: filamentId,
+        brand: planned.brand || "Generic",
         material: "PLA",
         colorName: planned.name,
         colorFamily: planned.materialFamily,
@@ -714,7 +1025,16 @@ export function useForgekeeperState() {
       },
       ...prev,
     ]);
+    setMaterialMovements((prev) => [{
+      id: uid("MOVE"),
+      filamentId,
+      type: "Purchase",
+      grams: 1000,
+      occurredAt: new Date().toISOString(),
+      notes: `Moved from Planning: ${planned.name}`,
+    }, ...prev]);
     setPlannedFilament((prev) => prev.map((item) => (item.id === id ? { ...item, status: "Active" } : item)));
+    logActivity("inventory", "materials", `Moved planned material ${planned.name} into inventory.`, filamentId);
   }
 
   function getDefaultSlicerForPrinter(printerName?: string) {
@@ -755,15 +1075,18 @@ export function useForgekeeperState() {
     if (mode === "file") return openLocalPathBestEffort(stl.filePath || stl.fileName);
     if (mode === "folder") return openLocalPathBestEffort(stl.folderPath || stl.libraryPath || folderFromPath(stl.filePath));
     if (mode === "blender") {
-      window.alert(`Blender path:\n${settings.blenderPath || "Not configured"}\n\nLinked STL:\n${stl.filePath || "No STL linked yet."}`);
-      return;
+      return launchExternalTool(getToolPath(settings, "blender"), stl.filePath, "Blender");
     }
-    window.alert(`${slicer === "anycubic" ? "Anycubic Slicer Next" : "OrcaSlicer"} path:\n${getToolPath(settings, slicer)}\n\nLinked STL:\n${stl.filePath || "No STL linked yet."}\n\nDirect launch with file arguments will be enabled in the next Tauri shell-permissions pass.`);
+    return launchExternalTool(
+      getToolPath(settings, slicer),
+      stl.filePath,
+      slicer === "anycubic" ? "Anycubic Slicer Next" : "OrcaSlicer",
+    );
   }
 
   function openExternalTool(tool: "orca" | "anycubic" | "blender" | "meshy") {
     if (tool === "meshy") return openWebUrl(settings.meshyUrl || "https://www.meshy.ai/");
-    return openLocalPathBestEffort(getToolPath(settings, tool));
+    return launchExternalTool(getToolPath(settings, tool), undefined, tool === "blender" ? "Blender" : tool === "anycubic" ? "Anycubic Slicer Next" : "OrcaSlicer");
   }
 
   function updateSettings(patch: Partial<AppSettings>) {
@@ -789,17 +1112,34 @@ export function useForgekeeperState() {
     };
   })); }
   function exportFilamentCsv() { downloadCsv("filament.csv", filament); }
+  function exportMaterialMovementsCsv() { downloadCsv("material-movements.csv", materialMovements); }
   function exportPrintersCsv() { downloadCsv("printers.csv", printers); }
   function exportMaintenanceCsv() { downloadCsv("maintenance.csv", maintenance); }
-  function exportBackupJson() { downloadJson(`forgekeeper-backup-${Date.now()}.json`, appData); }
+  function exportProductionBatchesCsv() { downloadCsv("production-batches.csv", productionBatches); }
+  function exportCostSnapshotsCsv() { downloadCsv("cost-snapshots.csv", costSnapshots); }
+  function exportActivityLogCsv() { downloadCsv("activity-log.csv", activityLog); }
+  function exportBackupJson() {
+    downloadJson(`forgekeeper-backup-${Date.now()}.json`, {
+      format: "forgekeeper-workspace",
+      schemaVersion: 4,
+      exportedAt: new Date().toISOString(),
+      data: appData,
+    });
+  }
 
   function importBackupFile(file: File) {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const parsed = migrateWorkspaceData(JSON.parse(String(reader.result || "{}")));
-        if (!Array.isArray(parsed.designProjects) || !Array.isArray(parsed.productionJobs)) {
+        const raw = JSON.parse(String(reader.result || "{}"));
+        if (!isForgekeeperBackup(raw)) {
           window.alert("This does not look like a Forgekeeper backup file.");
+          return;
+        }
+        const parsed = hydrateData(migrateWorkspaceData(raw));
+        const issues = inspectWorkspaceIntegrity(parsed);
+        if (issues.length > 0) {
+          window.alert(`The backup was not restored because it has ${issues.length} broken record relationship${issues.length === 1 ? "" : "s"}.`);
           return;
         }
         setDesignProjects(parsed.designProjects ?? []);
@@ -809,9 +1149,20 @@ export function useForgekeeperState() {
         setCollections(parsed.collections ?? []);
         setReleases(parsed.releases ?? []);
         setProductionJobs(parsed.productionJobs ?? []);
+        setProductionBatches(parsed.productionBatches ?? []);
         setFilament(parsed.filament ?? []);
+        setMaterialMovements(parsed.materialMovements ?? []);
         setPrinters(parsed.printers ?? []);
         setMaintenance(parsed.maintenance ?? []);
+        setCostSnapshots(parsed.costSnapshots ?? []);
+        const importEvent: ActivityEvent = {
+          id: uid("ACT"),
+          occurredAt: new Date().toISOString(),
+          kind: "import",
+          station: "administration",
+          summary: `Restored backup from ${file.name}.`,
+        };
+        setActivityLog([importEvent, ...(parsed.activityLog ?? [])].slice(0, 500));
         setSettings({ ...defaultExternalTools, ...defaultSettings, ...(parsed.settings ?? {}) });
         setPrototypes(parsed.prototypes ?? seedPrototypes);
         setPlannedFilament(parsed.plannedFilament ?? seedPlannedFilament);
@@ -830,6 +1181,7 @@ export function useForgekeeperState() {
   async function resetWorkspace() {
     if (!window.confirm("Reset this ForgeKeeper workspace? A fresh workspace will be empty and require setup.")) return;
     try {
+      exportBackupJson();
       await repository.clear();
       window.location.reload();
     } catch (error) {
@@ -838,7 +1190,10 @@ export function useForgekeeperState() {
     }
   }
 
-  function completeSetup(patch: Partial<AppSettings>) {
+  function completeSetup(
+    patch: Partial<AppSettings>,
+    initial?: { printerName?: string; materialName?: string; materialGrams?: number },
+  ) {
     setSettings((prev) => ({
       ...prev,
       ...patch,
@@ -846,17 +1201,60 @@ export function useForgekeeperState() {
       ownerName: patch.ownerName?.trim() || prev.ownerName,
       setupCompleted: true,
     }));
+    if (initial?.printerName?.trim() && printers.length === 0) {
+      const printerId = uid("PR");
+      setPrinters([{
+        id: printerId,
+        name: initial.printerName.trim(),
+        model: initial.printerName.trim(),
+        status: "Available",
+        buildVolume: "",
+        watts: Number(patch.machineWatts ?? settings.machineWatts),
+        nozzleDiameter: 0.4,
+        supportedMaterials: ["PLA", "PLA+", "PETG"],
+        maintenanceIntervalDays: 30,
+        activeJob: "",
+        notes: "",
+      }]);
+    }
+    if (initial?.materialName?.trim() && filament.length === 0) {
+      const filamentId = uid("FIL");
+      const grams = Math.max(0, Number(initial.materialGrams ?? 1000));
+      setFilament([{
+        id: filamentId,
+        brand: "Generic",
+        material: "PLA",
+        colorName: initial.materialName.trim(),
+        colorFamily: "Unknown",
+        gramsAvailable: grams,
+        reorderPointGrams: Math.min(250, grams),
+        spoolPrice: 0,
+        spoolWeightGrams: grams || 1000,
+        notes: "",
+      }]);
+      setMaterialMovements([{
+        id: uid("MOVE"),
+        filamentId,
+        type: "Purchase",
+        grams,
+        occurredAt: new Date().toISOString(),
+        notes: "Initial setup inventory",
+      }]);
+    }
+    logActivity("system", "administration", `Established workspace ${patch.workspaceName?.trim() || settings.workspaceName}.`);
   }
 
   return {
     view, setView, isReady, storageBackend, storageError, legacyImported,
-    designProjects, stls, concepts, variants, collections, releases, productionJobs, filament, printers, maintenance, settings,
+    designProjects, stls, concepts, variants, collections, releases, productionJobs, productionBatches, filament, materialMovements, printers, maintenance, costSnapshots, activityLog, settings,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, designPlanning, setDesignPlanning, realmMaterials, setRealmMaterials,
     selectedDesignProjectId, setSelectedDesignProjectId, designTab, setDesignTab,
     newDesignName, setNewDesignName, newStlName, setNewStlName, newConceptTitle, setNewConceptTitle,
-    newCollectionName, setNewCollectionName, newReleaseName, setNewReleaseName, newJobName, setNewJobName,
-    newFilamentName, setNewFilamentName, newPrinterName, setNewPrinterName, searchTerm, setSearchTerm, quickAction,
-    filteredDesignProjects, selectedDesignProject, designStls, designConcepts, designJobs, designVariants, designRelease, metrics, queueCounts, productionMetrics, getCostBreakdownForJob, getDesignCostGuide, getPrimaryStlForDesign, getLatestConceptForDesign, getDesignDisplayImage, getVariantDisplayImage,
+    newCollectionName, setNewCollectionName, newReleaseName, setNewReleaseName, newJobName, setNewJobName, newBatchName, setNewBatchName,
+    newFilamentName, setNewFilamentName, newPrinterName, setNewPrinterName,
+    newPrototypeName, setNewPrototypeName, newPlannedFilamentName, setNewPlannedFilamentName, newDesignPlanningName, setNewDesignPlanningName,
+    searchTerm, setSearchTerm, quickAction,
+    filteredDesignProjects, selectedDesignProject, designStls, designConcepts, designJobs, designVariants, designRelease, metrics, queueCounts, productionMetrics, integrityIssues, getCostBreakdownForJob, getDesignCostGuide, getPrimaryStlForDesign, getLatestConceptForDesign, getDesignDisplayImage, getVariantDisplayImage,
     triggerQuickAction,
     addDesign, updateDesign, removeDesign,
     addStl, updateStl, markPrimaryStl, removeStl,
@@ -865,12 +1263,17 @@ export function useForgekeeperState() {
     addCollection, updateCollection, removeCollection, assignDesignToCollection, setCollectionHero,
     addRelease, updateRelease, removeRelease, addDesignToRelease, removeDesignFromRelease,
     addProductionJob, updateProductionJob, removeProductionJob, consumeFilamentForJob,
+    addProductionBatch, updateProductionBatch, removeProductionBatch,
     addFilament, updateFilament, adjustFilament, removeFilament,
     addPrinter, updatePrinter, removePrinter,
     addMaintenance, updateMaintenance, removeMaintenance,
-    updateSettings, completeSetup, updatePrototype, updatePlannedFilament, removePlannedFilament, movePlannedFilamentToInventory, getDefaultSlicerForPrinter, getPreferredSlicerForStl, suggestStlLibraryFolder, suggestConceptLibraryFolder, linkStlPath, setStlSuggestedFolder, openStlAsset, openExternalTool,
+    updateSettings, completeSetup,
+    addPrototype, updatePrototype, removePrototype, promotePrototypeToDesign,
+    addPlannedFilament, updatePlannedFilament, removePlannedFilament, movePlannedFilamentToInventory,
+    addDesignPlanning, updateDesignPlanning, removeDesignPlanning,
+    getDefaultSlicerForPrinter, getPreferredSlicerForStl, suggestStlLibraryFolder, suggestConceptLibraryFolder, linkStlPath, setStlSuggestedFolder, openStlAsset, openExternalTool,
     exportDesignProjectsCsv, exportStlsCsv, exportConceptsCsv, exportVariantsCsv, exportCollectionsCsv, exportReleasesCsv, exportProductionJobsCsv,
-    exportFilamentCsv, exportPrintersCsv, exportMaintenanceCsv, exportBackupJson, importBackupFile, resetWorkspace,
+    exportFilamentCsv, exportMaterialMovementsCsv, exportPrintersCsv, exportMaintenanceCsv, exportProductionBatchesCsv, exportCostSnapshotsCsv, exportActivityLogCsv, exportBackupJson, importBackupFile, resetWorkspace,
   };
 }
 

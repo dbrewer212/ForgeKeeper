@@ -39,7 +39,13 @@ export function SettingsView({ state }: { state: ForgekeeperState }) {
           />
           <InfoLine
             title="Schema"
-            body="Workspace schema 3 · Design Projects and internal Production Jobs · legacy customer and sales fields excluded."
+            body="Workspace schema 4 · synchronized station tables, production batches, movement ledger, cost snapshots, and activity history."
+          />
+          <InfoLine
+            title={state.integrityIssues.length === 0 ? "Integrity Check Passed" : `${state.integrityIssues.length} Integrity Issue${state.integrityIssues.length === 1 ? "" : "s"}`}
+            body={state.integrityIssues.length === 0
+              ? "All operational references currently resolve to valid workspace records."
+              : "Open Reports to review broken record relationships before creating a backup."}
           />
         </div>
       </Card>
@@ -89,7 +95,7 @@ export function SettingsView({ state }: { state: ForgekeeperState }) {
             <Input value={state.settings.assetRootPath} onChange={(e) => state.updateSettings({ assetRootPath: e.target.value })} />
           </Field>
           <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4 text-sm text-slate-300">
-            Use this as the planned folder root for STL and Concept assets. True file upload/linking should be added after the cost engine is stable.
+            Use this as the folder root for STL, concept, and reference assets. Individual files and folders are linked from their Design Library records.
           </div>
         </div>
       </Card>

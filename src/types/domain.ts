@@ -5,9 +5,12 @@ export type DesignLine = "ForgeTech" | "Foundry" | "Relics of the Nine Realms" |
 export type DesignStatus = "Concept" | "Prototype" | "Active" | "Production" | "Archived";
 export type ProductionStatus = "Queued" | "Printing" | "Finishing" | "Complete" | "Cancelled";
 export type ProductionPriority = "Low" | "Normal" | "High" | "Rush";
+export type ProductionBatchStatus = "Planned" | "Ready" | "Running" | "Complete" | "Cancelled";
 export type ReleaseStatus = "Planning" | "Scheduled" | "Live";
 export type FilamentMaterial = "PLA" | "PLA+" | "PETG" | "ABS" | "TPU";
 export type PrinterStatus = "Available" | "Printing" | "Maintenance" | "Offline";
+export type MaterialMovementType = "Purchase" | "Adjustment" | "Production" | "Waste" | "Correction";
+export type ActivityKind = "create" | "update" | "complete" | "inventory" | "maintenance" | "import" | "system";
 export type DesignTab = "overview" | "stls" | "concepts" | "variants" | "jobs";
 export type AssetStatus = "Planned" | "Linked" | "Needs Update" | "Archived";
 export type SlicerKey = "orca" | "anycubic";
@@ -130,6 +133,25 @@ export type ProductionJob = {
   electricityRate: number;
   packagingCost: number;
   otherCost: number;
+  batchId?: string;
+  startedAt?: string;
+  completedAt?: string;
+  unitsCompleted?: number;
+  actualPrintHours?: number;
+  actualMaterialGrams?: number;
+  outcome?: "Success" | "Partial" | "Failed";
+  failureReason?: string;
+  costSnapshotId?: string;
+  notes: string;
+};
+
+export type ProductionBatch = {
+  id: string;
+  name: string;
+  status: ProductionBatchStatus;
+  printerId?: string;
+  scheduledStart: string;
+  completedAt?: string;
   notes: string;
 };
 
@@ -146,6 +168,16 @@ export type FilamentRecord = {
   notes: string;
 };
 
+export type MaterialMovement = {
+  id: string;
+  filamentId: string;
+  type: MaterialMovementType;
+  grams: number;
+  occurredAt: string;
+  productionJobId?: string;
+  notes: string;
+};
+
 export type PrinterRecord = {
   id: string;
   name: string;
@@ -153,6 +185,9 @@ export type PrinterRecord = {
   status: PrinterStatus;
   buildVolume: string;
   watts: number;
+  nozzleDiameter: number;
+  supportedMaterials: FilamentMaterial[];
+  maintenanceIntervalDays: number;
   activeJob: string;
   notes: string;
 };
@@ -163,6 +198,28 @@ export type MaintenanceRecord = {
   title: string;
   performedOn: string;
   notes: string;
+};
+
+export type CostSnapshot = {
+  id: string;
+  productionJobId: string;
+  capturedAt: string;
+  materialCost: number;
+  electricityCost: number;
+  laborCost: number;
+  finishingCost: number;
+  totalCost: number;
+  gramsUsed: number;
+  printHours: number;
+};
+
+export type ActivityEvent = {
+  id: string;
+  occurredAt: string;
+  kind: ActivityKind;
+  station: "command" | "design-library" | "planning" | "production" | "materials" | "printer-pool" | "reports" | "administration";
+  summary: string;
+  recordId?: string;
 };
 
 export type AppSettings = {
@@ -194,9 +251,13 @@ export type AppData = {
   collections: CollectionRecord[];
   releases: ReleaseRecord[];
   productionJobs: ProductionJob[];
+  productionBatches: ProductionBatch[];
   filament: FilamentRecord[];
+  materialMovements: MaterialMovement[];
   printers: PrinterRecord[];
   maintenance: MaintenanceRecord[];
+  costSnapshots: CostSnapshot[];
+  activityLog: ActivityEvent[];
   settings: AppSettings;
   prototypes: PlannedPrototype[];
   plannedFilament: PlannedFilament[];

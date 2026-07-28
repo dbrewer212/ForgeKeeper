@@ -102,6 +102,8 @@ export function getKeeperActions(alerts: KeeperAlert[]): KeeperAction[] {
       title: "Review alert",
       description: alert.message,
       priority,
+      targetView: alert.section,
+      targetId: alert.relatedRecordId,
     };
   });
 }
