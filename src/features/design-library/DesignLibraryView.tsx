@@ -12,7 +12,7 @@ import { inventoryState, pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 import type { AssetStatus, ProductionStatus, DesignProject, DesignLine, DesignStatus, DesignTab, DesignTier, DesignVariant, RealmVariant, SlicerKey } from "../../types/domain";
 
-const designTabs: DesignTab[] = ["overview", "stls", "concepts", "variants", "jobs"];
+const designTabs: DesignTab[] = ["overview", "stls", "concepts", "packets", "variants", "jobs"];
 const realmOptions: RealmVariant[] = ["Midgard", "Alfheim", "Svartalfheim", "Vanaheim", "Asgard", "Jotunheim", "Muspelheim", "Niflheim", "Helheim"];
 
 export function DesignLibraryView({ state }: { state: ForgekeeperState }) {
@@ -112,6 +112,7 @@ function DesignRail({ state }: { state: ForgekeeperState }) {
 function DesignWorkspace({ state, design }: { state: ForgekeeperState; design: DesignProject }) {
   const primaryStl = state.designStls.find((stl) => stl.isPrimary);
   const latestConcept = state.designConcepts[0];
+  const productPackets = state.intakePackets.filter((packet) => packet.productId === design.id);
   const inventory = inventoryState(design.available, design.reorderPoint);
   const costGuide = state.getDesignCostGuide(design);
 
@@ -155,6 +156,7 @@ function DesignWorkspace({ state, design }: { state: ForgekeeperState; design: D
               <AssetLine label="Primary STL" value={primaryStl?.name || "None assigned"} />
               <AssetLine label="STL File" value={primaryStl?.filePath || primaryStl?.fileName || "No STL file path"} />
               <AssetLine label="Latest Concept" value={latestConcept?.title || "No concept spec"} />
+              <AssetLine label="Foundry Packets" value={`${productPackets.length} retained`} />
               <AssetLine label="Variants" value={`${state.designVariants.length} configured`} />
               <AssetLine label="Release" value={state.designRelease?.name || "Unassigned"} />
               <AssetLine label="Material Cost" value={money(costGuide.material)} />
@@ -172,7 +174,7 @@ function DesignWorkspace({ state, design }: { state: ForgekeeperState; design: D
                 state.designTab === tab ? "border-amber-500/35 bg-amber-500/10 text-amber-100" : "border-white/10 bg-white/5 text-slate-300 hover:bg-white/10"
               }`}
             >
-              {tab === "concepts" ? "Concept Specs" : tab === "stls" ? "STL Files" : tab === "variants" ? "Variants" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === "concepts" ? "Concept Specs" : tab === "stls" ? "STL Files" : tab === "packets" ? "Foundry Packets" : tab === "variants" ? "Variants" : tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
           ))}
         </div>
@@ -181,9 +183,66 @@ function DesignWorkspace({ state, design }: { state: ForgekeeperState; design: D
       {state.designTab === "overview" && <DesignEditor state={state} />}
       {state.designTab === "stls" && <StlPanel state={state} />}
       {state.designTab === "concepts" && <ConceptPanel state={state} />}
+      {state.designTab === "packets" && <FoundryPacketsPanel state={state} design={design} />}
       {state.designTab === "variants" && <VariantPanel state={state} />}
       {state.designTab === "jobs" && <DesignJobsPanel state={state} />}
     </div>
+  );
+}
+
+function FoundryPacketsPanel({ state, design }: { state: ForgekeeperState; design: DesignProject }) {
+  const packets = state.intakePackets
+    .filter((packet) => packet.productId === design.id)
+    .sort((a, b) => Date.parse(b.importedAt) - Date.parse(a.importedAt));
+
+  return (
+    <Card title="Foundry Packet History">
+      <div className="mb-4 rounded-2xl border border-white/10 bg-[#0d131c] p-4 text-sm text-slate-400">
+        Every promoted product keeps its complete `.forgepack` history. Concept sheets, models, diagnostics, reviews, gates, and next actions remain attached to the stable Design Library record.
+      </div>
+      {packets.length === 0 ? (
+        <Empty text="No Foundry packets are linked to this design." />
+      ) : (
+        <div className="space-y-4">
+          {packets.map((packet) => (
+            <div key={packet.packetId} className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-slate-100">{packet.packetId}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {packet.stage} · {packet.conceptRevision} · imported {new Date(packet.importedAt).toLocaleString()}
+                  </div>
+                </div>
+                <Button onClick={() => state.openManagedAsset(packet.assetRoot)}>Open Packet Folder</Button>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <StatusRow label="Canon" value={packet.canonGate.status} status={packet.canonGate.status} />
+                <StatusRow label="Forgeability" value={packet.forgeability.status} status={packet.forgeability.status} />
+                <StatusRow label="Physical Trial" value={packet.pipeline.physicalTestStatus} status={packet.pipeline.physicalTestStatus} />
+              </div>
+
+              {packet.product?.purpose && <div className="mt-4 text-sm text-slate-300">{packet.product.purpose}</div>}
+              {packet.product?.measurements && <div className="mt-2 whitespace-pre-wrap text-sm text-slate-400"><span className="text-slate-200">Measurements:</span> {packet.product.measurements}</div>}
+              {packet.pipeline.nextAction && <div className="mt-2 whitespace-pre-wrap text-sm text-slate-400"><span className="text-slate-200">Next action:</span> {packet.pipeline.nextAction}</div>}
+              {packet.pipeline.blockedBy.length > 0 && <div className="mt-2 text-sm text-rose-300">Blocked by: {packet.pipeline.blockedBy.join("; ")}</div>}
+
+              <div className="mt-4 grid gap-2 lg:grid-cols-2">
+                {packet.assets.map((asset) => (
+                  <div key={asset.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm text-slate-200">{asset.label}</div>
+                      <div className="mt-1 truncate text-xs text-slate-500">{asset.kind} · {asset.version}</div>
+                    </div>
+                    <Button className="shrink-0" onClick={() => state.openManagedAsset(asset.importedPath)}>Open</Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 

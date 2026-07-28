@@ -181,6 +181,7 @@ function emptyState(): ForgekeeperState {
     linkStlPath: noop,
     setStlSuggestedFolder: noop,
     openStlAsset: noop,
+    openManagedAsset: noop,
     openExternalTool: noop,
     exportDesignProjectsCsv: noop,
     exportStlsCsv: noop,

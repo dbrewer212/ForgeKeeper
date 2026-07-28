@@ -15,6 +15,7 @@ import type {
   ForgepackTrialStatus,
   STLRecord,
 } from "../../types/domain";
+import { syncPlanningProductToDesign } from "./planningPromotion";
 
 export const FORGEPACK_FORMAT = "fenrir-forgepack";
 export const FORGEPACK_FORMAT_VERSION = 1;
@@ -315,6 +316,14 @@ export function applyForgepackImport(data: AppData, nativeImport: NativeForgepac
     assetRoot: nativeImport.assetRoot,
     importedAt,
     conceptRevision: manifest.product.conceptRevision,
+    product: {
+      tier: manifest.product.tier,
+      line: manifest.product.line,
+      category: manifest.product.category,
+      collection: manifest.product.collection,
+      purpose: manifest.product.purpose,
+      measurements: manifest.product.measurements,
+    },
     canonGate: manifest.canonGate,
     forgeability: manifest.forgeability,
     pipeline: manifest.pipeline,
@@ -429,6 +438,16 @@ export function applyForgepackImport(data: AppData, nativeImport: NativeForgepac
       const stlIndex = next.stls.findIndex((item) => item.id === stlId);
       if (stlIndex >= 0) next.stls[stlIndex] = stl;
       else next.stls.unshift(stl);
+    }
+  } else {
+    const synchronized = syncPlanningProductToDesign(next, manifest.product.id, {
+      createIfMissing: false,
+      recordActivity: false,
+      occurredAt: importedAt,
+    });
+    if (synchronized) {
+      Object.assign(next, synchronized.data);
+      updatedDesignProject = true;
     }
   }
 

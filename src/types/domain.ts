@@ -28,7 +28,7 @@ export type PrinterStatus = "Available" | "Printing" | "Maintenance" | "Offline"
 export type PrinterConnectionType = "Anycubic Cloud / LAN" | "Moonraker / Fluidd" | "Local / USB";
 export type MaterialMovementType = "Purchase" | "Adjustment" | "Production" | "Waste" | "Correction";
 export type ActivityKind = "create" | "update" | "complete" | "inventory" | "maintenance" | "import" | "system";
-export type DesignTab = "overview" | "stls" | "concepts" | "variants" | "jobs";
+export type DesignTab = "overview" | "stls" | "concepts" | "packets" | "variants" | "jobs";
 export type AssetStatus = "Planned" | "Linked" | "Needs Update" | "Archived";
 export type SlicerKey = "orca" | "anycubic";
 export type ForgepackStage =
@@ -334,6 +334,14 @@ export type ForgepackImportRecord = {
   assetRoot: string;
   importedAt: string;
   conceptRevision: string;
+  product?: {
+    tier: DesignTier;
+    line: DesignLine;
+    category: string;
+    collection: string;
+    purpose: string;
+    measurements: string;
+  };
   canonGate: ForgepackGate;
   forgeability: ForgepackEngineeringReview;
   pipeline: ForgepackPipeline;

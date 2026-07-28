@@ -32,6 +32,18 @@ assets/
 
 Forgekeeper never promotes an unapproved packet merely because it contains concept art or a model.
 
+## Planning promotion and continuity
+
+Manual promotion from Planning preserves the packet's stable product ID and materializes its complete imported history into the Design Library:
+
+- concept images become linked Concept Specs;
+- STL and 3MF assets become versioned model records;
+- measurements, gate summaries, risks, requirements, blockers, provenance, and next actions remain attached;
+- documents, diagnostics, references, and every prior packet remain visible through the Foundry Packets tab;
+- later Planning-stage packet imports synchronize with an already-promoted design without silently changing its approval status.
+
+Workspaces created by earlier bridge builds are repaired on load when a blank promoted record and its original Planning packet can be matched safely.
+
 ## Native safety boundary
 
 The Tauri importer:

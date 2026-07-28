@@ -21,6 +21,7 @@ import type { StorageBackend } from "../core/persistence/workspaceRepository";
 import { migrateWorkspaceData } from "../core/persistence/legacyMigration";
 import { createEmptyWorkspaceData, inspectWorkspaceIntegrity, isForgekeeperBackup } from "../core/domain/workspaceData";
 import { applyForgepackImport, type NativeForgepackImport } from "../core/forgepack/forgepack";
+import { syncPlanningProductToDesign } from "../core/forgepack/planningPromotion";
 import type {
   ActivityEvent,
   AppData,
@@ -88,7 +89,7 @@ export function hydrateData(stored: AppData | null): AppData {
         summary: "Installed researched profiles for the Kobra S1 Max Combo, Neptune 4 Max, and Kobra 3 Combo.",
       }]
     : [];
-  return {
+  let hydrated: AppData = {
     designProjects: (stored.designProjects ?? seedData.designProjects).map((design) => ({
       ...design,
       designImagePath: design.designImagePath ?? "",
@@ -152,6 +153,15 @@ export function hydrateData(stored: AppData | null): AppData {
     designPlanning: stored.designPlanning ?? seedData.designPlanning,
     realmMaterials: stored.realmMaterials ?? seedData.realmMaterials,
   };
+  for (const prototype of hydrated.prototypes) {
+    if (!hydrated.intakePackets.some((packet) => packet.productId === prototype.id || packet.productName === prototype.designName)) continue;
+    const synchronized = syncPlanningProductToDesign(hydrated, prototype.id, {
+      createIfMissing: false,
+      recordActivity: false,
+    });
+    if (synchronized) hydrated = synchronized.data;
+  }
+  return hydrated;
 }
 
 function printerStatusFromJobs(printer: PrinterRecord, productionJobs: ProductionJob[], designProjects: DesignProject[]): PrinterRecord {
@@ -946,36 +956,12 @@ export function useForgekeeperState() {
   }
 
   function promotePrototypeToDesign(id: string) {
-    const prototype = prototypes.find((item) => item.id === id);
-    if (!prototype) return;
-    const existing = designProjects.find((item) => item.name.toLowerCase() === prototype.designName.toLowerCase());
-    if (existing) {
-      setSelectedDesignProjectId(existing.id);
-      setView("designs");
-      return;
-    }
-    const designId = uid("P");
-    setDesignProjects((prev) => [{
-      id: designId,
-      name: prototype.designName,
-      tier: prototype.tier,
-      line: "Foundry",
-      category: prototype.family,
-      collection: prototype.collection,
-      status: "Prototype",
-      targetPrice: 0,
-      estimatedFilamentGrams: 0,
-      estimatedPrintHours: 0,
-      available: 0,
-      reorderPoint: 0,
-      designImagePath: "",
-      conceptImagePath: "",
-      supportedRealmVariants: [],
-      notes: [prototype.nextStep, prototype.notes].filter(Boolean).join("\n"),
-    }, ...prev]);
-    setSelectedDesignProjectId(designId);
+    const result = syncPlanningProductToDesign(appData, id, { createIfMissing: true });
+    if (!result) return;
+    replaceWorkspaceData(result.data);
+    setSelectedDesignProjectId(result.designProjectId);
     setView("designs");
-    logActivity("create", "design-library", `Promoted ${prototype.designName} from Planning to the Design Library.`, designId);
+    setDesignTab(result.packetCount ? "packets" : "overview");
   }
 
   function updatePlannedFilament(id: string, patch: Partial<PlannedFilament>) {
@@ -1123,6 +1109,10 @@ export function useForgekeeperState() {
   function openExternalTool(tool: "orca" | "anycubic" | "blender" | "meshy") {
     if (tool === "meshy") return openWebUrl(settings.meshyUrl || "https://www.meshy.ai/");
     return launchExternalTool(getToolPath(settings, tool), undefined, tool === "blender" ? "Blender" : tool === "anycubic" ? "Anycubic Slicer Next" : "OrcaSlicer");
+  }
+
+  function openManagedAsset(path: string) {
+    return openLocalPathBestEffort(path);
   }
 
   function updateSettings(patch: Partial<AppSettings>) {
@@ -1346,7 +1336,7 @@ export function useForgekeeperState() {
     addPrototype, updatePrototype, removePrototype, promotePrototypeToDesign,
     addPlannedFilament, updatePlannedFilament, removePlannedFilament, movePlannedFilamentToInventory,
     addDesignPlanning, updateDesignPlanning, removeDesignPlanning,
-    getDefaultSlicerForPrinter, getPreferredSlicerForStl, suggestStlLibraryFolder, suggestConceptLibraryFolder, linkStlPath, setStlSuggestedFolder, openStlAsset, openExternalTool,
+    getDefaultSlicerForPrinter, getPreferredSlicerForStl, suggestStlLibraryFolder, suggestConceptLibraryFolder, linkStlPath, setStlSuggestedFolder, openStlAsset, openManagedAsset, openExternalTool,
     exportDesignProjectsCsv, exportStlsCsv, exportConceptsCsv, exportVariantsCsv, exportCollectionsCsv, exportReleasesCsv, exportProductionJobsCsv,
     exportFilamentCsv, exportMaterialMovementsCsv, exportPrintersCsv, exportMaintenanceCsv, exportProductionBatchesCsv, exportCostSnapshotsCsv, exportActivityLogCsv, exportBackupJson, importBackupFile, resetWorkspace,
   };

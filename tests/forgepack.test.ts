@@ -6,6 +6,7 @@ import {
   type ForgepackManifest,
   type NativeForgepackImport,
 } from "../src/core/forgepack/forgepack";
+import { syncPlanningProductToDesign } from "../src/core/forgepack/planningPromotion";
 
 function manifest(overrides: Partial<ForgepackManifest["product"]> = {}): ForgepackManifest {
   return {
@@ -106,6 +107,126 @@ describe(".forgepack intake", () => {
       designProjectId: "DESIGN-MIMICWHELP",
       measurements: "Target height: 70 mm",
     });
+  });
+
+  it("promotes Planning with the stable product ID and complete packet history", () => {
+    const conceptPacket = manifest();
+    const firstImport = applyForgepackImport(
+      createEmptyWorkspaceData(),
+      nativeImport(conceptPacket),
+      "2026-07-28T12:00:00.000Z",
+    );
+
+    const meshPacket = manifest({
+      stage: "Planning",
+      purpose: "Create the canonical tabletop miniature.",
+      measurements: "Target height: 70 mm; rotate upright before slicing.",
+      conceptRevision: "v002",
+    });
+    meshPacket.packetId = "FP-MIMICWHELP-V002";
+    meshPacket.forgeability.status = "Changes Required";
+    meshPacket.forgeability.summary = "Repair one non-manifold edge.";
+    meshPacket.pipeline.nextAction = "Repair and re-export the STL.";
+    meshPacket.assets.push(
+      {
+        id: "ASSET-MODEL-1",
+        kind: "stl",
+        label: "Mimicwhelp raw model",
+        path: "assets/models/mimicwhelp-v001.stl",
+        sha256: "b".repeat(64),
+        version: "v001",
+        primary: true,
+      },
+      {
+        id: "ASSET-REVIEW-1",
+        kind: "document",
+        label: "Forgeability review",
+        path: "assets/documents/review.md",
+        sha256: "c".repeat(64),
+        version: "v001",
+        primary: false,
+      },
+    );
+    const secondImport = applyForgepackImport(
+      firstImport.data,
+      nativeImport(meshPacket),
+      "2026-07-28T13:00:00.000Z",
+    );
+
+    secondImport.data.designProjects.push({
+      id: "P-OLD-BLANK",
+      name: "Mimicwhelp",
+      tier: "Hero",
+      line: "Foundry",
+      category: "Resident",
+      collection: "Foundry",
+      status: "Prototype",
+      targetPrice: 0,
+      estimatedFilamentGrams: 0,
+      estimatedPrintHours: 0,
+      available: 0,
+      reorderPoint: 0,
+      designImagePath: "",
+      conceptImagePath: "",
+      supportedRealmVariants: [],
+      notes: "Blank promotion record.",
+    });
+
+    const promoted = syncPlanningProductToDesign(secondImport.data, "DESIGN-MIMICWHELP");
+    expect(promoted).not.toBeNull();
+    expect(promoted?.designProjectId).toBe("DESIGN-MIMICWHELP");
+    expect(promoted?.rekeyedDesignProject).toBe(true);
+    expect(promoted?.packetCount).toBe(2);
+    expect(promoted?.linkedConcepts).toBe(1);
+    expect(promoted?.linkedModels).toBe(1);
+    expect(promoted?.data.designProjects).toHaveLength(1);
+    expect(promoted?.data.designProjects[0]).toMatchObject({
+      id: "DESIGN-MIMICWHELP",
+      conceptImagePath: expect.stringContaining("mimicwhelp.png"),
+    });
+    expect(promoted?.data.stls[0]).toMatchObject({
+      designProjectId: "DESIGN-MIMICWHELP",
+      fileName: "mimicwhelp-v001.stl",
+      assetStatus: "Linked",
+    });
+    expect(promoted?.data.concepts[0]).toMatchObject({
+      designProjectId: "DESIGN-MIMICWHELP",
+      measurements: "Target height: 70 mm; rotate upright before slicing.",
+    });
+    expect(promoted?.data.designProjects[0].notes).toContain("Create the canonical tabletop miniature.");
+    expect(promoted?.data.designProjects[0].notes).toContain("Repair one non-manifold edge.");
+    expect(promoted?.data.intakePackets).toHaveLength(2);
+
+    const refinementPacket = manifest({
+      stage: "Planning",
+      purpose: "Create the canonical tabletop miniature.",
+      measurements: "Target height: 70 mm.",
+      conceptRevision: "v003",
+    });
+    refinementPacket.packetId = "FP-MIMICWHELP-V003";
+    refinementPacket.assets = [{
+      id: "ASSET-MODEL-2",
+      kind: "3mf",
+      label: "Mimicwhelp repaired model",
+      path: "assets/models/mimicwhelp-v002.3mf",
+      sha256: "d".repeat(64),
+      version: "v002",
+      primary: true,
+    }];
+    const synchronizedImport = applyForgepackImport(
+      promoted!.data,
+      nativeImport(refinementPacket),
+      "2026-07-28T14:00:00.000Z",
+    );
+    expect(synchronizedImport.updatedDesignProject).toBe(true);
+    expect(synchronizedImport.data.designProjects).toHaveLength(1);
+    expect(synchronizedImport.data.stls).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        designProjectId: "DESIGN-MIMICWHELP",
+        fileName: "mimicwhelp-v002.3mf",
+      }),
+    ]));
+    expect(synchronizedImport.data.intakePackets).toHaveLength(3);
   });
 
   it("rejects unsafe asset paths and premature production approval", () => {
