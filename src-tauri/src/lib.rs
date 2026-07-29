@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
@@ -14,6 +15,7 @@ const MAX_FORGEPACK_ENTRIES: usize = 200;
 const MAX_FORGEPACK_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_FORGEPACK_ASSET_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
+const MAX_MANAGED_IMAGE_BYTES: u64 = 32 * 1024 * 1024;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -87,6 +89,59 @@ fn launch_external_tool(tool_path: String, asset_path: Option<String>) -> Result
 
     let resolved_tool = resolve_tool_path(&tool_path);
     launch_tool_native(&resolved_tool, asset_path.as_deref())
+}
+
+#[tauri::command]
+fn read_managed_image(
+    app: tauri::AppHandle,
+    path: String,
+    asset_root_path: Option<String>,
+) -> Result<String, String> {
+    let source = fs::canonicalize(path.trim())
+        .map_err(|error| format!("Could not resolve the managed image: {error}"))?;
+    if !source.is_file() {
+        return Err("The managed image path is not a file.".to_string());
+    }
+
+    let mut allowed_roots = Vec::new();
+    if let Some(root) = asset_root_path.filter(|value| !value.trim().is_empty()) {
+        if let Ok(canonical) = fs::canonicalize(root.trim()) {
+            allowed_roots.push(canonical);
+        }
+    }
+    if let Ok(app_data) = app.path().app_data_dir() {
+        if let Ok(canonical) = fs::canonicalize(app_data.join("library")) {
+            allowed_roots.push(canonical);
+        }
+    }
+    if allowed_roots.is_empty() || !allowed_roots.iter().any(|root| source.starts_with(root)) {
+        return Err("The image is outside Forgekeeper's managed library.".to_string());
+    }
+
+    let extension = source
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let mime = match extension.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        "bmp" => "image/bmp",
+        _ => return Err("Forgekeeper only previews supported bitmap image files.".to_string()),
+    };
+    let metadata = fs::metadata(&source)
+        .map_err(|error| format!("Could not inspect the managed image: {error}"))?;
+    if metadata.len() > MAX_MANAGED_IMAGE_BYTES {
+        return Err("The managed image exceeds the 32 MiB preview limit.".to_string());
+    }
+    let bytes = fs::read(&source)
+        .map_err(|error| format!("Could not read the managed image: {error}"))?;
+    Ok(format!(
+        "data:{mime};base64,{}",
+        BASE64_STANDARD.encode(bytes)
+    ))
 }
 
 fn safe_segment(value: &str, label: &str) -> Result<String, String> {
@@ -494,6 +549,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_path,
             launch_external_tool,
+            read_managed_image,
             import_forgepack
         ])
         .run(tauri::generate_context!())

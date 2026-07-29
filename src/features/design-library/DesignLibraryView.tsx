@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { AssetLaunchpad } from "../../components/assets/AssetLaunchpad";
+import { ManagedImage } from "../../components/assets/ManagedImage";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
@@ -81,7 +82,12 @@ function DesignRail({ state }: { state: ForgekeeperState }) {
                 }`}
               >
                 <div className="flex items-start gap-3">
-                  <DesignThumb src={state.getDesignDisplayImage(design)} alt={design.name} className="h-14 w-14 shrink-0" />
+                  <DesignThumb
+                    src={state.getDesignDisplayImage(design)}
+                    assetRootPath={state.settings.forgekeeperLibraryPath || state.settings.assetRootPath}
+                    alt={design.name}
+                    className="h-14 w-14 shrink-0"
+                  />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-semibold text-slate-100">{design.name}</div>
                     <div className="mt-1 truncate text-xs text-slate-500">{design.collection}</div>
@@ -124,7 +130,11 @@ function DesignWorkspace({ state, design }: { state: ForgekeeperState; design: D
       >
         <div className="grid gap-5 xl:grid-cols-[320px,1fr,360px]">
           <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-3">
-            <DesignImagePanel design={design} imageSrc={state.getDesignDisplayImage(design)} />
+            <DesignImagePanel
+              design={design}
+              imageSrc={state.getDesignDisplayImage(design)}
+              assetRootPath={state.settings.forgekeeperLibraryPath || state.settings.assetRootPath}
+            />
           </div>
 
           <div>
@@ -162,6 +172,20 @@ function DesignWorkspace({ state, design }: { state: ForgekeeperState; design: D
               <AssetLine label="Material Cost" value={money(costGuide.material)} />
               <AssetLine label="Electricity Cost" value={money(costGuide.electricity)} />
             </div>
+            {(primaryStl || latestConcept) && (
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-white/10 pt-4">
+                {primaryStl && (
+                  <>
+                    <Button variant="ghost" onClick={() => state.openStlAsset(primaryStl.id, "file")}>Open STL</Button>
+                    <Button variant="ghost" onClick={() => state.openStlAsset(primaryStl.id, "folder")}>Open Folder</Button>
+                    <Button onClick={() => state.setDesignTab("stls")}>View STL Record</Button>
+                  </>
+                )}
+                {latestConcept?.imagePath && (
+                  <Button variant="ghost" onClick={() => state.openManagedAsset(latestConcept.imagePath || "")}>Open Concept</Button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -545,7 +569,12 @@ function ConceptPanel({ state }: { state: ForgekeeperState }) {
               </div>
 
               <div className="mb-4 grid gap-4 xl:grid-cols-[260px,1fr]">
-                <DesignImagePanel design={state.selectedDesignProject} imageSrc={concept.imagePath || concept.imageName || state.selectedDesignProject?.conceptImagePath || ""} label="Concept Art" />
+                <DesignImagePanel
+                  design={state.selectedDesignProject}
+                  imageSrc={concept.imagePath || concept.imageName || state.selectedDesignProject?.conceptImagePath || ""}
+                  assetRootPath={state.settings.forgekeeperLibraryPath || state.settings.assetRootPath}
+                  label="Concept Art"
+                />
                 <div className="rounded-2xl border border-white/10 bg-[#111722] p-4 text-sm text-slate-400">
                   Use Concept Specs for measurements, listing content, visual identity, variant notes, and STL association. This is the design intelligence layer.
                 </div>
@@ -781,30 +810,59 @@ function DesignJobsPanel({ state }: { state: ForgekeeperState }) {
 }
 
 
-function DesignThumb({ src, alt, className = "" }: { src?: string; alt: string; className?: string }) {
-  if (!src) {
-    return (
-      <div className={`flex items-center justify-center rounded-xl border border-white/10 bg-black/30 text-[10px] uppercase tracking-wide text-slate-600 ${className}`}>
-        No Image
-      </div>
-    );
-  }
+function ImageFallback({ className = "", text = "No Image" }: { className?: string; text?: string }) {
   return (
-    <div className={`overflow-hidden rounded-xl border border-white/10 bg-black/30 ${className}`}>
-      <img src={src} alt={alt} className="h-full w-full object-cover" />
+    <div className={`flex h-full w-full items-center justify-center bg-black/30 text-center text-[10px] uppercase tracking-wide text-slate-600 ${className}`}>
+      {text}
     </div>
   );
 }
 
-function DesignImagePanel({ design, imageSrc, label = "Design Image" }: { design?: DesignProject; imageSrc?: string; label?: string }) {
+function DesignThumb({
+  src,
+  assetRootPath,
+  alt,
+  className = "",
+}: {
+  src?: string;
+  assetRootPath?: string;
+  alt: string;
+  className?: string;
+}) {
+  return (
+    <div className={`overflow-hidden rounded-xl border border-white/10 bg-black/30 ${className}`}>
+      <ManagedImage
+        src={src}
+        assetRootPath={assetRootPath}
+        alt={alt}
+        className="h-full w-full object-cover"
+        fallback={<ImageFallback />}
+      />
+    </div>
+  );
+}
+
+function DesignImagePanel({
+  design,
+  imageSrc,
+  assetRootPath,
+  label = "Design Image",
+}: {
+  design?: DesignProject;
+  imageSrc?: string;
+  assetRootPath?: string;
+  label?: string;
+}) {
   return (
     <div className="space-y-3">
       <div className="aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-black/30">
-        {imageSrc ? (
-          <img src={imageSrc} alt={design?.name || label} className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full items-center justify-center text-xs uppercase tracking-[0.18em] text-slate-600">No Image</div>
-        )}
+        <ManagedImage
+          src={imageSrc}
+          assetRootPath={assetRootPath}
+          alt={design?.name || label}
+          className="h-full w-full object-cover"
+          fallback={<ImageFallback text={imageSrc ? "Image Unavailable" : "No Image"} className="text-xs tracking-[0.18em]" />}
+        />
       </div>
       <div>
         <div className="text-xs uppercase tracking-[0.18em] text-slate-500">{label}</div>
@@ -864,7 +922,7 @@ function AssetLine({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start justify-between gap-3 border-b border-white/5 pb-2 last:border-b-0 last:pb-0">
       <span className="text-slate-500">{label}</span>
-      <span className="max-w-[190px] text-right text-slate-200">{value}</span>
+      <span className="max-w-[190px] break-all text-right text-slate-200">{value}</span>
     </div>
   );
 }
