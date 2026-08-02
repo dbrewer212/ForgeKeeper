@@ -13,6 +13,7 @@ export type AssetStatus = "Planned" | "Linked" | "Needs Update" | "Archived";
 export type SlicerKey = "orca" | "anycubic";
 export type ViewKey = "dashboard" | "catalog" | "collections" | "releases" | "orders" | "filament" | "printers" | "planning" | "reports" | "settings";
 export type QuickActionKey = "newProduct" | "newOrder" | "newFilament" | "newPrinter";
+export type GenerationProvider = "meshy" | "printpal";
 
 export type RealmVariant =
   | "Midgard"
@@ -169,6 +170,23 @@ export type MaintenanceRecord = {
   notes: string;
 };
 
+export type GenerationJobRecord = {
+  id: string;
+  provider: GenerationProvider;
+  externalJobId: string;
+  productId: string;
+  conceptId: string;
+  sourceImagePath: string;
+  status: string;
+  progress?: number;
+  creditsUsed?: number;
+  creditsRemaining?: number;
+  outputUrls: Record<string, string>;
+  createdAt: string;
+  updatedAt: string;
+  error?: string;
+};
+
 export type AppSettings = {
   laborRate: number;
   electricityRate: number;
@@ -180,6 +198,7 @@ export type AppSettings = {
   assetRootPath: string;
   productionHoursPerDay: number;
   forgekeeperLibraryPath?: string;
+  apiCredentialFilePath?: string;
   orcaSlicerPath?: string;
   anycubicSlicerPath?: string;
   blenderPath?: string;
@@ -198,6 +217,7 @@ export type AppData = {
   filament: FilamentRecord[];
   printers: PrinterRecord[];
   maintenance: MaintenanceRecord[];
+  generationJobs: GenerationJobRecord[];
   settings: AppSettings;
   prototypes: PlannedPrototype[];
   plannedFilament: PlannedFilament[];

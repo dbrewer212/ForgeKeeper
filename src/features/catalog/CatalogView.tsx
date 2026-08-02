@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { AssetLaunchpad } from "../../components/assets/AssetLaunchpad";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -6,6 +6,7 @@ import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Textarea } from "../../components/ui/Textarea";
 import { money } from "../../lib/format";
+import { downloadGenerationAsset, getGenerationStatus, submitMeshyImageGeneration, submitPrintPalImageGeneration, type ProviderKey } from "../../lib/generationProviders";
 import { inventoryState, pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 import type { OrderStatus, Product, ProductLine, ProductStatus, ProductTab, ProductTier, ProductVariant, RealmVariant } from "../../types/domain";
@@ -519,12 +520,146 @@ function ConceptPanel({ state }: { state: ForgekeeperState }) {
                 <Field label="Internal Notes" className="lg:col-span-2">
                   <Textarea value={concept.notes} onChange={(e) => state.updateConcept(concept.id, { notes: e.target.value })} placeholder="Finish notes, design changes, print recommendations, paint ideas..." className="min-h-[100px] w-full" />
                 </Field>
+                <div className="lg:col-span-2">
+                  <ConceptGenerationPanel state={state} concept={concept} />
+                </div>
               </div>
             </div>
           ))
         )}
       </div>
     </Card>
+  );
+}
+
+function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; concept: ForgekeeperState["concepts"][number] }) {
+  const [provider, setProvider] = useState<ProviderKey>("printpal");
+  const [quality, setQuality] = useState("superplus");
+  const [working, setWorking] = useState(false);
+  const [message, setMessage] = useState("");
+  const imagePath = concept.imagePath || concept.imageName || "";
+  const apiFilePath = state.settings.apiCredentialFilePath || "";
+  const jobs = state.generationJobs.filter((job) => job.conceptId === concept.id);
+
+  async function submitGeneration() {
+    if (!apiFilePath) {
+      setMessage("Set the local API credential file in Settings first.");
+      return;
+    }
+    if (!imagePath) {
+      setMessage("Link a concept image before submitting a generation.");
+      return;
+    }
+    if (!window.confirm(`Submit ${concept.title} to ${provider === "printpal" ? "PrintPal" : "Meshy"}? This action consumes provider credits.`)) return;
+
+    setWorking(true);
+    setMessage("");
+    try {
+      const submission = provider === "printpal"
+        ? await submitPrintPalImageGeneration(apiFilePath, imagePath, { quality, format: "stl" })
+        : await submitMeshyImageGeneration(apiFilePath, imagePath, { shouldTexture: false, targetPolycount: 100000 });
+      state.recordGenerationJob({
+        provider,
+        externalJobId: submission.jobId,
+        productId: concept.productId,
+        conceptId: concept.id,
+        sourceImagePath: imagePath,
+        status: submission.status,
+        creditsUsed: submission.creditsUsed ?? undefined,
+        creditsRemaining: submission.creditsRemaining ?? undefined,
+        outputUrls: submission.downloadUrl ? { download: submission.downloadUrl } : {},
+      });
+      setMessage(`${provider === "printpal" ? "PrintPal" : "Meshy"} job ${submission.jobId} submitted.`);
+    } catch (error) {
+      setMessage(String(error));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function refreshJob(localId: string, externalJobId: string, jobProvider: ProviderKey) {
+    setWorking(true);
+    setMessage("");
+    try {
+      const status = await getGenerationStatus(apiFilePath, jobProvider, externalJobId);
+      state.updateGenerationJob(localId, {
+        status: status.status,
+        progress: status.progress ?? undefined,
+        creditsUsed: status.creditsUsed ?? undefined,
+        outputUrls: status.outputUrls,
+        error: status.error ?? undefined,
+      });
+      setMessage(`${jobProvider === "printpal" ? "PrintPal" : "Meshy"} job refreshed: ${status.status}.`);
+    } catch (error) {
+      setMessage(String(error));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function downloadStl(localId: string, externalJobId: string, jobProvider: ProviderKey) {
+    const productName = state.selectedProduct?.name || "GeneratedModel";
+    const safeName = `${productName}-${concept.title}`.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-|-$/g, "");
+    const defaultPath = `${state.suggestStlLibraryFolder(concept.productId, "v001")}\\${safeName || "generated-model"}.stl`;
+    const outputPath = window.prompt("Save the completed STL to:", defaultPath);
+    if (!outputPath) return;
+    setWorking(true);
+    setMessage("");
+    try {
+      const result = await downloadGenerationAsset(apiFilePath, jobProvider, externalJobId, "stl", outputPath);
+      state.linkGeneratedStl(localId, result.outputPath);
+      setMessage(`STL saved and linked to ${concept.title}. It is recorded as generated—not print approved.`);
+    } catch (error) {
+      setMessage(String(error));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-amber-500/15 bg-amber-500/5 p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="font-semibold text-slate-100">Generate Print Model</div>
+          <div className="mt-1 text-xs text-slate-400">Submissions require confirmation and are recorded with provider, source image, job ID, status, and credit use.</div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Select value={provider} onChange={(event) => setProvider(event.target.value as ProviderKey)}>
+            <option value="printpal">PrintPal</option>
+            <option value="meshy">Meshy</option>
+          </Select>
+          {provider === "printpal" ? (
+            <Select value={quality} onChange={(event) => setQuality(event.target.value)}>
+              <option value="default">Default · 4 credits</option>
+              <option value="high">High · 6 credits</option>
+              <option value="ultra">Ultra · 8 credits</option>
+              <option value="super">Super · 20 credits</option>
+              <option value="superplus">Super+ · 30 credits</option>
+            </Select>
+          ) : null}
+          <Button onClick={submitGeneration} disabled={working}>{working ? "Working..." : "Submit Generation"}</Button>
+        </div>
+      </div>
+
+      {message ? <div className="mb-3 rounded-xl border border-white/10 bg-[#0d131c] p-3 text-sm text-slate-300">{message}</div> : null}
+
+      {jobs.length ? (
+        <div className="space-y-2">
+          {jobs.map((job) => (
+            <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#0d131c] p-3 text-sm">
+              <div>
+                <div className="font-medium text-slate-200">{job.provider === "printpal" ? "PrintPal" : "Meshy"} · {job.status}</div>
+                <div className="mt-1 text-xs text-slate-500">{job.externalJobId}{job.creditsUsed != null ? ` · ${job.creditsUsed} credits` : ""}</div>
+              </div>
+              <Button variant="ghost" onClick={() => refreshJob(job.id, job.externalJobId, job.provider)} disabled={working}>Refresh</Button>
+              {job.status.toLowerCase() === "completed" || job.status.toLowerCase() === "succeeded" ? (
+                <Button onClick={() => downloadStl(job.id, job.externalJobId, job.provider)} disabled={working}>Download & Link STL</Button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

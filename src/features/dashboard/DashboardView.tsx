@@ -4,10 +4,12 @@ import { KeeperAlertPanel } from "../../components/keeper/KeeperAlertPanel";
 import { KeeperActionPanel } from "../../components/keeper/KeeperActionPanel";
 import { money } from "../../lib/format";
 import { inventoryState, pillClass } from "../../lib/inventory";
+import { getKeeperAlerts } from "../../lib/keeper/keeperAlerts";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 
 export function DashboardView({ state }: { state: ForgekeeperState }) {
   const production = state.productionMetrics;
+  const keeperAlerts = getKeeperAlerts(state);
 
   return (
     <div className="space-y-6">
@@ -22,7 +24,7 @@ export function DashboardView({ state }: { state: ForgekeeperState }) {
 
       <div className="grid gap-6 xl:grid-cols-2">
         <KeeperAlertPanel state={state} title="Keeper System Alerts" />
-        <KeeperActionPanel state={state} title="Keeper Suggested Actions" />
+        <KeeperActionPanel alerts={keeperAlerts} onNavigate={(view) => state.setView(view as ForgekeeperState["view"])} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">

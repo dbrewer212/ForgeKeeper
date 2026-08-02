@@ -14,6 +14,7 @@ import type {
   CollectionRecord,
   ConceptSpec,
   FilamentRecord,
+  GenerationJobRecord,
   MaintenanceRecord,
   OrderRecord,
   OrderStatus,
@@ -39,6 +40,7 @@ const seedData: AppData = {
   filament: seedFilament,
   printers: seedPrinters,
   maintenance: [],
+  generationJobs: [],
   settings: { ...defaultExternalTools, ...defaultSettings },
   prototypes: seedPrototypes,
   plannedFilament: seedPlannedFilament,
@@ -99,6 +101,7 @@ function hydrateData(): AppData {
       watts: printer.watts ?? defaultSettings.machineWatts,
     })),
     maintenance: stored.maintenance ?? [],
+    generationJobs: stored.generationJobs ?? [],
     settings: { ...defaultExternalTools, ...defaultSettings, ...(stored.settings ?? {}) },
     prototypes: stored.prototypes ?? seedData.prototypes,
     plannedFilament: stored.plannedFilament ?? seedData.plannedFilament,
@@ -136,6 +139,7 @@ export function useForgekeeperState() {
   const [filament, setFilament] = useState<FilamentRecord[]>(initial.filament);
   const [printers, setPrinters] = useState<PrinterRecord[]>(initial.printers);
   const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>(initial.maintenance);
+  const [generationJobs, setGenerationJobs] = useState<GenerationJobRecord[]>(initial.generationJobs);
   const [settings, setSettings] = useState<AppSettings>(initial.settings);
   const [prototypes, setPrototypes] = useState<PlannedPrototype[]>(initial.prototypes);
   const [plannedFilament, setPlannedFilament] = useState<PlannedFilament[]>(initial.plannedFilament);
@@ -166,6 +170,7 @@ export function useForgekeeperState() {
     filament,
     printers,
     maintenance,
+    generationJobs,
     settings,
     prototypes,
     plannedFilament,
@@ -175,7 +180,7 @@ export function useForgekeeperState() {
 
   useEffect(() => {
     saveStoredData(appData);
-  }, [products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
+  }, [products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
 
   useEffect(() => {
     setPrinters((prev) => prev.map((printer) => printerStatusFromOrders(printer, orders, products)));
@@ -636,6 +641,45 @@ export function useForgekeeperState() {
     setMaintenance((prev) => prev.map((entry) => entry.id === id ? { ...entry, ...patch } : entry));
   }
 
+  function recordGenerationJob(job: Omit<GenerationJobRecord, "id" | "createdAt" | "updatedAt">) {
+    const timestamp = new Date().toISOString();
+    const record: GenerationJobRecord = { ...job, id: uid("GEN"), createdAt: timestamp, updatedAt: timestamp };
+    setGenerationJobs((previous) => [record, ...previous]);
+    return record;
+  }
+
+  function updateGenerationJob(id: string, patch: Partial<GenerationJobRecord>) {
+    setGenerationJobs((previous) => previous.map((job) => job.id === id ? { ...job, ...patch, updatedAt: new Date().toISOString() } : job));
+  }
+
+  function linkGeneratedStl(jobId: string, filePath: string) {
+    const job = generationJobs.find((item) => item.id === jobId);
+    const concept = job ? concepts.find((item) => item.id === job.conceptId) : undefined;
+    if (!job || !concept) return;
+    const stlId = uid("STL");
+    const hasPrimary = stls.some((item) => item.productId === job.productId && item.isPrimary);
+    const record: STLRecord = {
+      id: stlId,
+      productId: job.productId,
+      name: `${concept.title} · ${job.provider === "printpal" ? "PrintPal" : "Meshy"}`,
+      fileName: filenameFromPath(filePath),
+      filePath,
+      folderPath: folderFromPath(filePath),
+      libraryPath: folderFromPath(filePath),
+      version: "v001",
+      isPrimary: !hasPrimary,
+      linkedConceptId: concept.id,
+      assetStatus: "Linked",
+      notes: `Generated through ${job.provider}. External job: ${job.externalJobId}. Geometry and print validation are still required.`,
+    };
+    setStls((previous) => [record, ...previous]);
+    setConcepts((previous) => previous.map((item) => item.id === concept.id ? {
+      ...item,
+      linkedStlId: item.linkedStlId || stlId,
+      linkedStlIds: Array.from(new Set([...(item.linkedStlIds || []), stlId])),
+    } : item));
+  }
+
   function removeMaintenance(id: string) {
     setMaintenance((prev) => prev.filter((entry) => entry.id !== id));
   }
@@ -770,6 +814,7 @@ export function useForgekeeperState() {
         setFilament(parsed.filament ?? []);
         setPrinters(parsed.printers ?? []);
         setMaintenance(parsed.maintenance ?? []);
+        setGenerationJobs(parsed.generationJobs ?? []);
         setSettings({ ...defaultExternalTools, ...defaultSettings, ...(parsed.settings ?? {}) });
         setPrototypes(parsed.prototypes ?? seedPrototypes);
         setPlannedFilament(parsed.plannedFilament ?? seedPlannedFilament);
@@ -793,7 +838,7 @@ export function useForgekeeperState() {
 
   return {
     view, setView,
-    products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, settings,
+    products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, settings,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
     selectedProductId, setSelectedProductId, productTab, setProductTab,
     newProductName, setNewProductName, newStlName, setNewStlName, newConceptTitle, setNewConceptTitle,
@@ -811,6 +856,7 @@ export function useForgekeeperState() {
     addFilament, updateFilament, adjustFilament, removeFilament,
     addPrinter, updatePrinter, removePrinter,
     addMaintenance, updateMaintenance, removeMaintenance,
+    recordGenerationJob, updateGenerationJob, linkGeneratedStl,
     updateSettings, updatePrototype, updatePlannedFilament, removePlannedFilament, movePlannedFilamentToInventory, getDefaultSlicerForPrinter, getPreferredSlicerForStl, suggestStlLibraryFolder, suggestConceptLibraryFolder, linkStlPath, setStlSuggestedFolder, openStlAsset, openExternalTool,
     exportProductsCsv, exportStlsCsv, exportConceptsCsv, exportVariantsCsv, exportCollectionsCsv, exportReleasesCsv, exportOrdersCsv,
     exportFilamentCsv, exportPrintersCsv, exportMaintenanceCsv, exportBackupJson, importBackupFile, resetWorkspace,
