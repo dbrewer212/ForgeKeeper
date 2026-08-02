@@ -6,6 +6,7 @@ import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Textarea } from "../../components/ui/Textarea";
 import { money } from "../../lib/format";
+import { expectedGenerationCredits, generationSpend } from "../../lib/generationBudget";
 import { downloadGenerationAsset, getGenerationStatus, submitMeshyImageGeneration, submitPrintPalImageGeneration, type ProviderKey } from "../../lib/generationProviders";
 import { inventoryState, pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
@@ -497,6 +498,9 @@ function ConceptPanel({ state }: { state: ForgekeeperState }) {
                 <Field label="Concept Image Path">
                   <Input value={concept.imagePath || ""} onChange={(e) => state.updateConcept(concept.id, { imagePath: e.target.value })} placeholder="C:\ForgekeeperLibrary\Concepts\Product\concept-art\front.png" />
                 </Field>
+                <Field label="Generator-Safe Reference Path">
+                  <Input value={concept.generationReferencePath || ""} onChange={(e) => state.updateConcept(concept.id, { generationReferencePath: e.target.value })} placeholder="One isolated model and pose only—never the full concept sheet" />
+                </Field>
                 <Field label="Measurement Image Path">
                   <Input value={concept.measurementImagePath || ""} onChange={(e) => state.updateConcept(concept.id, { measurementImagePath: e.target.value })} placeholder="C:\ForgekeeperLibrary\Concepts\Product\measurements\dims.png" />
                 </Field>
@@ -535,11 +539,33 @@ function ConceptPanel({ state }: { state: ForgekeeperState }) {
 function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; concept: ForgekeeperState["concepts"][number] }) {
   const [provider, setProvider] = useState<ProviderKey>("printpal");
   const [quality, setQuality] = useState("superplus");
+  const [generationPurpose, setGenerationPurpose] = useState("Create one print-model revision from this approved concept.");
+  const [providerReason, setProviderReason] = useState("");
+  const [retryReason, setRetryReason] = useState("");
+  const [creditCeiling, setCreditCeiling] = useState("");
+  const [checks, setChecks] = useState({
+    approvedConcept: false,
+    isolatedReference: false,
+    providerReviewed: false,
+    exactSubmission: false,
+  });
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
-  const imagePath = concept.imagePath || concept.imageName || "";
+  const imagePath = concept.generationReferencePath || "";
   const apiFilePath = state.settings.apiCredentialFilePath || "";
   const jobs = state.generationJobs.filter((job) => job.conceptId === concept.id);
+  const spend = generationSpend(state.generationJobs, concept.productId);
+  const expectedCredits = expectedGenerationCredits(provider, quality, false);
+  const parsedCeiling = Number(creditCeiling);
+  const projectedCommitted = spend.committed + expectedCredits;
+  const allChecksPassed = Object.values(checks).every(Boolean);
+  const retryIsDocumented = jobs.length === 0 || retryReason.trim().length > 0;
+  const withinBudget = Number.isFinite(parsedCeiling) && parsedCeiling >= projectedCommitted;
+  const canSubmit = Boolean(apiFilePath && imagePath && generationPurpose.trim() && providerReason.trim() && allChecksPassed && retryIsDocumented && withinBudget && !working);
+
+  function toggleCheck(key: keyof typeof checks) {
+    setChecks((current) => ({ ...current, [key]: !current[key] }));
+  }
 
   async function submitGeneration() {
     if (!apiFilePath) {
@@ -547,17 +573,47 @@ function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; c
       return;
     }
     if (!imagePath) {
-      setMessage("Link a concept image before submitting a generation.");
+      setMessage("Link a separate generator-safe reference before submitting. The canonical concept sheet cannot be used directly.");
       return;
     }
-    if (!window.confirm(`Submit ${concept.title} to ${provider === "printpal" ? "PrintPal" : "Meshy"}? This action consumes provider credits.`)) return;
+    if (!allChecksPassed) {
+      setMessage("Complete every production preflight check before submitting.");
+      return;
+    }
+    if (!generationPurpose.trim() || !providerReason.trim()) {
+      setMessage("Record the model purpose and why this provider is the best route.");
+      return;
+    }
+    if (!retryIsDocumented) {
+      setMessage("Diagnose the previous attempt before authorizing another paid generation.");
+      return;
+    }
+    if (!withinBudget) {
+      setMessage(`The product credit ceiling must be at least ${projectedCommitted} credits for this one attempt.`);
+      return;
+    }
+
+    const providerName = provider === "printpal" ? "PrintPal" : "Meshy";
+    const approvalSummary = [
+      `ONE PAID GENERATION`,
+      `Concept: ${concept.title}`,
+      `Provider: ${providerName}`,
+      `Source: ${imagePath}`,
+      `Mode: ${provider === "printpal" ? `Image-to-3D · ${quality}` : "Image-to-3D · Meshy-6/latest · untextured"}`,
+      `Output: STL`,
+      `This attempt: ${expectedCredits} credits`,
+      `Product committed before this attempt: ${spend.committed} credits`,
+      `Projected product commitment: ${projectedCommitted} / ${parsedCeiling} authorized credits`,
+      `No automatic retry is authorized.`,
+    ].join("\n");
+    if (!window.confirm(`${approvalSummary}\n\nSubmit this exact job?`)) return;
 
     setWorking(true);
     setMessage("");
     try {
       const submission = provider === "printpal"
-        ? await submitPrintPalImageGeneration(apiFilePath, imagePath, { quality, format: "stl" })
-        : await submitMeshyImageGeneration(apiFilePath, imagePath, { shouldTexture: false, targetPolycount: 100000 });
+        ? await submitPrintPalImageGeneration(apiFilePath, imagePath, { quality, format: "stl", authorizedCredits: expectedCredits })
+        : await submitMeshyImageGeneration(apiFilePath, imagePath, { shouldTexture: false, targetPolycount: 100000, authorizedCredits: expectedCredits });
       state.recordGenerationJob({
         provider,
         externalJobId: submission.jobId,
@@ -567,9 +623,20 @@ function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; c
         status: submission.status,
         creditsUsed: submission.creditsUsed ?? undefined,
         creditsRemaining: submission.creditsRemaining ?? undefined,
+        expectedCredits,
+        authorizedCreditCeiling: parsedCeiling,
+        attemptNumber: spend.attempts + 1,
+        generationPurpose: generationPurpose.trim(),
+        providerSelectionReason: providerReason.trim(),
+        retryReason: retryReason.trim() || undefined,
+        approvalSummary,
+        reviewStatus: "pending",
         outputUrls: submission.downloadUrl ? { download: submission.downloadUrl } : {},
       });
-      setMessage(`${provider === "printpal" ? "PrintPal" : "Meshy"} job ${submission.jobId} submitted.`);
+      setChecks({ approvedConcept: false, isolatedReference: false, providerReviewed: false, exactSubmission: false });
+      setCreditCeiling("");
+      setRetryReason("");
+      setMessage(`${providerName} job ${submission.jobId} submitted. No retry is authorized by this approval.`);
     } catch (error) {
       setMessage(String(error));
     } finally {
@@ -582,19 +649,34 @@ function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; c
     setMessage("");
     try {
       const status = await getGenerationStatus(apiFilePath, jobProvider, externalJobId);
-      state.updateGenerationJob(localId, {
+      const patch = {
         status: status.status,
         progress: status.progress ?? undefined,
-        creditsUsed: status.creditsUsed ?? undefined,
         outputUrls: status.outputUrls,
         error: status.error ?? undefined,
-      });
+        ...(status.creditsUsed != null ? { creditsUsed: status.creditsUsed } : {}),
+      };
+      state.updateGenerationJob(localId, patch);
       setMessage(`${jobProvider === "printpal" ? "PrintPal" : "Meshy"} job refreshed: ${status.status}.`);
     } catch (error) {
       setMessage(String(error));
     } finally {
       setWorking(false);
     }
+  }
+
+  function reviewJob(localId: string, decision: "accepted" | "rejected") {
+    if (decision === "accepted") {
+      if (!window.confirm("Mark this generated revision as visually accepted? Geometry and physical Print Trial approval remain separate.")) return;
+      state.updateGenerationJob(localId, { reviewStatus: "accepted", error: undefined });
+      setMessage("Visual revision accepted. Forgeability and physical Print Trial gates remain pending.");
+      return;
+    }
+    const diagnosis = window.prompt("Why was this revision rejected? Record the cause before another paid attempt.");
+    if (!diagnosis?.trim()) return;
+    state.updateGenerationJob(localId, { reviewStatus: "rejected", error: diagnosis.trim() });
+    setRetryReason(diagnosis.trim());
+    setMessage("Revision preserved as rejected. The diagnosis is loaded into the next-attempt gate.");
   }
 
   async function downloadStl(localId: string, externalJobId: string, jobProvider: ProviderKey) {
@@ -620,10 +702,22 @@ function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; c
     <div className="rounded-2xl border border-amber-500/15 bg-amber-500/5 p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="font-semibold text-slate-100">Generate Print Model</div>
-          <div className="mt-1 text-xs text-slate-400">Submissions require confirmation and are recorded with provider, source image, job ID, status, and credit use.</div>
+          <div className="font-semibold text-slate-100">Model Production & Budget Gate</div>
+          <div className="mt-1 text-xs text-slate-400">One approval authorizes one exact paid job. Retries stop here for diagnosis and renewed approval.</div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="rounded-full border border-white/10 bg-[#0d131c] px-3 py-2 text-slate-300">Attempts: {spend.attempts}</span>
+          <span className="rounded-full border border-white/10 bg-[#0d131c] px-3 py-2 text-amber-300">Committed: {spend.committed} credits</span>
+          <span className="rounded-full border border-white/10 bg-[#0d131c] px-3 py-2 text-slate-300">Confirmed actual: {spend.actual} credits</span>
+        </div>
+      </div>
+
+      <div className="mb-4 grid gap-3 lg:grid-cols-2">
+        <div className="space-y-3 rounded-xl border border-white/10 bg-[#0d131c] p-3">
+          <div className="text-xs uppercase tracking-wide text-slate-500">Exact submission</div>
+          <div className="break-all text-sm text-slate-300"><span className="text-slate-500">Generator-safe source:</span> {imagePath || "No isolated production reference linked"}</div>
+          <div className="text-xs text-amber-300">The canonical concept-art path is intentionally unavailable to the provider submission command.</div>
+          <div className="flex flex-wrap gap-2">
           <Select value={provider} onChange={(event) => setProvider(event.target.value as ProviderKey)}>
             <option value="printpal">PrintPal</option>
             <option value="meshy">Meshy</option>
@@ -637,8 +731,32 @@ function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; c
               <option value="superplus">Super+ · 30 credits</option>
             </Select>
           ) : null}
-          <Button onClick={submitGeneration} disabled={working}>{working ? "Working..." : "Submit Generation"}</Button>
+          </div>
+          <Textarea value={providerReason} onChange={(event) => setProviderReason(event.target.value)} placeholder="Why this provider is the best generation route for this model" className="min-h-[72px] w-full" />
+          <Textarea value={generationPurpose} onChange={(event) => setGenerationPurpose(event.target.value)} placeholder="One intended model, pose, scale, and use" className="min-h-[72px] w-full" />
+          {jobs.length ? <Textarea value={retryReason} onChange={(event) => setRetryReason(event.target.value)} placeholder="Required: diagnosis or reason for another paid attempt" className="min-h-[72px] w-full" /> : null}
         </div>
+
+        <div className="space-y-3 rounded-xl border border-white/10 bg-[#0d131c] p-3">
+          <div className="text-xs uppercase tracking-wide text-slate-500">Preflight verification</div>
+          <GateCheck checked={checks.approvedConcept} onChange={() => toggleCheck("approvedConcept")} label="This is the newest approved concept and intended pose." />
+          <GateCheck checked={checks.isolatedReference} onChange={() => toggleCheck("isolatedReference")} label="The source contains one model only—no sheet, collage, alternate view, inset, text, scale figure, or loose prop." />
+          <GateCheck checked={checks.providerReviewed} onChange={() => toggleCheck("providerReviewed")} label="Meshy and PrintPal were compared for this specific model; the reason is recorded." />
+          <GateCheck checked={checks.exactSubmission} onChange={() => toggleCheck("exactSubmission")} label="The exact source, settings, STL output, and credit cost below are verified." />
+        </div>
+      </div>
+
+      <div className="mb-4 grid gap-3 rounded-xl border border-amber-500/20 bg-[#0d131c] p-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-slate-500">This attempt</div>
+          <div className="mt-1 text-lg font-semibold text-amber-300">{expectedCredits} credits</div>
+        </div>
+        <label className="block space-y-1">
+          <div className="text-xs uppercase tracking-wide text-slate-500">Authorized product ceiling</div>
+          <Input type="number" min={projectedCommitted} step="1" value={creditCeiling} onChange={(event) => setCreditCeiling(event.target.value)} placeholder={`Minimum ${projectedCommitted}`} className="w-full" />
+          <div className={`text-xs ${withinBudget ? "text-emerald-300" : "text-slate-500"}`}>Projected: {projectedCommitted}{creditCeiling ? ` / ${creditCeiling}` : ""} credits</div>
+        </label>
+        <Button onClick={submitGeneration} disabled={!canSubmit}>{working ? "Working..." : "Authorize One Generation"}</Button>
       </div>
 
       {message ? <div className="mb-3 rounded-xl border border-white/10 bg-[#0d131c] p-3 text-sm text-slate-300">{message}</div> : null}
@@ -649,17 +767,35 @@ function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; c
             <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#0d131c] p-3 text-sm">
               <div>
                 <div className="font-medium text-slate-200">{job.provider === "printpal" ? "PrintPal" : "Meshy"} · {job.status}</div>
-                <div className="mt-1 text-xs text-slate-500">{job.externalJobId}{job.creditsUsed != null ? ` · ${job.creditsUsed} credits` : ""}</div>
+                <div className="mt-1 text-xs text-slate-500">Attempt {job.attemptNumber ?? "—"} · {job.externalJobId}</div>
+                <div className="mt-1 text-xs text-slate-500">Expected {job.expectedCredits ?? "unknown"} · Actual {job.creditsUsed ?? "pending"} credits · Review {job.reviewStatus ?? "pending"}</div>
+                {job.retryReason ? <div className="mt-1 text-xs text-amber-300">Retry reason: {job.retryReason}</div> : null}
+                {job.error ? <div className="mt-1 text-xs text-red-300">Diagnosis: {job.error}</div> : null}
               </div>
-              <Button variant="ghost" onClick={() => refreshJob(job.id, job.externalJobId, job.provider)} disabled={working}>Refresh</Button>
-              {job.status.toLowerCase() === "completed" || job.status.toLowerCase() === "succeeded" ? (
-                <Button onClick={() => downloadStl(job.id, job.externalJobId, job.provider)} disabled={working}>Download & Link STL</Button>
-              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <Button variant="ghost" onClick={() => refreshJob(job.id, job.externalJobId, job.provider)} disabled={working}>Refresh</Button>
+                {job.status.toLowerCase() === "completed" || job.status.toLowerCase() === "succeeded" ? (
+                  <>
+                    <Button variant="ghost" onClick={() => reviewJob(job.id, "rejected")} disabled={working}>Reject Revision</Button>
+                    <Button variant="ghost" onClick={() => reviewJob(job.id, "accepted")} disabled={working}>Accept Likeness</Button>
+                    <Button onClick={() => downloadStl(job.id, job.externalJobId, job.provider)} disabled={working}>Download & Link STL</Button>
+                  </>
+                ) : null}
+              </div>
             </div>
           ))}
         </div>
       ) : null}
     </div>
+  );
+}
+
+function GateCheck({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 text-sm text-slate-300">
+      <input type="checkbox" checked={checked} onChange={onChange} className="mt-1 h-4 w-4 accent-amber-500" />
+      <span>{label}</span>
+    </label>
   );
 }
 

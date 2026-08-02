@@ -71,6 +71,7 @@ struct MeshyGenerationOptions {
     should_texture: Option<bool>,
     enable_pbr: Option<bool>,
     target_polycount: Option<u64>,
+    authorized_credits: f64,
 }
 
 #[derive(Deserialize)]
@@ -78,6 +79,27 @@ struct MeshyGenerationOptions {
 struct PrintPalGenerationOptions {
     quality: Option<String>,
     format: Option<String>,
+    authorized_credits: f64,
+}
+
+fn printpal_credit_cost(quality: &str) -> Option<f64> {
+    match quality {
+        "default" => Some(4.0),
+        "high" => Some(6.0),
+        "ultra" => Some(8.0),
+        "super" => Some(20.0),
+        "superplus" => Some(30.0),
+        _ => None,
+    }
+}
+
+fn require_credit_authorization(provider: &str, expected: f64, authorized: f64) -> Result<(), String> {
+    if !authorized.is_finite() || authorized < expected {
+        return Err(format!(
+            "{provider} requires {expected:.0} credits for these settings, but only {authorized:.0} were authorized. Review the Generation Budget Gate before submitting."
+        ));
+    }
+    Ok(())
 }
 
 fn read_provider_credentials(api_file_path: &str) -> Result<ProviderCredentials, String> {
@@ -228,6 +250,8 @@ async fn submit_meshy_image_generation(
     image_path: String,
     options: MeshyGenerationOptions,
 ) -> Result<GenerationSubmission, String> {
+    let expected_credits = if options.should_texture.unwrap_or(false) { 30.0 } else { 20.0 };
+    require_credit_authorization("Meshy", expected_credits, options.authorized_credits)?;
     let credentials = read_provider_credentials(&api_file_path)?;
     let api_key = credentials.meshy.ok_or("No Meshy key was found in the credential file.")?;
     let image = fs::read(&image_path).map_err(|error| format!("Could not read the source image: {error}"))?;
@@ -276,6 +300,10 @@ async fn submit_printpal_image_generation(
     image_path: String,
     options: PrintPalGenerationOptions,
 ) -> Result<GenerationSubmission, String> {
+    let quality = options.quality.as_deref().unwrap_or("superplus");
+    let expected_credits = printpal_credit_cost(quality)
+        .ok_or_else(|| format!("Unsupported PrintPal quality setting: {quality}"))?;
+    require_credit_authorization("PrintPal", expected_credits, options.authorized_credits)?;
     let credentials = read_provider_credentials(&api_file_path)?;
     let api_key = credentials.printpal.ok_or("No PrintPal key was found in the credential file.")?;
     let image = fs::read(&image_path).map_err(|error| format!("Could not read the source image: {error}"))?;
@@ -287,7 +315,7 @@ async fn submit_printpal_image_generation(
     let part = Part::bytes(image).file_name(file_name);
     let form = Form::new()
         .part("image", part)
-        .text("quality", options.quality.unwrap_or_else(|| "superplus".into()))
+        .text("quality", quality.to_string())
         .text("format", options.format.unwrap_or_else(|| "stl".into()));
     let client = reqwest::Client::new();
     let value = get_json(

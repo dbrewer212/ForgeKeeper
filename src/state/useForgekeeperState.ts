@@ -71,6 +71,7 @@ function hydrateData(): AppData {
     concepts: (stored.concepts ?? seedData.concepts).map((concept) => ({
       ...concept,
       imagePath: concept.imagePath ?? concept.imageName ?? "",
+      generationReferencePath: concept.generationReferencePath ?? "",
       measurementImagePath: concept.measurementImagePath ?? "",
       referenceFolderPath: concept.referenceFolderPath ?? "",
       linkedStlIds: concept.linkedStlIds ?? (concept.linkedStlId ? [concept.linkedStlId] : []),

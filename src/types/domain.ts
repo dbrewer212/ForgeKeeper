@@ -14,6 +14,7 @@ export type SlicerKey = "orca" | "anycubic";
 export type ViewKey = "dashboard" | "catalog" | "collections" | "releases" | "orders" | "filament" | "printers" | "planning" | "reports" | "settings";
 export type QuickActionKey = "newProduct" | "newOrder" | "newFilament" | "newPrinter";
 export type GenerationProvider = "meshy" | "printpal";
+export type GenerationReviewStatus = "pending" | "accepted" | "rejected";
 
 export type RealmVariant =
   | "Midgard"
@@ -68,6 +69,7 @@ export type ConceptSpec = {
   title: string;
   imageName: string;
   imagePath?: string;
+  generationReferencePath?: string;
   measurementImagePath?: string;
   referenceFolderPath?: string;
   measurements: string;
@@ -181,6 +183,14 @@ export type GenerationJobRecord = {
   progress?: number;
   creditsUsed?: number;
   creditsRemaining?: number;
+  expectedCredits?: number;
+  authorizedCreditCeiling?: number;
+  attemptNumber?: number;
+  generationPurpose?: string;
+  providerSelectionReason?: string;
+  retryReason?: string;
+  approvalSummary?: string;
+  reviewStatus?: GenerationReviewStatus;
   outputUrls: Record<string, string>;
   createdAt: string;
   updatedAt: string;

@@ -61,7 +61,7 @@ export function testProviderConnections(apiFilePath: string) {
 export function submitMeshyImageGeneration(
   apiFilePath: string,
   imagePath: string,
-  options: { shouldTexture?: boolean; enablePbr?: boolean; targetPolycount?: number } = {},
+  options: { shouldTexture?: boolean; enablePbr?: boolean; targetPolycount?: number; authorizedCredits: number },
 ) {
   return invoke<GenerationSubmission>("submit_meshy_image_generation", {
     apiFilePath,
@@ -73,7 +73,7 @@ export function submitMeshyImageGeneration(
 export function submitPrintPalImageGeneration(
   apiFilePath: string,
   imagePath: string,
-  options: { quality?: string; format?: string } = {},
+  options: { quality?: string; format?: string; authorizedCredits: number },
 ) {
   return invoke<GenerationSubmission>("submit_printpal_image_generation", {
     apiFilePath,
