@@ -2,7 +2,9 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use reqwest::multipart::{Form, Part};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -63,6 +65,27 @@ struct DownloadedGenerationAsset {
     job_id: String,
     format: String,
     output_path: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LocalPathInspection {
+    path: String,
+    exists: bool,
+    is_file: bool,
+    size_bytes: Option<u64>,
+    sha256: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CredentialFileHealth {
+    file_path: String,
+    readable: bool,
+    meshy_configured: bool,
+    printpal_configured: bool,
+    message: String,
 }
 
 #[derive(Deserialize)]
@@ -135,6 +158,73 @@ fn read_provider_credentials(api_file_path: &str) -> Result<ProviderCredentials,
     }
 
     Ok(credentials)
+}
+
+fn sha256_file(path: &Path) -> Result<String, String> {
+    let mut file = fs::File::open(path).map_err(|error| error.to_string())?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; 64 * 1024];
+    loop {
+        let count = file.read(&mut buffer).map_err(|error| error.to_string())?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+#[tauri::command]
+fn inspect_local_paths(paths: Vec<String>) -> Vec<LocalPathInspection> {
+    paths
+        .into_iter()
+        .map(|path| {
+            let candidate = Path::new(&path);
+            match fs::metadata(candidate) {
+                Ok(metadata) => {
+                    let is_file = metadata.is_file();
+                    let (sha256, error) = if is_file {
+                        match sha256_file(candidate) {
+                            Ok(hash) => (Some(hash), None),
+                            Err(message) => (None, Some(format!("Could not fingerprint file: {message}"))),
+                        }
+                    } else {
+                        (None, Some("Path exists but is not a file.".into()))
+                    };
+                    LocalPathInspection { path, exists: true, is_file, size_bytes: Some(metadata.len()), sha256, error }
+                }
+                Err(error) => LocalPathInspection { path, exists: false, is_file: false, size_bytes: None, sha256: None, error: Some(error.to_string()) },
+            }
+        })
+        .collect()
+}
+
+#[tauri::command]
+fn inspect_credential_file(api_file_path: String) -> CredentialFileHealth {
+    match read_provider_credentials(&api_file_path) {
+        Ok(credentials) => {
+            let meshy_configured = credentials.meshy.is_some();
+            let printpal_configured = credentials.printpal.is_some();
+            CredentialFileHealth {
+                file_path: api_file_path,
+                readable: true,
+                meshy_configured,
+                printpal_configured,
+                message: format!(
+                    "Credential file is readable. Meshy: {}. PrintPal: {}. Secret values were not returned.",
+                    if meshy_configured { "configured" } else { "missing" },
+                    if printpal_configured { "configured" } else { "missing" }
+                ),
+            }
+        }
+        Err(message) => CredentialFileHealth {
+            file_path: api_file_path,
+            readable: false,
+            meshy_configured: false,
+            printpal_configured: false,
+            message,
+        },
+    }
 }
 
 fn value_number(value: &Value, names: &[&str]) -> Option<f64> {
@@ -564,7 +654,9 @@ pub fn run() {
             submit_meshy_image_generation,
             submit_printpal_image_generation,
             get_generation_status,
-            download_generation_asset
+            download_generation_asset,
+            inspect_local_paths,
+            inspect_credential_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

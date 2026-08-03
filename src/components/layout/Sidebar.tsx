@@ -29,6 +29,7 @@ export function Sidebar({ state }: { state: any }) {
       {navItem("planning", "Planning")}
 
       {navItem("reports", "Reports")}
+      {navItem("recovery", "Recovery & Audit")}
       {navItem("settings", "Settings")}
     </aside>
   );

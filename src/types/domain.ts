@@ -11,7 +11,7 @@ export type PrinterStatus = "Available" | "Printing" | "Maintenance" | "Offline"
 export type ProductTab = "overview" | "stls" | "concepts" | "variants" | "orders";
 export type AssetStatus = "Planned" | "Linked" | "Needs Update" | "Archived";
 export type SlicerKey = "orca" | "anycubic";
-export type ViewKey = "dashboard" | "canon" | "catalog" | "collections" | "releases" | "orders" | "filament" | "printers" | "planning" | "reports" | "settings";
+export type ViewKey = "dashboard" | "canon" | "catalog" | "collections" | "releases" | "orders" | "filament" | "printers" | "planning" | "reports" | "recovery" | "settings";
 export type QuickActionKey = "newProduct" | "newOrder" | "newFilament" | "newPrinter";
 export type GenerationProvider = "meshy" | "printpal";
 export type GenerationReviewStatus = "pending" | "accepted" | "rejected";
@@ -325,7 +325,58 @@ export type GenerationJobRecord = {
   outputUrls: Record<string, string>;
   createdAt: string;
   updatedAt: string;
+  lastReconciledAt?: string;
+  reconciliationMessage?: string;
   error?: string;
+};
+
+export type AuditEventType = "Backup" | "Restore" | "Integrity" | "Credential" | "Provider" | "Data Change" | "System";
+export type AuditEventOutcome = "Info" | "Success" | "Warning" | "Blocked" | "Failed";
+export type IntegritySeverity = "Info" | "Warning" | "Critical";
+export type IntegrityFindingStatus = "Open" | "Acknowledged" | "Resolved";
+
+export type AuditEvent = {
+  id: string;
+  occurredAt: string;
+  type: AuditEventType;
+  action: string;
+  outcome: AuditEventOutcome;
+  summary: string;
+  subjectId?: string;
+};
+
+export type IntegrityFinding = {
+  id: string;
+  severity: IntegritySeverity;
+  category: "Relationship" | "Asset" | "Checksum" | "Provider Job" | "Credential" | "Backup";
+  title: string;
+  detail: string;
+  subjectId?: string;
+  status: IntegrityFindingStatus;
+};
+
+export type IntegrityScanRecord = {
+  id: string;
+  startedAt: string;
+  completedAt: string;
+  desktopFileChecksAvailable: boolean;
+  checkedPathCount: number;
+  findings: IntegrityFinding[];
+};
+
+export type CredentialHealthRecord = {
+  checkedAt: string;
+  filePath: string;
+  readable: boolean;
+  meshyConfigured: boolean;
+  printpalConfigured: boolean;
+  message: string;
+};
+
+export type RecoverySystemRecord = {
+  auditEvents: AuditEvent[];
+  lastIntegrityScan?: IntegrityScanRecord;
+  credentialHealth?: CredentialHealthRecord;
 };
 
 export type ActiveObjective = {
@@ -439,6 +490,7 @@ export type AppData = {
   controlCenter: ControlCenterRecord;
   canonRecords: CanonRecord[];
   libraryAssets: LibraryAssetRecord[];
+  recovery: RecoverySystemRecord;
   settings: AppSettings;
   prototypes: PlannedPrototype[];
   plannedFilament: PlannedFilament[];

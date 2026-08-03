@@ -9,6 +9,7 @@ import { PrintersView } from "./features/printers/PrintersView";
 import { ReportsView } from "./features/reports/ReportsView";
 import { SettingsView } from "./features/settings/SettingsView";
 import { CanonRegistryView } from "./features/canon/CanonRegistryView";
+import { RecoveryAuditView } from "./features/recovery/RecoveryAuditView";
 
 // ✅ NEW
 import { PlanningView } from "./features/planning/PlanningView";
@@ -32,6 +33,8 @@ export default function App() {
         return <PrintersView state={state} />;
       case "reports":
         return <ReportsView state={state} />;
+      case "recovery":
+        return <RecoveryAuditView state={state} />;
       case "settings":
         return <SettingsView state={state} />;
       case "planning": // ✅ NEW

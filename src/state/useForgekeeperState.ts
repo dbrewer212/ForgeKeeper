@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { defaultControlCenter, defaultSettings, seedCanonRecords, seedCollections, seedConcepts, seedFilament, seedLibraryAssets, seedOrders, seedPrinters, seedProducts, seedReleases, seedStls, seedVariants } from "../data/seed";
 import { seedPlannedFilament, seedProductPlanning, seedPrototypes, seedRealmMaterials } from "../data/planningSeed";
 import { directCost, getOrderCostBreakdown } from "../lib/cost";
@@ -11,6 +11,22 @@ import { filenameFromPath, folderFromPath, suggestedLibraryPath } from "../lib/a
 import { emptyProductionReferenceChecks, productionReferenceReady, referenceChecksPassed } from "../lib/productionReferences";
 import { canApproveForgeability, checksAllPass, defaultMeshChecks, defaultVisualChecks, requiredViewsPresent } from "../lib/modelVerification";
 import { defaultPrintTrialCriteria, printTrialCanFail, printTrialCanPass, printTrialReadyToStart } from "../lib/printTrials";
+import { getGenerationStatus } from "../lib/generationProviders";
+import {
+  collectInspectablePaths,
+  collectStructuralFindings,
+  createAuditEvent,
+  createBackupEnvelope,
+  createIntegrityScan,
+  credentialHealthRecord,
+  inspectCredentialFile,
+  inspectLocalPaths,
+  loadRecoveryCheckpoints,
+  removeRecoveryCheckpoint,
+  saveRecoveryCheckpoint,
+  verifyBackupEnvelope,
+  type RecoveryCheckpoint,
+} from "../lib/recovery";
 import type {
   AppData,
   AppSettings,
@@ -56,6 +72,7 @@ const seedData: AppData = {
   controlCenter: defaultControlCenter,
   canonRecords: seedCanonRecords,
   libraryAssets: seedLibraryAssets,
+  recovery: { auditEvents: [] },
   settings: { ...defaultExternalTools, ...defaultSettings },
   prototypes: seedPrototypes,
   plannedFilament: seedPlannedFilament,
@@ -223,6 +240,11 @@ function hydrateData(): AppData {
     } : defaultControlCenter,
     canonRecords: hydrateCanonRecords(stored.canonRecords),
     libraryAssets: mergeLibraryAssets(stored.libraryAssets),
+    recovery: {
+      auditEvents: stored.recovery?.auditEvents ?? [],
+      lastIntegrityScan: stored.recovery?.lastIntegrityScan,
+      credentialHealth: stored.recovery?.credentialHealth,
+    },
     settings: { ...defaultExternalTools, ...defaultSettings, ...(stored.settings ?? {}) },
     prototypes: stored.prototypes ?? seedData.prototypes,
     plannedFilament: stored.plannedFilament ?? seedData.plannedFilament,
@@ -267,6 +289,8 @@ export function useForgekeeperState() {
   const [controlCenter, setControlCenter] = useState<ControlCenterRecord>(initial.controlCenter);
   const [canonRecords, setCanonRecords] = useState(initial.canonRecords);
   const [libraryAssets, setLibraryAssets] = useState(initial.libraryAssets);
+  const [recovery, setRecovery] = useState(initial.recovery);
+  const [recoveryCheckpoints, setRecoveryCheckpoints] = useState<RecoveryCheckpoint[]>(loadRecoveryCheckpoints());
   const [settings, setSettings] = useState<AppSettings>(initial.settings);
   const [prototypes, setPrototypes] = useState<PlannedPrototype[]>(initial.prototypes);
   const [plannedFilament, setPlannedFilament] = useState<PlannedFilament[]>(initial.plannedFilament);
@@ -304,6 +328,7 @@ export function useForgekeeperState() {
     controlCenter,
     canonRecords,
     libraryAssets,
+    recovery,
     settings,
     prototypes,
     plannedFilament,
@@ -313,7 +338,33 @@ export function useForgekeeperState() {
 
   useEffect(() => {
     saveStoredData(appData);
-  }, [products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
+  }, [products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, recovery, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
+
+  const automaticCheckpointStarted = useRef(false);
+  const lastAutomaticCheckpointAt = useRef(Date.now());
+  useEffect(() => {
+    if (automaticCheckpointStarted.current) return;
+    automaticCheckpointStarted.current = true;
+    void saveRecoveryCheckpoint(appData, "Automatic session-start checkpoint")
+      .then(() => {
+        lastAutomaticCheckpointAt.current = Date.now();
+        setRecoveryCheckpoints(loadRecoveryCheckpoints());
+      })
+      .catch((error) => console.warn("Forgekeeper automatic checkpoint failed", error));
+  }, []);
+
+  useEffect(() => {
+    if (Date.now() - lastAutomaticCheckpointAt.current < 15 * 60 * 1000) return;
+    const timer = window.setTimeout(() => {
+      void saveRecoveryCheckpoint(appData, "Automatic 15-minute activity checkpoint")
+        .then(() => {
+          lastAutomaticCheckpointAt.current = Date.now();
+          setRecoveryCheckpoints(loadRecoveryCheckpoints());
+        })
+        .catch((error) => console.warn("Forgekeeper timed checkpoint failed", error));
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, recovery, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
 
   useEffect(() => {
     setPrinters((prev) => prev.map((printer) => printerStatusFromOrders(printer, orders, products)));
@@ -971,9 +1022,21 @@ export function useForgekeeperState() {
   }
 
   function recordGenerationJob(job: Omit<GenerationJobRecord, "id" | "createdAt" | "updatedAt">) {
+    const duplicate = generationJobs.find((item) => item.provider === job.provider && item.externalJobId === job.externalJobId);
+    if (duplicate) {
+      setRecovery((previous) => ({
+        ...previous,
+        auditEvents: [createAuditEvent("Provider", "Block duplicate provider job", "Blocked", `${job.provider}:${job.externalJobId} already exists as ${duplicate.id}.`, duplicate.id), ...previous.auditEvents].slice(0, 300),
+      }));
+      return duplicate;
+    }
     const timestamp = new Date().toISOString();
     const record: GenerationJobRecord = { ...job, id: uid("GEN"), createdAt: timestamp, updatedAt: timestamp };
     setGenerationJobs((previous) => [record, ...previous]);
+    setRecovery((previous) => ({
+      ...previous,
+      auditEvents: [createAuditEvent("Provider", "Record provider job", "Success", `${job.provider}:${job.externalJobId} recorded once.`, record.id), ...previous.auditEvents].slice(0, 300),
+    }));
     return record;
   }
 
@@ -1187,58 +1250,198 @@ export function useForgekeeperState() {
   function exportFilamentCsv() { downloadCsv("filament.csv", filament); }
   function exportPrintersCsv() { downloadCsv("printers.csv", printers); }
   function exportMaintenanceCsv() { downloadCsv("maintenance.csv", maintenance); }
-  function exportBackupJson() { downloadJson(`forgekeeper-backup-${Date.now()}.json`, appData); }
-
-  function importBackupFile(file: File) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(String(reader.result || "{}")) as Partial<AppData>;
-        if (!parsed.products || !parsed.orders || !parsed.filament || !parsed.printers) {
-          window.alert("This does not look like a Forgekeeper backup file.");
-          return;
-        }
-        setProducts(parsed.products ?? []);
-        setStls(parsed.stls ?? []);
-        const importedConcepts = hydrateConcepts(parsed.concepts ?? []);
-        setConcepts(importedConcepts);
-        setProductionReferences(hydrateProductionReferences(importedConcepts, parsed.productionReferences));
-        setModelVerifications(hydrateModelVerifications(parsed.modelVerifications));
-        setVariants(parsed.variants ?? []);
-        setCollections(parsed.collections ?? []);
-        setReleases(parsed.releases ?? []);
-        setOrders(parsed.orders ?? []);
-        setFilament(parsed.filament ?? []);
-        setPrinters(parsed.printers ?? []);
-        setMaintenance(parsed.maintenance ?? []);
-        setGenerationJobs(parsed.generationJobs ?? []);
-        setControlCenter(parsed.controlCenter ?? defaultControlCenter);
-        setCanonRecords(hydrateCanonRecords(parsed.canonRecords));
-        setLibraryAssets(mergeLibraryAssets(parsed.libraryAssets));
-        setSettings({ ...defaultExternalTools, ...defaultSettings, ...(parsed.settings ?? {}) });
-        setPrototypes(parsed.prototypes ?? seedPrototypes);
-        setPlannedFilament(parsed.plannedFilament ?? seedPlannedFilament);
-        setProductPlanning(parsed.productPlanning ?? seedProductPlanning);
-        setRealmMaterials(parsed.realmMaterials ?? seedRealmMaterials);
-        setSelectedProductId(parsed.products?.[0]?.id ?? "");
-        window.alert("Forgekeeper backup restored.");
-      } catch (error) {
-        console.error(error);
-        window.alert("Could not import that backup file.");
-      }
-    };
-    reader.readAsText(file);
+  function appendAudit(type: Parameters<typeof createAuditEvent>[0], action: string, outcome: Parameters<typeof createAuditEvent>[2], summary: string, subjectId?: string) {
+    setRecovery((previous) => ({ ...previous, auditEvents: [createAuditEvent(type, action, outcome, summary, subjectId), ...previous.auditEvents].slice(0, 300) }));
   }
 
-  function resetWorkspace() {
-    if (!window.confirm("Reset workspace to starter data? This clears local Forgekeeper data.")) return;
+  function applyRestoredData(parsed: Partial<AppData>, restoreSummary: string) {
+    setProducts(parsed.products ?? []);
+    setStls(parsed.stls ?? []);
+    const importedConcepts = hydrateConcepts(parsed.concepts ?? []);
+    setConcepts(importedConcepts);
+    setProductionReferences(hydrateProductionReferences(importedConcepts, parsed.productionReferences));
+    setModelVerifications(hydrateModelVerifications(parsed.modelVerifications));
+    setPrintTrials(hydratePrintTrials(parsed.printTrials));
+    setVariants(parsed.variants ?? []);
+    setCollections(parsed.collections ?? []);
+    setReleases(parsed.releases ?? []);
+    setOrders(parsed.orders ?? []);
+    setFilament(parsed.filament ?? []);
+    setPrinters(parsed.printers ?? []);
+    setMaintenance(parsed.maintenance ?? []);
+    setGenerationJobs(parsed.generationJobs ?? []);
+    setControlCenter(parsed.controlCenter ?? defaultControlCenter);
+    setCanonRecords(hydrateCanonRecords(parsed.canonRecords));
+    setLibraryAssets(mergeLibraryAssets(parsed.libraryAssets));
+    setSettings({ ...defaultExternalTools, ...defaultSettings, ...(parsed.settings ?? {}) });
+    setPrototypes(parsed.prototypes ?? seedPrototypes);
+    setPlannedFilament(parsed.plannedFilament ?? seedPlannedFilament);
+    setProductPlanning(parsed.productPlanning ?? seedProductPlanning);
+    setRealmMaterials(parsed.realmMaterials ?? seedRealmMaterials);
+    setSelectedProductId(parsed.products?.[0]?.id ?? "");
+    setRecovery({
+      auditEvents: [createAuditEvent("Restore", "Restore workspace", "Success", restoreSummary), ...(parsed.recovery?.auditEvents ?? [])].slice(0, 300),
+      lastIntegrityScan: parsed.recovery?.lastIntegrityScan,
+      credentialHealth: parsed.recovery?.credentialHealth,
+    });
+  }
+
+  async function createManualCheckpoint(reason = "Manual recovery checkpoint") {
+    try {
+      const checkpoint = await saveRecoveryCheckpoint(appData, reason);
+      setRecoveryCheckpoints(loadRecoveryCheckpoints());
+      appendAudit("Backup", "Create recovery checkpoint", "Success", `${checkpoint.id} created with SHA-256 ${checkpoint.checksum.slice(0, 12)}…`, checkpoint.id);
+      return checkpoint;
+    } catch (error) {
+      appendAudit("Backup", "Create recovery checkpoint", "Failed", String(error));
+      return null;
+    }
+  }
+
+  async function exportBackupJson() {
+    try {
+      const envelope = await createBackupEnvelope(appData, "Portable export");
+      downloadJson(`forgekeeper-backup-${Date.now()}.json`, envelope);
+      appendAudit("Backup", "Export verified backup", "Success", `Portable schema ${envelope.schemaVersion} backup created with SHA-256 ${envelope.checksum.slice(0, 12)}…`);
+    } catch (error) {
+      appendAudit("Backup", "Export verified backup", "Failed", String(error));
+      window.alert("Forgekeeper could not create the verified backup.");
+    }
+  }
+
+  async function importBackupFile(file: File) {
+    try {
+      const verification = await verifyBackupEnvelope(JSON.parse(await file.text()));
+      if (!verification.valid) {
+        appendAudit("Restore", "Reject backup import", "Blocked", verification.message);
+        window.alert(verification.message);
+        return;
+      }
+      const source = verification.envelope?.data ?? verification.legacyData;
+      if (!source) return;
+      const confirmed = window.confirm(`${verification.message}\n\nRestore this backup? Forgekeeper will first preserve the current workspace as a recovery checkpoint.`);
+      if (!confirmed) return;
+      await saveRecoveryCheckpoint(appData, "Automatic checkpoint before backup import");
+      setRecoveryCheckpoints(loadRecoveryCheckpoints());
+      applyRestoredData(source, `${file.name} restored. ${verification.message}`);
+      window.alert("Forgekeeper backup restored.");
+    } catch (error) {
+      console.error(error);
+      appendAudit("Restore", "Import backup", "Failed", String(error));
+      window.alert("Could not import that backup file.");
+    }
+  }
+
+  async function restoreRecoveryCheckpoint(id: string) {
+    const checkpoint = recoveryCheckpoints.find((item) => item.id === id);
+    if (!checkpoint) return false;
+    const verification = await verifyBackupEnvelope(checkpoint.envelope);
+    if (!verification.valid || !verification.envelope) {
+      appendAudit("Restore", "Reject recovery checkpoint", "Blocked", verification.message, id);
+      return false;
+    }
+    if (!window.confirm(`Restore checkpoint from ${new Date(checkpoint.createdAt).toLocaleString()}? The current workspace will be preserved first.`)) return false;
+    await saveRecoveryCheckpoint(appData, "Automatic checkpoint before rollback");
+    setRecoveryCheckpoints(loadRecoveryCheckpoints());
+    applyRestoredData(verification.envelope.data, `Rolled back to ${checkpoint.id}; checksum verified.`);
+    return true;
+  }
+
+  function deleteRecoveryCheckpoint(id: string) {
+    if (!window.confirm("Delete this local recovery checkpoint? Portable exports are unaffected.")) return;
+    removeRecoveryCheckpoint(id);
+    setRecoveryCheckpoints(loadRecoveryCheckpoints());
+    appendAudit("Backup", "Delete recovery checkpoint", "Warning", `${id} deleted by explicit approval.`, id);
+  }
+
+  async function runIntegrityScan() {
+    const startedAt = new Date().toISOString();
+    try {
+      const structural = collectStructuralFindings(appData);
+      const paths = collectInspectablePaths(appData);
+      const inspected = await inspectLocalPaths(paths);
+      const scan = createIntegrityScan(appData, structural, inspected, startedAt);
+      const critical = scan.findings.filter((item) => item.severity === "Critical").length;
+      setRecovery((previous) => ({
+        ...previous,
+        lastIntegrityScan: scan,
+        auditEvents: [createAuditEvent("Integrity", "Run integrity scan", critical ? "Warning" : "Success", `${scan.findings.length} findings; ${critical} critical. Desktop path checks ${scan.desktopFileChecksAvailable ? "completed" : "not available"}.`, scan.id), ...previous.auditEvents].slice(0, 300),
+      }));
+      return scan;
+    } catch (error) {
+      appendAudit("Integrity", "Run integrity scan", "Failed", String(error));
+      return null;
+    }
+  }
+
+  async function checkCredentialHealth() {
+    const filePath = settings.apiCredentialFilePath?.trim() ?? "";
+    if (!filePath) {
+      const record = credentialHealthRecord(null, "");
+      record.message = "No local credential file is configured.";
+      setRecovery((previous) => ({ ...previous, credentialHealth: record, auditEvents: [createAuditEvent("Credential", "Inspect credential health", "Warning", record.message), ...previous.auditEvents].slice(0, 300) }));
+      return record;
+    }
+    try {
+      const record = credentialHealthRecord(await inspectCredentialFile(filePath), filePath);
+      setRecovery((previous) => ({ ...previous, credentialHealth: record, auditEvents: [createAuditEvent("Credential", "Inspect credential health", record.readable ? "Success" : "Warning", record.message), ...previous.auditEvents].slice(0, 300) }));
+      return record;
+    } catch (error) {
+      const record = { ...credentialHealthRecord(null, filePath), message: String(error) };
+      setRecovery((previous) => ({ ...previous, credentialHealth: record, auditEvents: [createAuditEvent("Credential", "Inspect credential health", "Failed", record.message), ...previous.auditEvents].slice(0, 300) }));
+      return record;
+    }
+  }
+
+  async function reconcileProviderJobs() {
+    const apiFilePath = settings.apiCredentialFilePath?.trim() ?? "";
+    if (!apiFilePath) {
+      appendAudit("Provider", "Reconcile provider jobs", "Blocked", "No local credential file is configured.");
+      return { checked: 0, failed: 0, message: "Link the local credential file before reconciliation." };
+    }
+    const seen = new Set<string>();
+    const duplicates = generationJobs.filter((job) => {
+      const key = `${job.provider}:${job.externalJobId}`;
+      if (seen.has(key)) return true;
+      seen.add(key);
+      return false;
+    });
+    if (duplicates.length) {
+      appendAudit("Provider", "Reconcile provider jobs", "Blocked", `${duplicates.length} duplicate external job identities must be resolved first.`);
+      return { checked: 0, failed: duplicates.length, message: "Duplicate external job identities blocked reconciliation." };
+    }
+    const terminal = /complete|completed|succeed|failed|cancel|expired/i;
+    const candidates = generationJobs.filter((job) => job.externalJobId && !terminal.test(job.status));
+    let failed = 0;
+    const updates = new Map<string, Partial<GenerationJobRecord>>();
+    for (const job of candidates) {
+      try {
+        const status = await getGenerationStatus(apiFilePath, job.provider, job.externalJobId);
+        updates.set(job.id, { status: status.status, progress: status.progress ?? undefined, creditsUsed: status.creditsUsed ?? job.creditsUsed, outputUrls: status.outputUrls, error: status.error ?? undefined, lastReconciledAt: new Date().toISOString(), reconciliationMessage: "Matched by provider and external job ID; no new job submitted." });
+      } catch (error) {
+        failed += 1;
+        updates.set(job.id, { lastReconciledAt: new Date().toISOString(), reconciliationMessage: String(error) });
+      }
+    }
+    setGenerationJobs((previous) => previous.map((job) => updates.has(job.id) ? { ...job, ...updates.get(job.id), updatedAt: new Date().toISOString() } : job));
+    appendAudit("Provider", "Reconcile provider jobs", failed ? "Warning" : "Success", `${candidates.length} existing jobs checked by external ID; ${failed} could not be refreshed. No job was submitted.`);
+    return { checked: candidates.length, failed, message: `Checked ${candidates.length} existing jobs. No new job was submitted.` };
+  }
+
+  async function resetWorkspace() {
+    if (!window.confirm("Reset workspace to starter data? Forgekeeper will preserve a recovery checkpoint first, then clear local workspace data.")) return;
+    const checkpoint = await createManualCheckpoint("Automatic checkpoint before workspace reset");
+    if (!checkpoint) {
+      window.alert("Reset blocked because the recovery checkpoint could not be created.");
+      return;
+    }
     clearStoredData();
     window.location.reload();
   }
 
   return {
     view, setView,
-    products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings,
+    products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, recovery, recoveryCheckpoints, settings,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
     selectedProductId, setSelectedProductId, productTab, setProductTab,
     newProductName, setNewProductName, newStlName, setNewStlName, newConceptTitle, setNewConceptTitle,
@@ -1264,6 +1467,7 @@ export function useForgekeeperState() {
     updateSettings, updatePrototype, updatePlannedFilament, removePlannedFilament, movePlannedFilamentToInventory, getDefaultSlicerForPrinter, getPreferredSlicerForStl, suggestStlLibraryFolder, suggestConceptLibraryFolder, linkStlPath, setStlSuggestedFolder, openStlAsset, openExternalTool,
     exportProductsCsv, exportStlsCsv, exportConceptsCsv, exportVariantsCsv, exportCollectionsCsv, exportReleasesCsv, exportOrdersCsv,
     exportFilamentCsv, exportPrintersCsv, exportMaintenanceCsv, exportBackupJson, importBackupFile, resetWorkspace,
+    createManualCheckpoint, restoreRecoveryCheckpoint, deleteRecoveryCheckpoint, runIntegrityScan, checkCredentialHealth, reconcileProviderJobs,
   };
 }
 
