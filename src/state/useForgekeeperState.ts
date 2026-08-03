@@ -8,6 +8,7 @@ import { uid } from "../lib/ids";
 import { clearStoredData, downloadJson, loadStoredData, saveStoredData } from "../lib/storage";
 import { defaultExternalTools, getToolPath, openLocalPathBestEffort, openWebUrl, slicerForPrinter } from "../lib/externalTools";
 import { filenameFromPath, folderFromPath, suggestedLibraryPath } from "../lib/assetLibrary";
+import { emptyProductionReferenceChecks, productionReferenceReady, referenceChecksPassed } from "../lib/productionReferences";
 import type {
   AppData,
   AppSettings,
@@ -22,6 +23,7 @@ import type {
   OrderRecord,
   OrderStatus,
   PrinterRecord,
+  ProductionReferenceRecord,
   Product,
   ProductTab,
   ProductVariant,
@@ -36,6 +38,7 @@ const seedData: AppData = {
   products: seedProducts,
   stls: seedStls,
   concepts: seedConcepts,
+  productionReferences: [],
   variants: seedVariants,
   collections: seedCollections,
   releases: seedReleases,
@@ -80,9 +83,46 @@ function mergeLibraryAssets(assets?: LibraryAssetRecord[]): LibraryAssetRecord[]
   ];
 }
 
+function hydrateConcepts(concepts: ConceptSpec[]): ConceptSpec[] {
+  return concepts.map((concept) => ({
+    ...concept,
+    imagePath: concept.imagePath ?? concept.imageName ?? "",
+    generationReferencePath: concept.generationReferencePath ?? "",
+    generationReferenceId: concept.generationReferenceId ?? (concept.generationReferencePath ? `REF-MIGRATED-${concept.id}` : undefined),
+    measurementImagePath: concept.measurementImagePath ?? "",
+    referenceFolderPath: concept.referenceFolderPath ?? "",
+    linkedStlIds: concept.linkedStlIds ?? (concept.linkedStlId ? [concept.linkedStlId] : []),
+  }));
+}
+
+function hydrateProductionReferences(concepts: ConceptSpec[], references?: ProductionReferenceRecord[]): ProductionReferenceRecord[] {
+  const retained = (references ?? []).map((reference) => {
+    const normalized = { ...reference, checks: { ...emptyProductionReferenceChecks, ...(reference.checks ?? {}) } };
+    const remainsReady = productionReferenceReady(normalized);
+    return { ...normalized, status: remainsReady ? "Ready" as const : normalized.status === "Retired" ? "Retired" as const : "Draft" as const };
+  });
+  const migrated = concepts
+    .filter((concept) => concept.generationReferencePath && !retained.some((reference) => reference.conceptId === concept.id))
+    .map((concept): ProductionReferenceRecord => ({
+      id: `REF-MIGRATED-${concept.id}`,
+      conceptId: concept.id,
+      outputPath: concept.generationReferencePath ?? "",
+      view: "Three-quarter",
+      subject: concept.title,
+      pose: "Needs verification",
+      background: "Neutral Light",
+      status: "Draft",
+      checks: { ...emptyProductionReferenceChecks },
+      notes: "Migrated from an earlier unverified generator-safe path. Complete the Production Reference Builder before use.",
+      createdAt: "",
+    }));
+  return [...retained, ...migrated];
+}
+
 function hydrateData(): AppData {
   const stored = loadStoredData();
   if (!stored) return seedData;
+  const concepts = hydrateConcepts(stored.concepts ?? seedData.concepts);
   return {
     products: (stored.products ?? seedData.products).map((product) => ({
       ...product,
@@ -100,14 +140,8 @@ function hydrateData(): AppData {
       linkedConceptId: stl.linkedConceptId ?? undefined,
       assetStatus: stl.assetStatus ?? (stl.fileName || stl.filePath ? "Linked" : "Planned"),
     })),
-    concepts: (stored.concepts ?? seedData.concepts).map((concept) => ({
-      ...concept,
-      imagePath: concept.imagePath ?? concept.imageName ?? "",
-      generationReferencePath: concept.generationReferencePath ?? "",
-      measurementImagePath: concept.measurementImagePath ?? "",
-      referenceFolderPath: concept.referenceFolderPath ?? "",
-      linkedStlIds: concept.linkedStlIds ?? (concept.linkedStlId ? [concept.linkedStlId] : []),
-    })),
+    concepts,
+    productionReferences: hydrateProductionReferences(concepts, stored.productionReferences),
     variants: (stored.variants ?? seedData.variants).map((variant) => ({
       ...variant,
       productImagePath: variant.productImagePath ?? "",
@@ -171,6 +205,7 @@ export function useForgekeeperState() {
   const [products, setProducts] = useState<Product[]>(initial.products);
   const [stls, setStls] = useState<STLRecord[]>(initial.stls);
   const [concepts, setConcepts] = useState<ConceptSpec[]>(initial.concepts);
+  const [productionReferences, setProductionReferences] = useState<ProductionReferenceRecord[]>(initial.productionReferences);
   const [variants, setVariants] = useState<ProductVariant[]>(initial.variants);
   const [collections, setCollections] = useState<CollectionRecord[]>(initial.collections);
   const [releases, setReleases] = useState<ReleaseRecord[]>(initial.releases);
@@ -205,6 +240,7 @@ export function useForgekeeperState() {
     products,
     stls,
     concepts,
+    productionReferences,
     variants,
     collections,
     releases,
@@ -225,7 +261,7 @@ export function useForgekeeperState() {
 
   useEffect(() => {
     saveStoredData(appData);
-  }, [products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
+  }, [products, stls, concepts, productionReferences, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
 
   useEffect(() => {
     setPrinters((prev) => prev.map((printer) => printerStatusFromOrders(printer, orders, products)));
@@ -390,6 +426,8 @@ export function useForgekeeperState() {
     setProducts((prev) => prev.filter((p) => p.id !== id));
     setStls((prev) => prev.filter((stl) => stl.productId !== id));
     setConcepts((prev) => prev.filter((concept) => concept.productId !== id));
+    const removedConceptIds = new Set(concepts.filter((concept) => concept.productId === id).map((concept) => concept.id));
+    setProductionReferences((prev) => prev.filter((reference) => !removedConceptIds.has(reference.conceptId)));
     setVariants((prev) => prev.filter((variant) => variant.productId !== id));
     setOrders((prev) => prev.filter((order) => order.productId !== id));
     setReleases((prev) => prev.map((release) => ({ ...release, productIds: release.productIds.filter((productId) => productId !== id) })));
@@ -456,7 +494,61 @@ export function useForgekeeperState() {
 
   function removeConcept(id: string) {
     setConcepts((prev) => prev.filter((concept) => concept.id !== id));
+    setProductionReferences((prev) => prev.filter((reference) => reference.conceptId !== id));
     setVariants((prev) => prev.map((variant) => (variant.conceptId === id ? { ...variant, conceptId: undefined } : variant)));
+  }
+
+  function addProductionReference(conceptId: string) {
+    const concept = concepts.find((item) => item.id === conceptId);
+    if (!concept) return;
+    const timestamp = new Date().toISOString();
+    setProductionReferences((prev) => [{
+      id: uid("REF"),
+      conceptId,
+      outputPath: "",
+      view: "Three-quarter",
+      subject: concept.title,
+      pose: "",
+      background: "Neutral Light",
+      status: "Draft",
+      checks: { ...emptyProductionReferenceChecks },
+      notes: "",
+      createdAt: timestamp,
+    }, ...prev]);
+  }
+
+  function updateProductionReference(id: string, patch: Partial<ProductionReferenceRecord>) {
+    setProductionReferences((prev) => prev.map((reference) => {
+      if (reference.id !== id) return reference;
+      const materialChange = Object.keys(patch).some((key) => key !== "status");
+      const status = patch.status ?? (reference.status === "Ready" && materialChange ? "Draft" : reference.status);
+      return { ...reference, ...patch, status, verifiedAt: status === "Ready" ? reference.verifiedAt : undefined };
+    }));
+  }
+
+  function markProductionReferenceReady(id: string) {
+    const reference = productionReferences.find((item) => item.id === id);
+    const concept = reference ? concepts.find((item) => item.id === reference.conceptId) : undefined;
+    const outputPath = reference?.outputPath.trim() ?? "";
+    const canonicalPaths = [concept?.imagePath, concept?.imageName].filter(Boolean).map((path) => String(path).trim().toLowerCase());
+    if (!reference || !/\.(png|jpe?g|webp)$/i.test(outputPath) || canonicalPaths.includes(outputPath.toLowerCase()) || !reference.subject.trim() || !reference.pose.trim() || !referenceChecksPassed(reference)) return false;
+    const timestamp = new Date().toISOString();
+    setProductionReferences((prev) => prev.map((item) => item.id === id ? { ...item, status: "Ready", verifiedAt: timestamp } : item));
+    setConcepts((prev) => prev.map((concept) => concept.id === reference.conceptId ? { ...concept, generationReferenceId: id, generationReferencePath: reference.outputPath } : concept));
+    return true;
+  }
+
+  function setPrimaryProductionReference(conceptId: string, referenceId: string) {
+    const reference = productionReferences.find((item) => item.id === referenceId && item.conceptId === conceptId && item.status === "Ready");
+    if (!reference) return;
+    setConcepts((prev) => prev.map((concept) => concept.id === conceptId ? { ...concept, generationReferenceId: referenceId, generationReferencePath: reference.outputPath } : concept));
+  }
+
+  function removeProductionReference(id: string) {
+    const reference = productionReferences.find((item) => item.id === id);
+    if (!reference) return;
+    setProductionReferences((prev) => prev.filter((item) => item.id !== id));
+    setConcepts((prev) => prev.map((concept) => concept.generationReferenceId === id ? { ...concept, generationReferenceId: undefined, generationReferencePath: "" } : concept));
   }
 
   function addVariant(realm?: ProductVariant["realm"]) {
@@ -907,7 +999,9 @@ export function useForgekeeperState() {
         }
         setProducts(parsed.products ?? []);
         setStls(parsed.stls ?? []);
-        setConcepts(parsed.concepts ?? []);
+        const importedConcepts = hydrateConcepts(parsed.concepts ?? []);
+        setConcepts(importedConcepts);
+        setProductionReferences(hydrateProductionReferences(importedConcepts, parsed.productionReferences));
         setVariants(parsed.variants ?? []);
         setCollections(parsed.collections ?? []);
         setReleases(parsed.releases ?? []);
@@ -942,7 +1036,7 @@ export function useForgekeeperState() {
 
   return {
     view, setView,
-    products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings,
+    products, stls, concepts, productionReferences, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
     selectedProductId, setSelectedProductId, productTab, setProductTab,
     newProductName, setNewProductName, newStlName, setNewStlName, newConceptTitle, setNewConceptTitle,
@@ -953,6 +1047,7 @@ export function useForgekeeperState() {
     addProduct, updateProduct, removeProduct,
     addStl, updateStl, markPrimaryStl, removeStl,
     addConcept, updateConcept, removeConcept,
+    addProductionReference, updateProductionReference, markProductionReferenceReady, setPrimaryProductionReference, removeProductionReference,
     addVariant, updateVariant, removeVariant,
     addCollection, updateCollection, removeCollection, assignProductToCollection, setCollectionHero,
     addRelease, updateRelease, removeRelease, addProductToRelease, removeProductFromRelease,

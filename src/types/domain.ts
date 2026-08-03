@@ -15,6 +15,8 @@ export type ViewKey = "dashboard" | "canon" | "catalog" | "collections" | "relea
 export type QuickActionKey = "newProduct" | "newOrder" | "newFilament" | "newPrinter";
 export type GenerationProvider = "meshy" | "printpal";
 export type GenerationReviewStatus = "pending" | "accepted" | "rejected";
+export type ProductionReferenceStatus = "Draft" | "Ready" | "Retired";
+export type ProductionReferenceView = "Front" | "Left" | "Right" | "Back" | "Top" | "Three-quarter";
 export type PipelineStage = "Planning" | "Concept Approved" | "Engineering" | "Prototype" | "Print Trial" | "Production Approved" | "Released";
 export type ObjectiveStatus = "Active" | "Paused" | "Complete";
 
@@ -72,6 +74,7 @@ export type ConceptSpec = {
   imageName: string;
   imagePath?: string;
   generationReferencePath?: string;
+  generationReferenceId?: string;
   measurementImagePath?: string;
   referenceFolderPath?: string;
   measurements: string;
@@ -79,6 +82,35 @@ export type ConceptSpec = {
   notes: string;
   linkedStlId?: string;
   linkedStlIds?: string[];
+};
+
+export type ProductionReferenceChecks = {
+  oneSubject: boolean;
+  onePose: boolean;
+  cleanBackground: boolean;
+  noTextOrBorders: boolean;
+  noInsetsOrCollage: boolean;
+  noScaleFigure: boolean;
+  noVariantLineup: boolean;
+  noLooseProps: boolean;
+  silhouetteReadable: boolean;
+  canonIdentityPreserved: boolean;
+};
+
+export type ProductionReferenceRecord = {
+  id: string;
+  conceptId: string;
+  sourceLibraryAssetId?: string;
+  outputPath: string;
+  view: ProductionReferenceView;
+  subject: string;
+  pose: string;
+  background: "Transparent" | "Neutral Light" | "Neutral Dark";
+  status: ProductionReferenceStatus;
+  checks: ProductionReferenceChecks;
+  notes: string;
+  createdAt: string;
+  verifiedAt?: string;
 };
 
 export type ProductVariant = {
@@ -181,6 +213,9 @@ export type GenerationJobRecord = {
   productId: string;
   conceptId: string;
   sourceImagePath: string;
+  productionReferenceId?: string;
+  productionReferenceVerifiedAt?: string;
+  sourceLibraryAssetId?: string;
   status: string;
   progress?: number;
   creditsUsed?: number;
@@ -296,6 +331,7 @@ export type AppData = {
   products: Product[];
   stls: STLRecord[];
   concepts: ConceptSpec[];
+  productionReferences: ProductionReferenceRecord[];
   variants: ProductVariant[];
   collections: CollectionRecord[];
   releases: ReleaseRecord[];

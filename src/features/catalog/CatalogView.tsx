@@ -7,10 +7,12 @@ import { Select } from "../../components/ui/Select";
 import { Textarea } from "../../components/ui/Textarea";
 import { money } from "../../lib/format";
 import { expectedGenerationCredits, generationSpend } from "../../lib/generationBudget";
+import { productionReferenceReady } from "../../lib/productionReferences";
 import { downloadGenerationAsset, getGenerationStatus, submitMeshyImageGeneration, submitPrintPalImageGeneration, type ProviderKey } from "../../lib/generationProviders";
 import { inventoryState, pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 import type { OrderStatus, Product, ProductLine, ProductStatus, ProductTab, ProductTier, ProductVariant, RealmVariant } from "../../types/domain";
+import { ProductionReferenceBuilder } from "./ProductionReferenceBuilder";
 
 const productTabs: ProductTab[] = ["overview", "stls", "concepts", "variants", "orders"];
 const realmOptions: RealmVariant[] = ["Midgard", "Alfheim", "Svartalfheim", "Vanaheim", "Asgard", "Jotunheim", "Muspelheim", "Niflheim", "Helheim"];
@@ -499,7 +501,7 @@ function ConceptPanel({ state }: { state: ForgekeeperState }) {
                   <Input value={concept.imagePath || ""} onChange={(e) => state.updateConcept(concept.id, { imagePath: e.target.value })} placeholder="C:\ForgekeeperLibrary\Concepts\Product\concept-art\front.png" />
                 </Field>
                 <Field label="Generator-Safe Reference Path">
-                  <Input value={concept.generationReferencePath || ""} onChange={(e) => state.updateConcept(concept.id, { generationReferencePath: e.target.value })} placeholder="One isolated model and pose only—never the full concept sheet" />
+                  <Input value={concept.generationReferencePath || ""} readOnly placeholder="Use the Production Reference Builder below" />
                 </Field>
                 <Field label="Measurement Image Path">
                   <Input value={concept.measurementImagePath || ""} onChange={(e) => state.updateConcept(concept.id, { measurementImagePath: e.target.value })} placeholder="C:\ForgekeeperLibrary\Concepts\Product\measurements\dims.png" />
@@ -524,6 +526,9 @@ function ConceptPanel({ state }: { state: ForgekeeperState }) {
                 <Field label="Internal Notes" className="lg:col-span-2">
                   <Textarea value={concept.notes} onChange={(e) => state.updateConcept(concept.id, { notes: e.target.value })} placeholder="Finish notes, design changes, print recommendations, paint ideas..." className="min-h-[100px] w-full" />
                 </Field>
+                <div className="lg:col-span-2">
+                  <ProductionReferenceBuilder state={state} concept={concept} />
+                </div>
                 <div className="lg:col-span-2">
                   <ConceptGenerationPanel state={state} concept={concept} />
                 </div>
@@ -551,7 +556,9 @@ function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; c
   });
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
-  const imagePath = concept.generationReferencePath || "";
+  const productionReference = state.productionReferences.find((reference) => reference.id === concept.generationReferenceId && reference.conceptId === concept.id);
+  const referenceReady = productionReferenceReady(productionReference);
+  const imagePath = referenceReady ? productionReference?.outputPath ?? "" : "";
   const apiFilePath = state.settings.apiCredentialFilePath || "";
   const jobs = state.generationJobs.filter((job) => job.conceptId === concept.id);
   const spend = generationSpend(state.generationJobs, concept.productId);
@@ -561,7 +568,7 @@ function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; c
   const allChecksPassed = Object.values(checks).every(Boolean);
   const retryIsDocumented = jobs.length === 0 || retryReason.trim().length > 0;
   const withinBudget = Number.isFinite(parsedCeiling) && parsedCeiling >= projectedCommitted;
-  const canSubmit = Boolean(apiFilePath && imagePath && generationPurpose.trim() && providerReason.trim() && allChecksPassed && retryIsDocumented && withinBudget && !working);
+  const canSubmit = Boolean(apiFilePath && referenceReady && imagePath && generationPurpose.trim() && providerReason.trim() && allChecksPassed && retryIsDocumented && withinBudget && !working);
 
   function toggleCheck(key: keyof typeof checks) {
     setChecks((current) => ({ ...current, [key]: !current[key] }));
@@ -572,8 +579,8 @@ function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; c
       setMessage("Set the local API credential file in Settings first.");
       return;
     }
-    if (!imagePath) {
-      setMessage("Link a separate generator-safe reference before submitting. The canonical concept sheet cannot be used directly.");
+    if (!productionReference || !referenceReady || !imagePath) {
+      setMessage("Select a Production Reference Builder revision that has passed all checks and is marked Ready.");
       return;
     }
     if (!allChecksPassed) {
@@ -599,6 +606,7 @@ function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; c
       `Concept: ${concept.title}`,
       `Provider: ${providerName}`,
       `Source: ${imagePath}`,
+      `Production reference: ${productionReference.id} · ${productionReference.view} · verified ${productionReference.verifiedAt ?? "unknown"}`,
       `Mode: ${provider === "printpal" ? `Image-to-3D · ${quality}` : "Image-to-3D · Meshy-6/latest · untextured"}`,
       `Output: STL`,
       `This attempt: ${expectedCredits} credits`,
@@ -620,6 +628,9 @@ function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; c
         productId: concept.productId,
         conceptId: concept.id,
         sourceImagePath: imagePath,
+        productionReferenceId: productionReference.id,
+        productionReferenceVerifiedAt: productionReference.verifiedAt,
+        sourceLibraryAssetId: productionReference.sourceLibraryAssetId,
         status: submission.status,
         creditsUsed: submission.creditsUsed ?? undefined,
         creditsRemaining: submission.creditsRemaining ?? undefined,
@@ -715,7 +726,9 @@ function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; c
       <div className="mb-4 grid gap-3 lg:grid-cols-2">
         <div className="space-y-3 rounded-xl border border-white/10 bg-[#0d131c] p-3">
           <div className="text-xs uppercase tracking-wide text-slate-500">Exact submission</div>
-          <div className="break-all text-sm text-slate-300"><span className="text-slate-500">Generator-safe source:</span> {imagePath || "No isolated production reference linked"}</div>
+          <ProductImagePanel product={state.selectedProduct} imageSrc={imagePath} label="Exact Provider Input" fit="contain" />
+          <div className="break-all text-sm text-slate-300"><span className="text-slate-500">Generator-safe source:</span> {imagePath || "No verified production reference selected"}</div>
+          <div className={`text-xs ${referenceReady ? "text-emerald-300" : "text-amber-300"}`}>{referenceReady ? `Builder gate passed · ${productionReference?.view} · ${productionReference?.id}` : "Builder gate blocked · complete the reference record above"}</div>
           <div className="text-xs text-amber-300">The canonical concept-art path is intentionally unavailable to the provider submission command.</div>
           <div className="flex flex-wrap gap-2">
           <Select value={provider} onChange={(event) => setProvider(event.target.value as ProviderKey)}>
@@ -740,7 +753,7 @@ function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; c
         <div className="space-y-3 rounded-xl border border-white/10 bg-[#0d131c] p-3">
           <div className="text-xs uppercase tracking-wide text-slate-500">Preflight verification</div>
           <GateCheck checked={checks.approvedConcept} onChange={() => toggleCheck("approvedConcept")} label="This is the newest approved concept and intended pose." />
-          <GateCheck checked={checks.isolatedReference} onChange={() => toggleCheck("isolatedReference")} label="The source contains one model only—no sheet, collage, alternate view, inset, text, scale figure, or loose prop." />
+          <GateCheck checked={checks.isolatedReference} onChange={() => toggleCheck("isolatedReference")} label="The selected Production Reference Builder revision is Ready and its exact path is shown here." />
           <GateCheck checked={checks.providerReviewed} onChange={() => toggleCheck("providerReviewed")} label="Meshy and PrintPal were compared for this specific model; the reason is recorded." />
           <GateCheck checked={checks.exactSubmission} onChange={() => toggleCheck("exactSubmission")} label="The exact source, settings, STL output, and credit cost below are verified." />
         </div>
@@ -1007,12 +1020,12 @@ function ProductThumb({ src, alt, className = "" }: { src?: string; alt: string;
   );
 }
 
-function ProductImagePanel({ product, imageSrc, label = "Product Image" }: { product?: Product; imageSrc?: string; label?: string }) {
+function ProductImagePanel({ product, imageSrc, label = "Product Image", fit = "cover" }: { product?: Product; imageSrc?: string; label?: string; fit?: "cover" | "contain" }) {
   return (
     <div className="space-y-3">
       <div className="aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-black/30">
         {imageSrc ? (
-          <img src={imageSrc} alt={product?.name || label} className="h-full w-full object-cover" />
+          <img src={imageSrc} alt={product?.name || label} className={`h-full w-full ${fit === "contain" ? "object-contain" : "object-cover"}`} />
         ) : (
           <div className="flex h-full items-center justify-center text-xs uppercase tracking-[0.18em] text-slate-600">No Image</div>
         )}
