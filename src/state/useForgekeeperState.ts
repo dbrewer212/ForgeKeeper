@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { defaultSettings, seedCollections, seedConcepts, seedFilament, seedOrders, seedPrinters, seedProducts, seedReleases, seedStls, seedVariants } from "../data/seed";
+import { defaultControlCenter, defaultSettings, seedCanonRecords, seedCollections, seedConcepts, seedFilament, seedOrders, seedPrinters, seedProducts, seedReleases, seedStls, seedVariants } from "../data/seed";
 import { seedPlannedFilament, seedProductPlanning, seedPrototypes, seedRealmMaterials } from "../data/planningSeed";
 import { directCost, getOrderCostBreakdown } from "../lib/cost";
 import { calculateProductionMetrics, orderMaterialGrams } from "../lib/production";
@@ -13,6 +13,7 @@ import type {
   AppSettings,
   CollectionRecord,
   ConceptSpec,
+  ControlCenterRecord,
   FilamentRecord,
   GenerationJobRecord,
   MaintenanceRecord,
@@ -41,6 +42,8 @@ const seedData: AppData = {
   printers: seedPrinters,
   maintenance: [],
   generationJobs: [],
+  controlCenter: defaultControlCenter,
+  canonRecords: seedCanonRecords,
   settings: { ...defaultExternalTools, ...defaultSettings },
   prototypes: seedPrototypes,
   plannedFilament: seedPlannedFilament,
@@ -103,6 +106,22 @@ function hydrateData(): AppData {
     })),
     maintenance: stored.maintenance ?? [],
     generationJobs: stored.generationJobs ?? [],
+    controlCenter: stored.controlCenter ? {
+      activeObjective: { ...defaultControlCenter.activeObjective, ...stored.controlCenter.activeObjective },
+      parkedIdeas: (stored.controlCenter.parkedIdeas ?? []).map((idea) => ({ ...idea })),
+    } : defaultControlCenter,
+    canonRecords: (stored.canonRecords ?? seedCanonRecords).map((record) => {
+      const seed = seedCanonRecords.find((candidate) => candidate.id === record.id);
+      return {
+        ...seed,
+        ...record,
+        foundryRole: record.foundryRole ?? seed?.foundryRole ?? "Not yet recorded.",
+        relationships: record.relationships ?? seed?.relationships ?? [],
+        currentProductionDesign: record.currentProductionDesign ?? seed?.currentProductionDesign ?? "Not yet recorded.",
+        decisionEvidence: record.decisionEvidence ?? seed?.decisionEvidence ?? "No explicit decision evidence recorded.",
+        authorityLinked: record.authorityLinked ?? seed?.authorityLinked ?? false,
+      };
+    }),
     settings: { ...defaultExternalTools, ...defaultSettings, ...(stored.settings ?? {}) },
     prototypes: stored.prototypes ?? seedData.prototypes,
     plannedFilament: stored.plannedFilament ?? seedData.plannedFilament,
@@ -141,6 +160,8 @@ export function useForgekeeperState() {
   const [printers, setPrinters] = useState<PrinterRecord[]>(initial.printers);
   const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>(initial.maintenance);
   const [generationJobs, setGenerationJobs] = useState<GenerationJobRecord[]>(initial.generationJobs);
+  const [controlCenter, setControlCenter] = useState<ControlCenterRecord>(initial.controlCenter);
+  const [canonRecords, setCanonRecords] = useState(initial.canonRecords);
   const [settings, setSettings] = useState<AppSettings>(initial.settings);
   const [prototypes, setPrototypes] = useState<PlannedPrototype[]>(initial.prototypes);
   const [plannedFilament, setPlannedFilament] = useState<PlannedFilament[]>(initial.plannedFilament);
@@ -172,6 +193,8 @@ export function useForgekeeperState() {
     printers,
     maintenance,
     generationJobs,
+    controlCenter,
+    canonRecords,
     settings,
     prototypes,
     plannedFilament,
@@ -181,7 +204,7 @@ export function useForgekeeperState() {
 
   useEffect(() => {
     saveStoredData(appData);
-  }, [products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
+  }, [products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
 
   useEffect(() => {
     setPrinters((prev) => prev.map((printer) => printerStatusFromOrders(printer, orders, products)));
@@ -653,6 +676,62 @@ export function useForgekeeperState() {
     setGenerationJobs((previous) => previous.map((job) => job.id === id ? { ...job, ...patch, updatedAt: new Date().toISOString() } : job));
   }
 
+  function updateActiveObjective(patch: Partial<ControlCenterRecord["activeObjective"]>) {
+    setControlCenter((previous) => ({
+      ...previous,
+      activeObjective: {
+        ...previous.activeObjective,
+        ...patch,
+        updatedAt: new Date().toISOString(),
+      },
+    }));
+  }
+
+  function addParkedIdea(title: string, notes: string) {
+    if (!title.trim()) return;
+    setControlCenter((previous) => ({
+      ...previous,
+      parkedIdeas: [{
+        id: uid("IDEA"),
+        title: title.trim(),
+        notes: notes.trim(),
+        capturedAt: new Date().toISOString(),
+      }, ...previous.parkedIdeas],
+    }));
+  }
+
+  function promoteParkedIdea(id: string) {
+    const idea = controlCenter.parkedIdeas.find((item) => item.id === id);
+    if (!idea) return;
+    const confirmed = window.confirm(`Make “${idea.title}” the active objective? The current objective will be returned to the parked drawer.`);
+    if (!confirmed) return;
+    const timestamp = new Date().toISOString();
+    setControlCenter((previous) => ({
+      activeObjective: idea.sourceObjective ? {
+        ...idea.sourceObjective,
+        status: "Active",
+        updatedAt: timestamp,
+      } : {
+        id: uid("OBJ"),
+        title: idea.title,
+        stage: "Planning",
+        status: "Active",
+        blocker: "None",
+        approvalNeeded: "Define the next real gate.",
+        lastCompletedAction: "Promoted from the idea drawer.",
+        nextAction: idea.notes || "Define the intended outcome and next concrete action.",
+        updatedAt: timestamp,
+      },
+      parkedIdeas: [{
+        id: uid("IDEA"),
+        title: previous.activeObjective.title,
+        notes: `Paused at ${previous.activeObjective.stage}. Next action: ${previous.activeObjective.nextAction}`,
+        capturedAt: timestamp,
+        sourceObjective: { ...previous.activeObjective, status: "Paused", updatedAt: timestamp },
+      }, ...previous.parkedIdeas.filter((item) => item.id !== id)],
+    }));
+  }
+
   function linkGeneratedStl(jobId: string, filePath: string) {
     const job = generationJobs.find((item) => item.id === jobId);
     const concept = job ? concepts.find((item) => item.id === job.conceptId) : undefined;
@@ -816,6 +895,8 @@ export function useForgekeeperState() {
         setPrinters(parsed.printers ?? []);
         setMaintenance(parsed.maintenance ?? []);
         setGenerationJobs(parsed.generationJobs ?? []);
+        setControlCenter(parsed.controlCenter ?? defaultControlCenter);
+        setCanonRecords(parsed.canonRecords ?? seedCanonRecords);
         setSettings({ ...defaultExternalTools, ...defaultSettings, ...(parsed.settings ?? {}) });
         setPrototypes(parsed.prototypes ?? seedPrototypes);
         setPlannedFilament(parsed.plannedFilament ?? seedPlannedFilament);
@@ -839,7 +920,7 @@ export function useForgekeeperState() {
 
   return {
     view, setView,
-    products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, settings,
+    products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, settings,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
     selectedProductId, setSelectedProductId, productTab, setProductTab,
     newProductName, setNewProductName, newStlName, setNewStlName, newConceptTitle, setNewConceptTitle,
@@ -858,6 +939,7 @@ export function useForgekeeperState() {
     addPrinter, updatePrinter, removePrinter,
     addMaintenance, updateMaintenance, removeMaintenance,
     recordGenerationJob, updateGenerationJob, linkGeneratedStl,
+    updateActiveObjective, addParkedIdea, promoteParkedIdea,
     updateSettings, updatePrototype, updatePlannedFilament, removePlannedFilament, movePlannedFilamentToInventory, getDefaultSlicerForPrinter, getPreferredSlicerForStl, suggestStlLibraryFolder, suggestConceptLibraryFolder, linkStlPath, setStlSuggestedFolder, openStlAsset, openExternalTool,
     exportProductsCsv, exportStlsCsv, exportConceptsCsv, exportVariantsCsv, exportCollectionsCsv, exportReleasesCsv, exportOrdersCsv,
     exportFilamentCsv, exportPrintersCsv, exportMaintenanceCsv, exportBackupJson, importBackupFile, resetWorkspace,

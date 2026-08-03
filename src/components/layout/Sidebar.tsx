@@ -18,7 +18,8 @@ export function Sidebar({ state }: { state: any }) {
         Forgekeeper
       </div>
 
-      {navItem("dashboard", "Dashboard")}
+      {navItem("dashboard", "Control Center")}
+      {navItem("canon", "Canon Registry")}
       {navItem("catalog", "Catalog")}
       {navItem("orders", "Orders")}
       {navItem("filament", "Filament")}

@@ -8,6 +8,7 @@ import { FilamentView } from "./features/filament/FilamentView";
 import { PrintersView } from "./features/printers/PrintersView";
 import { ReportsView } from "./features/reports/ReportsView";
 import { SettingsView } from "./features/settings/SettingsView";
+import { CanonRegistryView } from "./features/canon/CanonRegistryView";
 
 // ✅ NEW
 import { PlanningView } from "./features/planning/PlanningView";
@@ -19,6 +20,8 @@ export default function App() {
     switch (state.view) {
       case "dashboard":
         return <DashboardView state={state} />;
+      case "canon":
+        return <CanonRegistryView state={state} />;
       case "catalog":
         return <CatalogView state={state} />;
       case "orders":

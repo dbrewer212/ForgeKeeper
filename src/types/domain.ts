@@ -11,10 +11,12 @@ export type PrinterStatus = "Available" | "Printing" | "Maintenance" | "Offline"
 export type ProductTab = "overview" | "stls" | "concepts" | "variants" | "orders";
 export type AssetStatus = "Planned" | "Linked" | "Needs Update" | "Archived";
 export type SlicerKey = "orca" | "anycubic";
-export type ViewKey = "dashboard" | "catalog" | "collections" | "releases" | "orders" | "filament" | "printers" | "planning" | "reports" | "settings";
+export type ViewKey = "dashboard" | "canon" | "catalog" | "collections" | "releases" | "orders" | "filament" | "printers" | "planning" | "reports" | "settings";
 export type QuickActionKey = "newProduct" | "newOrder" | "newFilament" | "newPrinter";
 export type GenerationProvider = "meshy" | "printpal";
 export type GenerationReviewStatus = "pending" | "accepted" | "rejected";
+export type PipelineStage = "Planning" | "Concept Approved" | "Engineering" | "Prototype" | "Print Trial" | "Production Approved" | "Released";
+export type ObjectiveStatus = "Active" | "Paused" | "Complete";
 
 export type RealmVariant =
   | "Midgard"
@@ -197,6 +199,55 @@ export type GenerationJobRecord = {
   error?: string;
 };
 
+export type ActiveObjective = {
+  id: string;
+  title: string;
+  productId?: string;
+  stage: PipelineStage;
+  status: ObjectiveStatus;
+  blocker: string;
+  approvalNeeded: string;
+  lastCompletedAction: string;
+  nextAction: string;
+  updatedAt: string;
+};
+
+export type ParkedIdea = {
+  id: string;
+  title: string;
+  notes: string;
+  capturedAt: string;
+  sourceObjective?: ActiveObjective;
+};
+
+export type ControlCenterRecord = {
+  activeObjective: ActiveObjective;
+  parkedIdeas: ParkedIdea[];
+};
+
+export type CanonStatus = "Locked" | "Established Direction" | "Developing" | "Historical";
+
+export type CanonRecord = {
+  id: string;
+  name: string;
+  kind: "Resident" | "Creature" | "Collection" | "Philosophy";
+  canonStatus: CanonStatus;
+  primaryAuthority: string;
+  supersededReferences: string[];
+  identity: string;
+  foundryRole: string;
+  relationships: string[];
+  characterDna: string[];
+  allowedVariation: string[];
+  forbiddenDrift: string[];
+  symbolism: string;
+  currentProductionDesign: string;
+  decisionEvidence: string;
+  authorityLinked: boolean;
+  lastCanonChange: string;
+  notes: string;
+};
+
 export type AppSettings = {
   laborRate: number;
   electricityRate: number;
@@ -228,6 +279,8 @@ export type AppData = {
   printers: PrinterRecord[];
   maintenance: MaintenanceRecord[];
   generationJobs: GenerationJobRecord[];
+  controlCenter: ControlCenterRecord;
+  canonRecords: CanonRecord[];
   settings: AppSettings;
   prototypes: PlannedPrototype[];
   plannedFilament: PlannedFilament[];

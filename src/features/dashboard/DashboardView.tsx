@@ -6,6 +6,7 @@ import { money } from "../../lib/format";
 import { inventoryState, pillClass } from "../../lib/inventory";
 import { getKeeperAlerts } from "../../lib/keeper/keeperAlerts";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
+import { ControlCenter } from "./ControlCenter";
 
 export function DashboardView({ state }: { state: ForgekeeperState }) {
   const production = state.productionMetrics;
@@ -13,6 +14,8 @@ export function DashboardView({ state }: { state: ForgekeeperState }) {
 
   return (
     <div className="space-y-6">
+      <ControlCenter state={state} />
+
       <Card title="Quick Actions" right={<span className="text-xs text-slate-500">Fast Entry</span>}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <QuickAction title="New Order" helper="Jump to order intake" onClick={() => state.triggerQuickAction("newOrder")} />
