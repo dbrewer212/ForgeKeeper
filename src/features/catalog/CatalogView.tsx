@@ -14,6 +14,7 @@ import type { ForgekeeperState } from "../../state/useForgekeeperState";
 import type { OrderStatus, Product, ProductLine, ProductStatus, ProductTab, ProductTier, ProductVariant, RealmVariant } from "../../types/domain";
 import { ProductionReferenceBuilder } from "./ProductionReferenceBuilder";
 import { ModelVerificationStation } from "./ModelVerificationStation";
+import { PrintTrialStation } from "./PrintTrialStation";
 
 const productTabs: ProductTab[] = ["overview", "stls", "concepts", "variants", "orders"];
 const realmOptions: RealmVariant[] = ["Midgard", "Alfheim", "Svartalfheim", "Vanaheim", "Asgard", "Jotunheim", "Muspelheim", "Niflheim", "Helheim"];
@@ -541,6 +542,9 @@ function ConceptPanel({ state }: { state: ForgekeeperState }) {
                 </div>
                 <div className="lg:col-span-2">
                   <ModelVerificationStation state={state} concept={concept} />
+                </div>
+                <div className="lg:col-span-2">
+                  <PrintTrialStation state={state} concept={concept} />
                 </div>
               </div>
             </div>

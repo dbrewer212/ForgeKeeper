@@ -22,6 +22,8 @@ export type AssessmentResult = "Not Assessed" | "Pass" | "Fail";
 export type VisualReviewDecision = "Pending" | "Accepted" | "Changes Required" | "Rejected";
 export type ForgeabilityStatus = "Pending" | "Changes Required" | "Blocked" | "Approved";
 export type PhysicalTestStatus = "Not Started" | "In Progress" | "Passed" | "Failed";
+export type PrintTrialCriterionResult = "Pending" | "Pass" | "Fail";
+export type MaterialDryState = "Unknown" | "Dry" | "Dried for Trial" | "Not Dried";
 export type InspectionView = "Front" | "Left" | "Right" | "Back" | "Top" | "Three-quarter" | "Silhouette" | "Components";
 export type PipelineStage = "Planning" | "Concept Approved" | "Engineering" | "Prototype" | "Print Trial" | "Production Approved" | "Released";
 export type ObjectiveStatus = "Active" | "Paused" | "Complete";
@@ -150,6 +152,59 @@ export type ModelVerificationRecord = {
   notes: string;
   createdAt: string;
   assessedAt?: string;
+};
+
+export type PrintTrialCriterion = {
+  id: string;
+  label: string;
+  result: PrintTrialCriterionResult;
+  observation: string;
+};
+
+export type PrintTrialRecord = {
+  id: string;
+  productId: string;
+  conceptId: string;
+  modelVerificationId: string;
+  stlId?: string;
+  modelPath: string;
+  modelRevision: string;
+  modelSha256: string;
+  printerId: string;
+  nozzleDiameterMm: number;
+  filamentId?: string;
+  materialName: string;
+  materialDryState: MaterialDryState;
+  slicer: string;
+  slicerVersion: string;
+  profileName: string;
+  profileRevision: string;
+  orientation: string;
+  supports: string;
+  partDivision: string;
+  assemblyMethod: string;
+  controlledVariables: string[];
+  criteria: PrintTrialCriterion[];
+  estimatedTimeHours?: number;
+  actualTimeHours?: number;
+  estimatedMaterialGrams?: number;
+  actualMaterialGrams?: number;
+  cleanupMinutes?: number;
+  assemblyMinutes?: number;
+  dimensionalResults: string;
+  surfaceResult: string;
+  supportRemovalResult: string;
+  failureMode: string;
+  evidencePaths: string[];
+  status: PhysicalTestStatus;
+  outcomeVerifiedByDerek: boolean;
+  outcomeVerifiedAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  notes: string;
+  nextAction: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ProductVariant = {
@@ -372,6 +427,7 @@ export type AppData = {
   concepts: ConceptSpec[];
   productionReferences: ProductionReferenceRecord[];
   modelVerifications: ModelVerificationRecord[];
+  printTrials: PrintTrialRecord[];
   variants: ProductVariant[];
   collections: CollectionRecord[];
   releases: ReleaseRecord[];

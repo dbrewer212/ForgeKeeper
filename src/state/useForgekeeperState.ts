@@ -10,6 +10,7 @@ import { defaultExternalTools, getToolPath, openLocalPathBestEffort, openWebUrl,
 import { filenameFromPath, folderFromPath, suggestedLibraryPath } from "../lib/assetLibrary";
 import { emptyProductionReferenceChecks, productionReferenceReady, referenceChecksPassed } from "../lib/productionReferences";
 import { canApproveForgeability, checksAllPass, defaultMeshChecks, defaultVisualChecks, requiredViewsPresent } from "../lib/modelVerification";
+import { defaultPrintTrialCriteria, printTrialCanFail, printTrialCanPass, printTrialReadyToStart } from "../lib/printTrials";
 import type {
   AppData,
   AppSettings,
@@ -26,6 +27,7 @@ import type {
   OrderStatus,
   PrinterRecord,
   ProductionReferenceRecord,
+  PrintTrialRecord,
   Product,
   ProductTab,
   ProductVariant,
@@ -42,6 +44,7 @@ const seedData: AppData = {
   concepts: seedConcepts,
   productionReferences: [],
   modelVerifications: [],
+  printTrials: [],
   variants: seedVariants,
   collections: seedCollections,
   releases: seedReleases,
@@ -141,6 +144,27 @@ function hydrateModelVerifications(records?: ModelVerificationRecord[]): ModelVe
   }));
 }
 
+function hydratePrintTrials(records?: PrintTrialRecord[]): PrintTrialRecord[] {
+  return (records ?? []).map((record) => ({
+    ...record,
+    materialDryState: record.materialDryState ?? "Unknown",
+    slicerVersion: record.slicerVersion ?? "",
+    partDivision: record.partDivision ?? "",
+    assemblyMethod: record.assemblyMethod ?? "",
+    controlledVariables: record.controlledVariables ?? [],
+    criteria: record.criteria?.length ? record.criteria : defaultPrintTrialCriteria(),
+    dimensionalResults: record.dimensionalResults ?? "",
+    surfaceResult: record.surfaceResult ?? "",
+    supportRemovalResult: record.supportRemovalResult ?? "",
+    failureMode: record.failureMode ?? "",
+    evidencePaths: record.evidencePaths ?? [],
+    outcomeVerifiedByDerek: record.outcomeVerifiedByDerek ?? false,
+    notes: record.notes ?? "",
+    nextAction: record.nextAction ?? "",
+    updatedAt: record.updatedAt ?? record.createdAt ?? "",
+  }));
+}
+
 function hydrateData(): AppData {
   const stored = loadStoredData();
   if (!stored) return seedData;
@@ -165,6 +189,7 @@ function hydrateData(): AppData {
     concepts,
     productionReferences: hydrateProductionReferences(concepts, stored.productionReferences),
     modelVerifications: hydrateModelVerifications(stored.modelVerifications),
+    printTrials: hydratePrintTrials(stored.printTrials),
     variants: (stored.variants ?? seedData.variants).map((variant) => ({
       ...variant,
       productImagePath: variant.productImagePath ?? "",
@@ -230,6 +255,7 @@ export function useForgekeeperState() {
   const [concepts, setConcepts] = useState<ConceptSpec[]>(initial.concepts);
   const [productionReferences, setProductionReferences] = useState<ProductionReferenceRecord[]>(initial.productionReferences);
   const [modelVerifications, setModelVerifications] = useState<ModelVerificationRecord[]>(initial.modelVerifications);
+  const [printTrials, setPrintTrials] = useState<PrintTrialRecord[]>(initial.printTrials);
   const [variants, setVariants] = useState<ProductVariant[]>(initial.variants);
   const [collections, setCollections] = useState<CollectionRecord[]>(initial.collections);
   const [releases, setReleases] = useState<ReleaseRecord[]>(initial.releases);
@@ -266,6 +292,7 @@ export function useForgekeeperState() {
     concepts,
     productionReferences,
     modelVerifications,
+    printTrials,
     variants,
     collections,
     releases,
@@ -286,7 +313,7 @@ export function useForgekeeperState() {
 
   useEffect(() => {
     saveStoredData(appData);
-  }, [products, stls, concepts, productionReferences, modelVerifications, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
+  }, [products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
 
   useEffect(() => {
     setPrinters((prev) => prev.map((printer) => printerStatusFromOrders(printer, orders, products)));
@@ -616,7 +643,8 @@ export function useForgekeeperState() {
   }
 
   function updateModelVerification(id: string, patch: Partial<ModelVerificationRecord>) {
-    setModelVerifications((prev) => prev.map((verification) => verification.id === id ? { ...verification, ...patch } : verification));
+    const changesModelIdentity = ["modelPath", "modelRevision", "modelSha256"].some((key) => key in patch);
+    setModelVerifications((prev) => prev.map((verification) => verification.id === id ? { ...verification, ...patch, ...(changesModelIdentity ? { physicalTestStatus: "Not Started" as const } : {}) } : verification));
   }
 
   function setModelVisualDecision(id: string, decision: ModelVerificationRecord["visualDecision"]) {
@@ -640,6 +668,79 @@ export function useForgekeeperState() {
     if (!verification || (status === "Approved" && !canApproveForgeability(verification))) return false;
     setModelVerifications((prev) => prev.map((item) => item.id === id ? { ...item, forgeabilityStatus: status, assessedAt: new Date().toISOString() } : item));
     return true;
+  }
+
+  function addPrintTrial(modelVerificationId: string) {
+    const verification = modelVerifications.find((item) => item.id === modelVerificationId);
+    if (!verification) return "";
+    const stl = stls.find((item) => item.id === verification.stlId);
+    const printerId = stl?.defaultPrinterId ?? "";
+    const printer = printers.find((item) => item.id === printerId);
+    const slicer = stl?.defaultSlicer === "anycubic" ? "Anycubic Slicer Next" : stl?.defaultSlicer === "orca" ? "OrcaSlicer" : "";
+    const timestamp = new Date().toISOString();
+    const record: PrintTrialRecord = {
+      id: uid("TRIAL"), productId: verification.productId, conceptId: verification.conceptId, modelVerificationId: verification.id,
+      stlId: verification.stlId, modelPath: verification.modelPath, modelRevision: verification.modelRevision, modelSha256: verification.modelSha256,
+      printerId, nozzleDiameterMm: 0.4, filamentId: undefined, materialName: "", materialDryState: "Unknown", slicer,
+      slicerVersion: "", profileName: "", profileRevision: "", orientation: "", supports: "", partDivision: "", assemblyMethod: "",
+      controlledVariables: [], criteria: defaultPrintTrialCriteria(), estimatedTimeHours: undefined, actualTimeHours: undefined,
+      estimatedMaterialGrams: undefined, actualMaterialGrams: undefined, cleanupMinutes: undefined, assemblyMinutes: undefined,
+      dimensionalResults: "", surfaceResult: "", supportRemovalResult: "", failureMode: "", evidencePaths: [], status: "Not Started",
+      outcomeVerifiedByDerek: false, notes: printer ? `Initial route: ${printer.name}.` : "", nextAction: "Complete the controlled trial setup.",
+      createdAt: timestamp, updatedAt: timestamp,
+    };
+    setPrintTrials((prev) => [record, ...prev]);
+    return record.id;
+  }
+
+  function updatePrintTrial(id: string, patch: Partial<PrintTrialRecord>) {
+    const setupKeys = ["modelPath", "modelRevision", "modelSha256", "printerId", "nozzleDiameterMm", "filamentId", "materialName", "materialDryState", "slicer", "slicerVersion", "profileName", "profileRevision", "orientation", "supports", "partDivision", "assemblyMethod", "controlledVariables", "criteria"];
+    const existing = printTrials.find((trial) => trial.id === id);
+    const invalidatesOutcome = Boolean(existing && (existing.status === "Passed" || existing.status === "Failed") && Object.keys(patch).some((key) => setupKeys.includes(key)));
+    setPrintTrials((prev) => prev.map((trial) => {
+      if (trial.id !== id) return trial;
+      return {
+        ...trial,
+        ...patch,
+        ...(invalidatesOutcome ? { status: "In Progress" as const, outcomeVerifiedByDerek: false, outcomeVerifiedAt: undefined, completedAt: undefined } : {}),
+        updatedAt: new Date().toISOString(),
+      };
+    }));
+    if (invalidatesOutcome && existing) {
+      setModelVerifications((prev) => prev.map((item) => item.id === existing.modelVerificationId ? { ...item, physicalTestStatus: "Not Started" } : item));
+    }
+  }
+
+  function setPrintTrialStatus(id: string, status: PrintTrialRecord["status"]) {
+    const trial = printTrials.find((item) => item.id === id);
+    if (!trial) return false;
+    const verification = modelVerifications.find((item) => item.id === trial.modelVerificationId);
+    const exactRevision = Boolean(verification && verification.modelPath === trial.modelPath && verification.modelRevision === trial.modelRevision && verification.modelSha256.toLowerCase() === trial.modelSha256.toLowerCase());
+    if (status === "In Progress" && !printTrialReadyToStart(trial)) return false;
+    if ((status === "In Progress" || status === "Passed") && !exactRevision) return false;
+    if (status === "Passed" && !printTrialCanPass(trial)) return false;
+    if (status === "Failed" && !printTrialCanFail(trial)) return false;
+    const timestamp = new Date().toISOString();
+    setPrintTrials((prev) => prev.map((item) => item.id === id ? {
+      ...item, status,
+      startedAt: status === "Not Started" ? undefined : item.startedAt ?? timestamp,
+      completedAt: status === "Passed" || status === "Failed" ? timestamp : undefined,
+      outcomeVerifiedByDerek: status === "Not Started" ? false : item.outcomeVerifiedByDerek,
+      outcomeVerifiedAt: status === "Passed" || status === "Failed" ? timestamp : undefined,
+      updatedAt: timestamp,
+    } : item));
+    if (exactRevision) setModelVerifications((prev) => prev.map((item) => item.id === trial.modelVerificationId ? { ...item, physicalTestStatus: status } : item));
+    return true;
+  }
+
+  function removePrintTrial(id: string) {
+    const trial = printTrials.find((item) => item.id === id);
+    setPrintTrials((prev) => prev.filter((item) => item.id !== id));
+    if (trial) {
+      const remaining = printTrials.filter((item) => item.id !== id && item.modelVerificationId === trial.modelVerificationId);
+      const physicalTestStatus = remaining.some((item) => item.status === "Passed") ? "Passed" : remaining.some((item) => item.status === "In Progress") ? "In Progress" : remaining.some((item) => item.status === "Failed") ? "Failed" : "Not Started";
+      setModelVerifications((prev) => prev.map((item) => item.id === trial.modelVerificationId ? { ...item, physicalTestStatus } : item));
+    }
   }
 
   function addVariant(realm?: ProductVariant["realm"]) {
@@ -1137,7 +1238,7 @@ export function useForgekeeperState() {
 
   return {
     view, setView,
-    products, stls, concepts, productionReferences, modelVerifications, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings,
+    products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
     selectedProductId, setSelectedProductId, productTab, setProductTab,
     newProductName, setNewProductName, newStlName, setNewStlName, newConceptTitle, setNewConceptTitle,
@@ -1150,6 +1251,7 @@ export function useForgekeeperState() {
     addConcept, updateConcept, removeConcept,
     addProductionReference, updateProductionReference, markProductionReferenceReady, setPrimaryProductionReference, removeProductionReference,
     addModelVerification, updateModelVerification, setModelVisualDecision, setModelForgeabilityStatus,
+    addPrintTrial, updatePrintTrial, setPrintTrialStatus, removePrintTrial,
     addVariant, updateVariant, removeVariant,
     addCollection, updateCollection, removeCollection, assignProductToCollection, setCollectionHero,
     addRelease, updateRelease, removeRelease, addProductToRelease, removeProductFromRelease,
