@@ -9,6 +9,7 @@ import { clearStoredData, downloadJson, loadStoredData, saveStoredData } from ".
 import { defaultExternalTools, getToolPath, openLocalPathBestEffort, openWebUrl, slicerForPrinter } from "../lib/externalTools";
 import { filenameFromPath, folderFromPath, suggestedLibraryPath } from "../lib/assetLibrary";
 import { emptyProductionReferenceChecks, productionReferenceReady, referenceChecksPassed } from "../lib/productionReferences";
+import { canApproveForgeability, checksAllPass, defaultMeshChecks, defaultVisualChecks, requiredViewsPresent } from "../lib/modelVerification";
 import type {
   AppData,
   AppSettings,
@@ -20,6 +21,7 @@ import type {
   GenerationJobRecord,
   LibraryAssetRecord,
   MaintenanceRecord,
+  ModelVerificationRecord,
   OrderRecord,
   OrderStatus,
   PrinterRecord,
@@ -39,6 +41,7 @@ const seedData: AppData = {
   stls: seedStls,
   concepts: seedConcepts,
   productionReferences: [],
+  modelVerifications: [],
   variants: seedVariants,
   collections: seedCollections,
   releases: seedReleases,
@@ -119,6 +122,25 @@ function hydrateProductionReferences(concepts: ConceptSpec[], references?: Produ
   return [...retained, ...migrated];
 }
 
+function hydrateModelVerifications(records?: ModelVerificationRecord[]): ModelVerificationRecord[] {
+  return (records ?? []).map((record) => ({
+    ...record,
+    modelPath: record.modelPath ?? "",
+    modelRevision: record.modelRevision ?? "v001",
+    modelSha256: record.modelSha256 ?? "",
+    inspectionViews: record.inspectionViews ?? {},
+    visualChecks: record.visualChecks?.length ? record.visualChecks : defaultVisualChecks(),
+    meshChecks: record.meshChecks?.length ? record.meshChecks : defaultMeshChecks(),
+    visualDecision: record.visualDecision ?? "Pending",
+    forgeabilityStatus: record.forgeabilityStatus ?? "Pending",
+    physicalTestStatus: record.physicalTestStatus ?? "Not Started",
+    risks: record.risks ?? [],
+    requirements: record.requirements ?? [],
+    unknowns: record.unknowns ?? [],
+    notes: record.notes ?? "",
+  }));
+}
+
 function hydrateData(): AppData {
   const stored = loadStoredData();
   if (!stored) return seedData;
@@ -142,6 +164,7 @@ function hydrateData(): AppData {
     })),
     concepts,
     productionReferences: hydrateProductionReferences(concepts, stored.productionReferences),
+    modelVerifications: hydrateModelVerifications(stored.modelVerifications),
     variants: (stored.variants ?? seedData.variants).map((variant) => ({
       ...variant,
       productImagePath: variant.productImagePath ?? "",
@@ -206,6 +229,7 @@ export function useForgekeeperState() {
   const [stls, setStls] = useState<STLRecord[]>(initial.stls);
   const [concepts, setConcepts] = useState<ConceptSpec[]>(initial.concepts);
   const [productionReferences, setProductionReferences] = useState<ProductionReferenceRecord[]>(initial.productionReferences);
+  const [modelVerifications, setModelVerifications] = useState<ModelVerificationRecord[]>(initial.modelVerifications);
   const [variants, setVariants] = useState<ProductVariant[]>(initial.variants);
   const [collections, setCollections] = useState<CollectionRecord[]>(initial.collections);
   const [releases, setReleases] = useState<ReleaseRecord[]>(initial.releases);
@@ -241,6 +265,7 @@ export function useForgekeeperState() {
     stls,
     concepts,
     productionReferences,
+    modelVerifications,
     variants,
     collections,
     releases,
@@ -261,7 +286,7 @@ export function useForgekeeperState() {
 
   useEffect(() => {
     saveStoredData(appData);
-  }, [products, stls, concepts, productionReferences, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
+  }, [products, stls, concepts, productionReferences, modelVerifications, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
 
   useEffect(() => {
     setPrinters((prev) => prev.map((printer) => printerStatusFromOrders(printer, orders, products)));
@@ -428,6 +453,7 @@ export function useForgekeeperState() {
     setConcepts((prev) => prev.filter((concept) => concept.productId !== id));
     const removedConceptIds = new Set(concepts.filter((concept) => concept.productId === id).map((concept) => concept.id));
     setProductionReferences((prev) => prev.filter((reference) => !removedConceptIds.has(reference.conceptId)));
+    setModelVerifications((prev) => prev.filter((verification) => verification.productId !== id));
     setVariants((prev) => prev.filter((variant) => variant.productId !== id));
     setOrders((prev) => prev.filter((order) => order.productId !== id));
     setReleases((prev) => prev.map((release) => ({ ...release, productIds: release.productIds.filter((productId) => productId !== id) })));
@@ -467,6 +493,7 @@ export function useForgekeeperState() {
     setStls((prev) => prev.filter((stl) => stl.id !== id));
     setConcepts((prev) => prev.map((concept) => (concept.linkedStlId === id || concept.linkedStlIds?.includes(id) ? { ...concept, linkedStlId: concept.linkedStlId === id ? undefined : concept.linkedStlId, linkedStlIds: (concept.linkedStlIds ?? []).filter((stlId) => stlId !== id) } : concept)));
     setVariants((prev) => prev.map((variant) => (variant.stlId === id ? { ...variant, stlId: undefined } : variant)));
+    setModelVerifications((prev) => prev.map((verification) => verification.stlId === id ? { ...verification, stlId: undefined, forgeabilityStatus: "Pending" } : verification));
   }
 
   function addConcept() {
@@ -495,6 +522,7 @@ export function useForgekeeperState() {
   function removeConcept(id: string) {
     setConcepts((prev) => prev.filter((concept) => concept.id !== id));
     setProductionReferences((prev) => prev.filter((reference) => reference.conceptId !== id));
+    setModelVerifications((prev) => prev.filter((verification) => verification.conceptId !== id));
     setVariants((prev) => prev.map((variant) => (variant.conceptId === id ? { ...variant, conceptId: undefined } : variant)));
   }
 
@@ -549,6 +577,69 @@ export function useForgekeeperState() {
     if (!reference) return;
     setProductionReferences((prev) => prev.filter((item) => item.id !== id));
     setConcepts((prev) => prev.map((concept) => concept.generationReferenceId === id ? { ...concept, generationReferenceId: undefined, generationReferencePath: "" } : concept));
+  }
+
+  function addModelVerification(generationJobId: string) {
+    const existing = modelVerifications.find((verification) => verification.generationJobId === generationJobId);
+    if (existing) return existing.id;
+    const job = generationJobs.find((item) => item.id === generationJobId);
+    const concept = job ? concepts.find((item) => item.id === job.conceptId) : undefined;
+    if (!job || !concept) return "";
+    const linkedStl = stls.find((stl) => stl.linkedConceptId === concept.id && stl.notes.includes(job.externalJobId));
+    const id = uid("VERIFY");
+    const timestamp = new Date().toISOString();
+    const record: ModelVerificationRecord = {
+      id,
+      productId: job.productId,
+      conceptId: concept.id,
+      canonRecordId: concept.canonRecordId,
+      generationJobId: job.id,
+      stlId: linkedStl?.id,
+      modelPath: linkedStl?.filePath ?? "",
+      modelRevision: linkedStl?.version ?? "v001",
+      modelSha256: "",
+      evidenceClass: linkedStl?.filePath ? "Mesh available" : "Concept only",
+      inspectionViews: {},
+      visualChecks: defaultVisualChecks(),
+      meshChecks: defaultMeshChecks(),
+      visualDecision: "Pending",
+      forgeabilityStatus: "Pending",
+      physicalTestStatus: "Not Started",
+      risks: [],
+      requirements: [],
+      unknowns: linkedStl?.filePath ? [] : ["Actual STL/3MF geometry has not been linked to this verification."],
+      notes: "",
+      createdAt: timestamp,
+    };
+    setModelVerifications((prev) => [record, ...prev]);
+    return id;
+  }
+
+  function updateModelVerification(id: string, patch: Partial<ModelVerificationRecord>) {
+    setModelVerifications((prev) => prev.map((verification) => verification.id === id ? { ...verification, ...patch } : verification));
+  }
+
+  function setModelVisualDecision(id: string, decision: ModelVerificationRecord["visualDecision"]) {
+    const verification = modelVerifications.find((item) => item.id === id);
+    if (!verification || (decision === "Accepted" && (!checksAllPass(verification.visualChecks) || !requiredViewsPresent(verification)))) return false;
+    setModelVerifications((prev) => prev.map((item) => item.id === id ? { ...item, visualDecision: decision, assessedAt: new Date().toISOString() } : item));
+    if (verification.generationJobId) {
+      const reviewStatus = decision === "Accepted" ? "accepted" : decision === "Pending" ? "pending" : "rejected";
+      setGenerationJobs((previous) => previous.map((job) => job.id === verification.generationJobId ? {
+        ...job,
+        reviewStatus,
+        error: reviewStatus === "rejected" ? `Model Verification: ${decision}. ${verification.notes}`.trim() : undefined,
+        updatedAt: new Date().toISOString(),
+      } : job));
+    }
+    return true;
+  }
+
+  function setModelForgeabilityStatus(id: string, status: ModelVerificationRecord["forgeabilityStatus"]) {
+    const verification = modelVerifications.find((item) => item.id === id);
+    if (!verification || (status === "Approved" && !canApproveForgeability(verification))) return false;
+    setModelVerifications((prev) => prev.map((item) => item.id === id ? { ...item, forgeabilityStatus: status, assessedAt: new Date().toISOString() } : item));
+    return true;
   }
 
   function addVariant(realm?: ProductVariant["realm"]) {
@@ -871,6 +962,15 @@ export function useForgekeeperState() {
       linkedStlId: item.linkedStlId || stlId,
       linkedStlIds: Array.from(new Set([...(item.linkedStlIds || []), stlId])),
     } : item));
+    setModelVerifications((previous) => previous.map((verification) => verification.generationJobId === jobId ? {
+      ...verification,
+      stlId,
+      modelPath: filePath,
+      modelRevision: record.version,
+      evidenceClass: "Mesh available",
+      forgeabilityStatus: "Pending",
+      unknowns: verification.unknowns.filter((unknown) => !unknown.includes("Actual STL/3MF geometry")),
+    } : verification));
   }
 
   function removeMaintenance(id: string) {
@@ -1002,6 +1102,7 @@ export function useForgekeeperState() {
         const importedConcepts = hydrateConcepts(parsed.concepts ?? []);
         setConcepts(importedConcepts);
         setProductionReferences(hydrateProductionReferences(importedConcepts, parsed.productionReferences));
+        setModelVerifications(hydrateModelVerifications(parsed.modelVerifications));
         setVariants(parsed.variants ?? []);
         setCollections(parsed.collections ?? []);
         setReleases(parsed.releases ?? []);
@@ -1036,7 +1137,7 @@ export function useForgekeeperState() {
 
   return {
     view, setView,
-    products, stls, concepts, productionReferences, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings,
+    products, stls, concepts, productionReferences, modelVerifications, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
     selectedProductId, setSelectedProductId, productTab, setProductTab,
     newProductName, setNewProductName, newStlName, setNewStlName, newConceptTitle, setNewConceptTitle,
@@ -1048,6 +1149,7 @@ export function useForgekeeperState() {
     addStl, updateStl, markPrimaryStl, removeStl,
     addConcept, updateConcept, removeConcept,
     addProductionReference, updateProductionReference, markProductionReferenceReady, setPrimaryProductionReference, removeProductionReference,
+    addModelVerification, updateModelVerification, setModelVisualDecision, setModelForgeabilityStatus,
     addVariant, updateVariant, removeVariant,
     addCollection, updateCollection, removeCollection, assignProductToCollection, setCollectionHero,
     addRelease, updateRelease, removeRelease, addProductToRelease, removeProductFromRelease,

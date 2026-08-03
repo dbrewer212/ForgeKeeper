@@ -17,6 +17,12 @@ export type GenerationProvider = "meshy" | "printpal";
 export type GenerationReviewStatus = "pending" | "accepted" | "rejected";
 export type ProductionReferenceStatus = "Draft" | "Ready" | "Retired";
 export type ProductionReferenceView = "Front" | "Left" | "Right" | "Back" | "Top" | "Three-quarter";
+export type EvidenceClass = "Concept only" | "Mesh available" | "Sliced" | "Physical trial" | "Production evidence";
+export type AssessmentResult = "Not Assessed" | "Pass" | "Fail";
+export type VisualReviewDecision = "Pending" | "Accepted" | "Changes Required" | "Rejected";
+export type ForgeabilityStatus = "Pending" | "Changes Required" | "Blocked" | "Approved";
+export type PhysicalTestStatus = "Not Started" | "In Progress" | "Passed" | "Failed";
+export type InspectionView = "Front" | "Left" | "Right" | "Back" | "Top" | "Three-quarter" | "Silhouette" | "Components";
 export type PipelineStage = "Planning" | "Concept Approved" | "Engineering" | "Prototype" | "Print Trial" | "Production Approved" | "Released";
 export type ObjectiveStatus = "Active" | "Paused" | "Complete";
 
@@ -75,6 +81,7 @@ export type ConceptSpec = {
   imagePath?: string;
   generationReferencePath?: string;
   generationReferenceId?: string;
+  canonRecordId?: string;
   measurementImagePath?: string;
   referenceFolderPath?: string;
   measurements: string;
@@ -111,6 +118,38 @@ export type ProductionReferenceRecord = {
   notes: string;
   createdAt: string;
   verifiedAt?: string;
+};
+
+export type VerificationCheck = {
+  id: string;
+  label: string;
+  result: AssessmentResult;
+  note: string;
+};
+
+export type ModelVerificationRecord = {
+  id: string;
+  productId: string;
+  conceptId: string;
+  canonRecordId?: string;
+  generationJobId?: string;
+  stlId?: string;
+  modelPath: string;
+  modelRevision: string;
+  modelSha256: string;
+  evidenceClass: EvidenceClass;
+  inspectionViews: Partial<Record<InspectionView, string>>;
+  visualChecks: VerificationCheck[];
+  meshChecks: VerificationCheck[];
+  visualDecision: VisualReviewDecision;
+  forgeabilityStatus: ForgeabilityStatus;
+  physicalTestStatus: PhysicalTestStatus;
+  risks: string[];
+  requirements: string[];
+  unknowns: string[];
+  notes: string;
+  createdAt: string;
+  assessedAt?: string;
 };
 
 export type ProductVariant = {
@@ -332,6 +371,7 @@ export type AppData = {
   stls: STLRecord[];
   concepts: ConceptSpec[];
   productionReferences: ProductionReferenceRecord[];
+  modelVerifications: ModelVerificationRecord[];
   variants: ProductVariant[];
   collections: CollectionRecord[];
   releases: ReleaseRecord[];

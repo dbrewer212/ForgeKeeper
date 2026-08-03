@@ -13,6 +13,7 @@ import { inventoryState, pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 import type { OrderStatus, Product, ProductLine, ProductStatus, ProductTab, ProductTier, ProductVariant, RealmVariant } from "../../types/domain";
 import { ProductionReferenceBuilder } from "./ProductionReferenceBuilder";
+import { ModelVerificationStation } from "./ModelVerificationStation";
 
 const productTabs: ProductTab[] = ["overview", "stls", "concepts", "variants", "orders"];
 const realmOptions: RealmVariant[] = ["Midgard", "Alfheim", "Svartalfheim", "Vanaheim", "Asgard", "Jotunheim", "Muspelheim", "Niflheim", "Helheim"];
@@ -509,6 +510,12 @@ function ConceptPanel({ state }: { state: ForgekeeperState }) {
                 <Field label="Reference Folder">
                   <Input value={concept.referenceFolderPath || ""} onChange={(e) => state.updateConcept(concept.id, { referenceFolderPath: e.target.value })} placeholder="C:\ForgekeeperLibrary\Concepts\Product\reference" />
                 </Field>
+                <Field label="Canon Registry Record" className="lg:col-span-2">
+                  <Select value={concept.canonRecordId || ""} onChange={(e) => state.updateConcept(concept.id, { canonRecordId: e.target.value || undefined })}>
+                    <option value="">No character canon record required</option>
+                    {state.canonRecords.map((record) => <option key={record.id} value={record.id}>{record.name} · {record.canonStatus}</option>)}
+                  </Select>
+                </Field>
                 <Field label="Measurements">
                   <Textarea value={concept.measurements} onChange={(e) => state.updateConcept(concept.id, { measurements: e.target.value })} placeholder="Width, height, depth, tolerances, insert sizes..." className="min-h-[100px] w-full" />
                 </Field>
@@ -531,6 +538,9 @@ function ConceptPanel({ state }: { state: ForgekeeperState }) {
                 </div>
                 <div className="lg:col-span-2">
                   <ConceptGenerationPanel state={state} concept={concept} />
+                </div>
+                <div className="lg:col-span-2">
+                  <ModelVerificationStation state={state} concept={concept} />
                 </div>
               </div>
             </div>
@@ -676,20 +686,6 @@ function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; c
     }
   }
 
-  function reviewJob(localId: string, decision: "accepted" | "rejected") {
-    if (decision === "accepted") {
-      if (!window.confirm("Mark this generated revision as visually accepted? Geometry and physical Print Trial approval remain separate.")) return;
-      state.updateGenerationJob(localId, { reviewStatus: "accepted", error: undefined });
-      setMessage("Visual revision accepted. Forgeability and physical Print Trial gates remain pending.");
-      return;
-    }
-    const diagnosis = window.prompt("Why was this revision rejected? Record the cause before another paid attempt.");
-    if (!diagnosis?.trim()) return;
-    state.updateGenerationJob(localId, { reviewStatus: "rejected", error: diagnosis.trim() });
-    setRetryReason(diagnosis.trim());
-    setMessage("Revision preserved as rejected. The diagnosis is loaded into the next-attempt gate.");
-  }
-
   async function downloadStl(localId: string, externalJobId: string, jobProvider: ProviderKey) {
     const productName = state.selectedProduct?.name || "GeneratedModel";
     const safeName = `${productName}-${concept.title}`.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-|-$/g, "");
@@ -789,8 +785,7 @@ function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; c
                 <Button variant="ghost" onClick={() => refreshJob(job.id, job.externalJobId, job.provider)} disabled={working}>Refresh</Button>
                 {job.status.toLowerCase() === "completed" || job.status.toLowerCase() === "succeeded" ? (
                   <>
-                    <Button variant="ghost" onClick={() => reviewJob(job.id, "rejected")} disabled={working}>Reject Revision</Button>
-                    <Button variant="ghost" onClick={() => reviewJob(job.id, "accepted")} disabled={working}>Accept Likeness</Button>
+                    <Button variant="ghost" onClick={() => { state.addModelVerification(job.id); setMessage("Verification record ready below. Visual acceptance now requires the standardized inspection and Character DNA checks."); }} disabled={working}>Verify Model</Button>
                     <Button onClick={() => downloadStl(job.id, job.externalJobId, job.provider)} disabled={working}>Download & Link STL</Button>
                   </>
                 ) : null}
