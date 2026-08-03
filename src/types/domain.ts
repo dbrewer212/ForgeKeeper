@@ -226,6 +226,30 @@ export type ControlCenterRecord = {
 };
 
 export type CanonStatus = "Locked" | "Established Direction" | "Developing" | "Historical";
+export type LibraryAssetStatus = "Authoritative" | "Historical" | "Development Candidate" | "Supporting";
+export type CanonAssetRole = "Primary Authority" | "Superseded Reference" | "Development Candidate" | "Supporting Reference";
+
+export type LibraryAssetRecord = {
+  id: string;
+  libraryFileId: string;
+  fileId: string;
+  name: string;
+  libraryPath: string;
+  mimeType: string;
+  sizeBytes: number;
+  modifiedAt: string;
+  sha256: string;
+  assetType: "Concept Art" | "Document" | "Model" | "Production Reference";
+  status: LibraryAssetStatus;
+  duplicateOfAssetId?: string;
+  notes: string;
+};
+
+export type CanonAssetLink = {
+  assetId: string;
+  role: CanonAssetRole;
+  note: string;
+};
 
 export type CanonRecord = {
   id: string;
@@ -243,7 +267,8 @@ export type CanonRecord = {
   symbolism: string;
   currentProductionDesign: string;
   decisionEvidence: string;
-  authorityLinked: boolean;
+  authorityBasis: "Library Assets" | "Decision Record" | "Mixed";
+  assetLinks: CanonAssetLink[];
   lastCanonChange: string;
   notes: string;
 };
@@ -281,6 +306,7 @@ export type AppData = {
   generationJobs: GenerationJobRecord[];
   controlCenter: ControlCenterRecord;
   canonRecords: CanonRecord[];
+  libraryAssets: LibraryAssetRecord[];
   settings: AppSettings;
   prototypes: PlannedPrototype[];
   plannedFilament: PlannedFilament[];

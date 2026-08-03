@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { defaultControlCenter, defaultSettings, seedCanonRecords, seedCollections, seedConcepts, seedFilament, seedOrders, seedPrinters, seedProducts, seedReleases, seedStls, seedVariants } from "../data/seed";
+import { defaultControlCenter, defaultSettings, seedCanonRecords, seedCollections, seedConcepts, seedFilament, seedLibraryAssets, seedOrders, seedPrinters, seedProducts, seedReleases, seedStls, seedVariants } from "../data/seed";
 import { seedPlannedFilament, seedProductPlanning, seedPrototypes, seedRealmMaterials } from "../data/planningSeed";
 import { directCost, getOrderCostBreakdown } from "../lib/cost";
 import { calculateProductionMetrics, orderMaterialGrams } from "../lib/production";
@@ -11,11 +11,13 @@ import { filenameFromPath, folderFromPath, suggestedLibraryPath } from "../lib/a
 import type {
   AppData,
   AppSettings,
+  CanonRecord,
   CollectionRecord,
   ConceptSpec,
   ControlCenterRecord,
   FilamentRecord,
   GenerationJobRecord,
+  LibraryAssetRecord,
   MaintenanceRecord,
   OrderRecord,
   OrderStatus,
@@ -44,12 +46,39 @@ const seedData: AppData = {
   generationJobs: [],
   controlCenter: defaultControlCenter,
   canonRecords: seedCanonRecords,
+  libraryAssets: seedLibraryAssets,
   settings: { ...defaultExternalTools, ...defaultSettings },
   prototypes: seedPrototypes,
   plannedFilament: seedPlannedFilament,
   productPlanning: seedProductPlanning,
   realmMaterials: seedRealmMaterials,
 };
+
+function hydrateCanonRecords(records?: CanonRecord[]): CanonRecord[] {
+  return (records ?? seedCanonRecords).map((record) => {
+    const seed = seedCanonRecords.find((candidate) => candidate.id === record.id);
+    return {
+      ...seed,
+      ...record,
+      foundryRole: record.foundryRole ?? seed?.foundryRole ?? "Not yet recorded.",
+      relationships: record.relationships ?? seed?.relationships ?? [],
+      currentProductionDesign: record.currentProductionDesign ?? seed?.currentProductionDesign ?? "Not yet recorded.",
+      decisionEvidence: record.decisionEvidence ?? seed?.decisionEvidence ?? "No explicit decision evidence recorded.",
+      authorityBasis: record.authorityBasis ?? seed?.authorityBasis ?? "Decision Record",
+      assetLinks: record.assetLinks ?? seed?.assetLinks ?? [],
+    };
+  });
+}
+
+function mergeLibraryAssets(assets?: LibraryAssetRecord[]): LibraryAssetRecord[] {
+  return [
+    ...seedLibraryAssets.map((seed) => ({
+      ...(assets ?? []).find((asset) => asset.id === seed.id),
+      ...seed,
+    })),
+    ...(assets ?? []).filter((asset) => !seedLibraryAssets.some((seed) => seed.id === asset.id)),
+  ];
+}
 
 function hydrateData(): AppData {
   const stored = loadStoredData();
@@ -110,18 +139,8 @@ function hydrateData(): AppData {
       activeObjective: { ...defaultControlCenter.activeObjective, ...stored.controlCenter.activeObjective },
       parkedIdeas: (stored.controlCenter.parkedIdeas ?? []).map((idea) => ({ ...idea })),
     } : defaultControlCenter,
-    canonRecords: (stored.canonRecords ?? seedCanonRecords).map((record) => {
-      const seed = seedCanonRecords.find((candidate) => candidate.id === record.id);
-      return {
-        ...seed,
-        ...record,
-        foundryRole: record.foundryRole ?? seed?.foundryRole ?? "Not yet recorded.",
-        relationships: record.relationships ?? seed?.relationships ?? [],
-        currentProductionDesign: record.currentProductionDesign ?? seed?.currentProductionDesign ?? "Not yet recorded.",
-        decisionEvidence: record.decisionEvidence ?? seed?.decisionEvidence ?? "No explicit decision evidence recorded.",
-        authorityLinked: record.authorityLinked ?? seed?.authorityLinked ?? false,
-      };
-    }),
+    canonRecords: hydrateCanonRecords(stored.canonRecords),
+    libraryAssets: mergeLibraryAssets(stored.libraryAssets),
     settings: { ...defaultExternalTools, ...defaultSettings, ...(stored.settings ?? {}) },
     prototypes: stored.prototypes ?? seedData.prototypes,
     plannedFilament: stored.plannedFilament ?? seedData.plannedFilament,
@@ -162,6 +181,7 @@ export function useForgekeeperState() {
   const [generationJobs, setGenerationJobs] = useState<GenerationJobRecord[]>(initial.generationJobs);
   const [controlCenter, setControlCenter] = useState<ControlCenterRecord>(initial.controlCenter);
   const [canonRecords, setCanonRecords] = useState(initial.canonRecords);
+  const [libraryAssets, setLibraryAssets] = useState(initial.libraryAssets);
   const [settings, setSettings] = useState<AppSettings>(initial.settings);
   const [prototypes, setPrototypes] = useState<PlannedPrototype[]>(initial.prototypes);
   const [plannedFilament, setPlannedFilament] = useState<PlannedFilament[]>(initial.plannedFilament);
@@ -195,6 +215,7 @@ export function useForgekeeperState() {
     generationJobs,
     controlCenter,
     canonRecords,
+    libraryAssets,
     settings,
     prototypes,
     plannedFilament,
@@ -204,7 +225,7 @@ export function useForgekeeperState() {
 
   useEffect(() => {
     saveStoredData(appData);
-  }, [products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
+  }, [products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
 
   useEffect(() => {
     setPrinters((prev) => prev.map((printer) => printerStatusFromOrders(printer, orders, products)));
@@ -896,7 +917,8 @@ export function useForgekeeperState() {
         setMaintenance(parsed.maintenance ?? []);
         setGenerationJobs(parsed.generationJobs ?? []);
         setControlCenter(parsed.controlCenter ?? defaultControlCenter);
-        setCanonRecords(parsed.canonRecords ?? seedCanonRecords);
+        setCanonRecords(hydrateCanonRecords(parsed.canonRecords));
+        setLibraryAssets(mergeLibraryAssets(parsed.libraryAssets));
         setSettings({ ...defaultExternalTools, ...defaultSettings, ...(parsed.settings ?? {}) });
         setPrototypes(parsed.prototypes ?? seedPrototypes);
         setPlannedFilament(parsed.plannedFilament ?? seedPlannedFilament);
@@ -920,7 +942,7 @@ export function useForgekeeperState() {
 
   return {
     view, setView,
-    products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, settings,
+    products, stls, concepts, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, settings,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
     selectedProductId, setSelectedProductId, productTab, setProductTab,
     newProductName, setNewProductName, newStlName, setNewStlName, newConceptTitle, setNewConceptTitle,
