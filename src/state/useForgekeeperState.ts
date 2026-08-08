@@ -106,6 +106,20 @@ function mergeLibraryAssets(assets?: LibraryAssetRecord[]): LibraryAssetRecord[]
   ];
 }
 
+function hydratePrinters(printers?: PrinterRecord[]): PrinterRecord[] {
+  const restored = printers ?? seedPrinters;
+  const kobraS1Max = seedPrinters.find((printer) => printer.id === "PR-KOBRA-S1-MAX-COMBO");
+  const hasKobraS1Max = restored.some((printer) => {
+    const identity = `${printer.name} ${printer.model}`.toLowerCase();
+    return printer.id === kobraS1Max?.id || identity.includes("kobra s1 max");
+  });
+  const complete = !hasKobraS1Max && kobraS1Max ? [...restored, kobraS1Max] : restored;
+  return complete.map((printer) => ({
+    ...printer,
+    watts: printer.watts ?? defaultSettings.machineWatts,
+  }));
+}
+
 function hydrateConcepts(concepts: ConceptSpec[]): ConceptSpec[] {
   return concepts.map((concept) => ({
     ...concept,
@@ -228,10 +242,7 @@ function hydrateData(): AppData {
       spoolPrice: item.spoolPrice ?? 22,
       spoolWeightGrams: item.spoolWeightGrams ?? 1000,
     })),
-    printers: (stored.printers ?? seedData.printers).map((printer) => ({
-      ...printer,
-      watts: printer.watts ?? defaultSettings.machineWatts,
-    })),
+    printers: hydratePrinters(stored.printers),
     maintenance: stored.maintenance ?? [],
     generationJobs: stored.generationJobs ?? [],
     controlCenter: stored.controlCenter ? {
@@ -1267,7 +1278,7 @@ export function useForgekeeperState() {
     setReleases(parsed.releases ?? []);
     setOrders(parsed.orders ?? []);
     setFilament(parsed.filament ?? []);
-    setPrinters(parsed.printers ?? []);
+    setPrinters(hydratePrinters(parsed.printers));
     setMaintenance(parsed.maintenance ?? []);
     setGenerationJobs(parsed.generationJobs ?? []);
     setControlCenter(parsed.controlCenter ?? defaultControlCenter);

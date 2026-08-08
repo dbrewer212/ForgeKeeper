@@ -336,5 +336,6 @@ export const seedFilament: FilamentRecord[] = [
 
 export const seedPrinters: PrinterRecord[] = [
   { id: "PR1", name: "Neptune 4 Max", model: "Elegoo Neptune 4 Max", status: "Printing", buildVolume: "420 x 420 x 480", watts: 280, activeJob: "Controller Stand", notes: "Large format" },
+  { id: "PR-KOBRA-S1-MAX-COMBO", name: "Kobra S1 Max Combo", model: "Anycubic Kobra S1 Max Combo", status: "Available", buildVolume: "350 x 350 x 350", watts: 350, activeJob: "", notes: "Enclosed CoreXY · ACE 2 Pro · Anycubic Slicer Next" },
   { id: "PR2", name: "Kobra 3 Combo", model: "Anycubic Kobra 3 Combo", status: "Available", buildVolume: "250 x 250 x 260", watts: 220, activeJob: "", notes: "Fast support printer" },
 ];
