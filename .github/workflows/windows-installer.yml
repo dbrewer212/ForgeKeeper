@@ -49,6 +49,17 @@ jobs:
       - name: Build Windows installers
         run: npm run desktop:build
 
+      - name: Smoke test packaged application launch
+        shell: powershell
+        run: |
+          $executable = Resolve-Path "src-tauri/target/release/app.exe"
+          $process = Start-Process -FilePath $executable -PassThru
+          Start-Sleep -Seconds 10
+          if ($process.HasExited) {
+            throw "ForgeKeeper exited during its launch smoke test with code $($process.ExitCode)."
+          }
+          Stop-Process -Id $process.Id -Force
+
       - name: Upload current installers
         uses: actions/upload-artifact@v4
         with:
