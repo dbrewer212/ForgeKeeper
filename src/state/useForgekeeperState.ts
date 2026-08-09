@@ -347,6 +347,7 @@ export function useForgekeeperState() {
   const [quickAction, setQuickAction] = useState<QuickActionKey | null>(null);
   const [storageReady, setStorageReady] = useState(!isTauriRuntime());
   const [storageStatus, setStorageStatus] = useState<"Loading" | "SQLite" | "Browser fallback" | "Error">(isTauriRuntime() ? "Loading" : "Browser fallback");
+  const [storageError, setStorageError] = useState("");
 
   const appData: AppData = {
     products,
@@ -384,11 +385,13 @@ export function useForgekeeperState() {
         if (nativeData) replaceWorkspaceData(hydrateDataFrom(nativeData));
         else await saveNativeStoredData(appData);
         clearStoredData();
+        setStorageError("");
         setStorageStatus("SQLite");
         setStorageReady(true);
       })
       .catch((error) => {
         console.error("Forgekeeper SQLite initialization failed", error);
+        setStorageError(error instanceof Error ? error.message : String(error));
         setStorageStatus("Error");
         setStorageReady(true);
       });
@@ -403,6 +406,7 @@ export function useForgekeeperState() {
     const timer = window.setTimeout(() => {
       void saveNativeStoredData(appData).catch((error) => {
         console.error("Forgekeeper SQLite save failed", error);
+        setStorageError(error instanceof Error ? error.message : String(error));
         setStorageStatus("Error");
         saveStoredData(appData);
       });
@@ -1662,7 +1666,7 @@ export function useForgekeeperState() {
 
   return {
     view, setView,
-    products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filamentProfiles, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, recovery, recoveryCheckpoints, settings, storageReady, storageStatus,
+    products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filamentProfiles, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, recovery, recoveryCheckpoints, settings, storageReady, storageStatus, storageError,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
     selectedProductId, setSelectedProductId, productTab, setProductTab,
     newProductName, setNewProductName, newStlName, setNewStlName, newConceptTitle, setNewConceptTitle,
