@@ -18,7 +18,8 @@ async function getDatabase() {
   if (!databasePromise) {
     databasePromise = import("@tauri-apps/plugin-sql").then(async ({ default: Database }) => {
       const database = await Database.load(DATABASE_URL);
-      // Defensive creation keeps Windows production builds safe even if a plugin preload migration is delayed.
+      // The workspace is a single versioned JSON record. Bootstrap its table directly so
+      // retired SQLx migration ledgers from prerelease builds cannot block data recovery.
       await database.execute(`
         CREATE TABLE IF NOT EXISTS workspace_state (
           id INTEGER PRIMARY KEY CHECK (id = 1),

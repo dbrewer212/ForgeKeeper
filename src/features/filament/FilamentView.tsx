@@ -122,7 +122,7 @@ export function FilamentView({ state }: { state: ForgekeeperState }) {
         <Stat label="Unknown remainder" value={unknownCount} warning={unknownCount > 0} />
       </div>
 
-      <Card title="Filament Inventory Census" right={<span className="text-xs text-slate-500">v0.1.2 · {state.storageStatus === "SQLite" ? "SQLite workshop database" : state.storageStatus}</span>}>
+      <Card title="Filament Inventory Census" right={<span className="text-xs text-slate-500">v0.1.3 · {state.storageStatus === "SQLite" ? "SQLite workshop database" : state.storageStatus}</span>}>
         {state.storageStatus === "Error" && (
           <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
             <div className="font-semibold">SQLite workshop database did not start.</div>

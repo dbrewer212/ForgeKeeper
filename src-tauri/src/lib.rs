@@ -646,21 +646,8 @@ fn open_with_windows_shell(target: &str, asset_path: Option<&str>) -> Result<(),
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    use tauri_plugin_sql::{Migration, MigrationKind};
-
-    let migrations = vec![Migration {
-        version: 1,
-        description: "create_workspace_state",
-        sql: "CREATE TABLE IF NOT EXISTS workspace_state (id INTEGER PRIMARY KEY CHECK (id = 1), schema_version INTEGER NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);",
-        kind: MigrationKind::Up,
-    }];
-
     tauri::Builder::default()
-        .plugin(
-            tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:forgekeeper.db", migrations)
-                .build(),
-        )
+        .plugin(tauri_plugin_sql::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             open_path,
             launch_external_tool,
