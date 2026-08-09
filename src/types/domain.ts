@@ -6,7 +6,11 @@ export type ProductStatus = "Concept" | "Prototype" | "Active" | "Production" | 
 export type OrderStatus = "Queued" | "Printing" | "Finishing" | "Packed" | "Shipped";
 export type OrderPriority = "Low" | "Normal" | "High" | "Rush";
 export type ReleaseStatus = "Planning" | "Scheduled" | "Live";
-export type FilamentMaterial = "PLA" | "PLA+" | "PETG" | "ABS" | "TPU";
+export type FilamentMaterial = "PLA" | "PLA+" | "PETG" | "ABS" | "ASA" | "TPU" | "Nylon" | "PC" | "Other";
+export type FilamentSpoolCondition = "Sealed" | "Used" | "Empty";
+export type FilamentQuantityConfidence = "Exact" | "Nominal" | "Estimated" | "Unknown";
+export type FilamentSpoolStatus = "In Stock" | "In Use" | "Empty" | "Archived";
+export type FilamentDryingStatus = "Unknown" | "Dry" | "Needs Drying" | "Dried";
 export type PrinterStatus = "Available" | "Printing" | "Maintenance" | "Offline";
 export type ProductTab = "overview" | "stls" | "concepts" | "variants" | "orders";
 export type AssetStatus = "Planned" | "Linked" | "Needs Update" | "Archived";
@@ -268,17 +272,50 @@ export type OrderRecord = {
   notes: string;
 };
 
+export type FilamentProfile = {
+  id: string;
+  brand: string;
+  productLine: string;
+  material: FilamentMaterial;
+  colorName: string;
+  colorFamily: string;
+  diameterMm: number;
+  nominalWeightGrams: number;
+  emptySpoolWeightGrams?: number;
+  reorderPointGrams: number;
+  defaultSpoolPrice: number;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Physical spool. Legacy material fields remain as a compatibility snapshot for orders and costing. */
 export type FilamentRecord = {
   id: string;
+  profileId: string;
+  foundrySpoolCode: string;
   brand: string;
   material: FilamentMaterial;
   colorName: string;
   colorFamily: string;
   gramsAvailable: number;
+  quantityConfidence: FilamentQuantityConfidence;
+  condition: FilamentSpoolCondition;
+  status: FilamentSpoolStatus;
+  grossWeightGrams?: number;
+  estimatedPercent?: number;
   reorderPointGrams: number;
   spoolPrice: number;
   spoolWeightGrams: number;
+  emptySpoolWeightGrams?: number;
+  storageLocation: string;
+  purchaseDate: string;
+  lotNumber: string;
+  dryingStatus: FilamentDryingStatus;
+  dryingHistory: string;
   notes: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type PrinterRecord = {
@@ -348,7 +385,7 @@ export type AuditEvent = {
 export type IntegrityFinding = {
   id: string;
   severity: IntegritySeverity;
-  category: "Relationship" | "Asset" | "Checksum" | "Provider Job" | "Credential" | "Backup";
+  category: "Relationship" | "Asset" | "Checksum" | "Provider Job" | "Credential" | "Backup" | "Inventory";
   title: string;
   detail: string;
   subjectId?: string;
@@ -483,6 +520,7 @@ export type AppData = {
   collections: CollectionRecord[];
   releases: ReleaseRecord[];
   orders: OrderRecord[];
+  filamentProfiles: FilamentProfile[];
   filament: FilamentRecord[];
   printers: PrinterRecord[];
   maintenance: MaintenanceRecord[];

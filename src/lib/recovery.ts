@@ -7,6 +7,7 @@ import type {
   IntegrityFinding,
   IntegrityScanRecord,
 } from "../types/domain";
+import { isLegacyPlaceholderSpool } from "./filamentInventory";
 
 export const BACKUP_FORMAT = "forgekeeper.backup";
 export const BACKUP_SCHEMA_VERSION = 2;
@@ -86,12 +87,13 @@ export async function verifyBackupEnvelope(value: unknown): Promise<{ valid: boo
   if (!candidate.data || candidate.checksumAlgorithm !== "SHA-256" || !candidate.checksum) {
     return { valid: false, message: "The backup envelope is incomplete." };
   }
-  if (candidate.schemaVersion !== BACKUP_SCHEMA_VERSION) {
+  if (![1, BACKUP_SCHEMA_VERSION].includes(Number(candidate.schemaVersion))) {
     return { valid: false, message: `Unsupported backup schema ${String(candidate.schemaVersion)}.` };
   }
   const actual = await sha256Text(JSON.stringify(candidate.data));
   if (actual !== candidate.checksum) return { valid: false, message: "Backup checksum mismatch. The file may be damaged or modified." };
-  return { valid: true, envelope: candidate as BackupEnvelope, message: "SHA-256 checksum verified." };
+  const migrationNote = candidate.schemaVersion === BACKUP_SCHEMA_VERSION ? "" : ` Legacy schema ${candidate.schemaVersion} will be migrated during restore.`;
+  return { valid: true, envelope: candidate as BackupEnvelope, message: `SHA-256 checksum verified.${migrationNote}` };
 }
 
 export function loadRecoveryCheckpoints(): RecoveryCheckpoint[] {
@@ -138,6 +140,18 @@ export function collectStructuralFindings(data: AppData): IntegrityFinding[] {
   const referenceIds = new Set(data.productionReferences.map((item) => item.id));
   const verificationIds = new Set(data.modelVerifications.map((item) => item.id));
   const assetIds = new Set(data.libraryAssets.map((item) => item.id));
+  const profileIds = new Set((data.filamentProfiles ?? []).map((item) => item.id));
+  const spoolCodes = new Map<string, string>();
+
+  data.filament.forEach((spool) => {
+    if (!profileIds.has(spool.profileId)) findings.push(finding("Inventory", "Critical", "Spool has no filament profile", `${spool.foundrySpoolCode || spool.id} points to missing profile ${spool.profileId || "(none)"}.`, spool.id));
+    if (isLegacyPlaceholderSpool(spool)) findings.push(finding("Inventory", "Critical", "Fictional seed spool remains", `${spool.id} matches a retired demonstration record and must not count as physical stock.`, spool.id));
+    if (!spool.foundrySpoolCode) findings.push(finding("Inventory", "Warning", "Spool has no Foundry ID", `${spool.id} cannot be scanned or labeled until it has a Foundry spool code.`, spool.id));
+    const prior = spoolCodes.get(spool.foundrySpoolCode);
+    if (spool.foundrySpoolCode && prior) findings.push(finding("Inventory", "Critical", "Duplicate Foundry spool ID", `${spool.foundrySpoolCode} is used by both ${prior} and ${spool.id}.`, spool.id));
+    else if (spool.foundrySpoolCode) spoolCodes.set(spool.foundrySpoolCode, spool.id);
+    if (spool.quantityConfidence === "Unknown" && spool.gramsAvailable !== 0) findings.push(finding("Inventory", "Warning", "Unknown spool carries a numeric balance", `${spool.foundrySpoolCode} must be measured or estimated before its quantity counts toward stock.`, spool.id));
+  });
 
   data.concepts.forEach((concept) => {
     if (!productIds.has(concept.productId)) findings.push(finding("Relationship", "Critical", "Concept has no product", `${concept.title} references missing product ${concept.productId}.`, concept.id));

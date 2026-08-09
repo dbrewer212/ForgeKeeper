@@ -21,6 +21,12 @@ Then open the localhost URL printed by Vite.
 - CSV exports
 - Seed data matching the current prototype
 
+## Filament inventory
+
+The desktop app stores the operational workspace in a local SQLite database and migrates the earlier browser-storage workspace on first launch. Filament is tracked as reusable material profiles plus individually identified physical spools.
+
+Open **Filament → Filament Inventory Census** to receive sealed, measured, estimated, unknown, or empty spools. Repeated materials can be added in batches, the initial collection can be imported from CSV, and every physical spool receives a printable `FF-SP-######` QR label. Retired demonstration spools and their demonstration orders are removed only when their original seed fingerprints match exactly.
+
 ## Meshy and PrintPal
 
 The desktop app can connect to Meshy and PrintPal without copying API keys into browser storage or the repository.
@@ -34,7 +40,6 @@ Credentials are read by the Tauri backend only when a provider action runs. They
 
 ## Next recommended build steps
 
-1. Move browser persistence into the Tauri/local database layer.
-2. Add native file pickers for credential, STL, and concept paths.
-3. Add product image previews and generated-model inspection.
-4. Add stronger printability validation and printer conflict checks.
+1. Add native file pickers for credential, STL, and concept paths.
+2. Add product image previews and generated-model inspection.
+3. Add stronger printability validation and printer conflict checks.
