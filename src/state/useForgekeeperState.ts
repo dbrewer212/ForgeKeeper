@@ -5,7 +5,7 @@ import { directCost, getOrderCostBreakdown } from "../lib/cost";
 import { calculateProductionMetrics, orderMaterialGrams } from "../lib/production";
 import { downloadCsv } from "../lib/csv";
 import { uid } from "../lib/ids";
-import { clearNativeStoredData, clearStoredData, downloadJson, isTauriRuntime, loadNativeStoredData, loadStoredData, saveNativeStoredData, saveStoredData } from "../lib/storage";
+import { clearNativeStoredData, clearStoredData, downloadJson, isTauriRuntime, loadNativeStoredData, loadStoredData, saveNativeStoredData, saveStoredData, selectStartupWorkspace } from "../lib/storage";
 import { defaultExternalTools, getToolPath, openLocalPathBestEffort, openWebUrl, slicerForPrinter } from "../lib/externalTools";
 import { filenameFromPath, folderFromPath, suggestedLibraryPath } from "../lib/assetLibrary";
 import { emptyProductionReferenceChecks, productionReferenceReady, referenceChecksPassed } from "../lib/productionReferences";
@@ -382,8 +382,17 @@ export function useForgekeeperState() {
     nativeStorageStarted.current = true;
     void loadNativeStoredData()
       .then(async (nativeData) => {
-        if (nativeData) replaceWorkspaceData(hydrateDataFrom(nativeData));
-        else await saveNativeStoredData(appData);
+        // Browser fallback is the newest authority after a SQLite failure. Persist it before
+        // considering older native data so an intake made during recovery cannot be lost.
+        const fallbackData = loadStoredData();
+        const startupData = selectStartupWorkspace(fallbackData, nativeData);
+        if (startupData) {
+          const hydratedData = hydrateDataFrom(startupData);
+          replaceWorkspaceData(hydratedData);
+          await saveNativeStoredData(hydratedData);
+        } else {
+          await saveNativeStoredData(appData);
+        }
         clearStoredData();
         setStorageError("");
         setStorageStatus("SQLite");
