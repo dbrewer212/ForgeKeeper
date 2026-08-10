@@ -1,4 +1,5 @@
 name: Build current Windows installer
+run-name: ForgeKeeper Windows installer · ${{ github.sha }}
 
 on:
   workflow_dispatch:
