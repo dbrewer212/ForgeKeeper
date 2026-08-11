@@ -18,7 +18,7 @@ export class FoundryMeshRuntime {
   readonly checkpoints = new InMemoryCheckpointStore();
   readonly health = new DefaultHealthAggregator(this.workers, this.resources);
   readonly actions = new ActionGateway(this.permissions);
-  readonly events;
+  readonly events: DurableEventBus;
 
   private safeModeReason?: string;
   private initialized = false;
