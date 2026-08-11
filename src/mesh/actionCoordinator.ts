@@ -21,7 +21,6 @@ export interface CoordinatedAction<TPayload = unknown> {
 
 export class MeshActionCoordinator {
   private readonly handlers = new Map<string, ActionHandler>();
-  private readonly pending = new Map<string, ActionRequest>();
 
   constructor(private readonly runtime: FoundryMeshRuntime) {}
 
@@ -57,8 +56,7 @@ export class MeshActionCoordinator {
     }
 
     if (evaluation.approval) {
-      this.runtime.approvals.enqueue(evaluation.approval);
-      this.pending.set(evaluation.approval.id, request);
+      this.runtime.approvals.enqueue(evaluation.approval, request);
       await this.runtime.events.publish(
         createFoundryEvent({
           type: MeshEvents.actionApprovalRequested,
@@ -79,9 +77,9 @@ export class MeshActionCoordinator {
 
   async approve(approvalId: string, reason?: string): Promise<ActionResult> {
     const approval = this.runtime.approvals.approve(approvalId, reason);
-    const request = this.pending.get(approvalId);
+    const request = approval.actionRequest;
     if (!request) {
-      throw new Error(`Approval ${approvalId} has no pending in-memory action request. Resubmit the action after restart.`);
+      throw new Error(`Approval ${approvalId} predates durable action storage and cannot be resumed safely.`);
     }
 
     const registered = this.runtime.workers.get(request.requesterWorkerId);
@@ -97,7 +95,6 @@ export class MeshActionCoordinator {
       }),
     );
 
-    this.pending.delete(approvalId);
     const result = await this.execute(registered.identity, { ...request, state: "approved" });
     await this.runtime.save();
     return result;
@@ -105,20 +102,21 @@ export class MeshActionCoordinator {
 
   async deny(approvalId: string, reason?: string): Promise<ActionResult> {
     const approval = this.runtime.approvals.deny(approvalId, reason);
-    const request = this.pending.get(approvalId);
-    this.pending.delete(approvalId);
+    const request = approval.actionRequest;
+    const requestId = request?.id ?? approval.request.actionRequestId;
+    const result = deniedResult(requestId, reason ?? "Denied by human authority.");
 
-    const result = deniedResult(approval.request.actionRequestId, reason ?? "Denied by human authority.");
     await this.runtime.events.publish(
       createFoundryEvent({
         type: MeshEvents.actionDenied,
         sourceWorkerId: "foundry-core",
-        subjectId: approval.request.actionRequestId,
+        subjectId: requestId,
+        correlationId: request?.correlationId,
         payload: { approvalId, result },
       }),
     );
     await this.runtime.save();
-    return request ? { ...result, requestId: request.id } : result;
+    return result;
   }
 
   private async execute(worker: WorkerIdentity, request: ActionRequest): Promise<ActionResult> {
