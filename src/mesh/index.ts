@@ -14,5 +14,6 @@ export * from "./approvalStore";
 export * from "./checkpointStore";
 export * from "./healthAggregator";
 export * from "./operations";
+export * from "./toolGateway";
 export * from "./persistence";
 export * from "./runtime";
