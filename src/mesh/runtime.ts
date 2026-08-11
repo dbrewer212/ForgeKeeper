@@ -6,6 +6,7 @@ import { defaultPermissionRules } from "./defaultPolicies";
 import { DurableEventBus } from "./durableEventBus";
 import { InMemoryEventBus } from "./eventBus";
 import { DefaultHealthAggregator } from "./healthAggregator";
+import { MeshOperations } from "./operations";
 import { InMemoryPermissionService } from "./permissionService";
 import type { MeshPersistence, MeshSnapshot } from "./persistence";
 import { createDefaultMeshPersistence } from "./persistence";
@@ -24,6 +25,7 @@ export class FoundryMeshRuntime {
   readonly actions = new ActionGateway(this.permissions);
   readonly events: DurableEventBus;
   readonly coordinator: MeshActionCoordinator;
+  readonly operations: MeshOperations;
 
   private safeModeReason?: string;
   private initialized = false;
@@ -31,6 +33,7 @@ export class FoundryMeshRuntime {
   constructor(readonly persistence: MeshPersistence = createDefaultMeshPersistence()) {
     this.events = new DurableEventBus(new InMemoryEventBus(), persistence);
     this.coordinator = new MeshActionCoordinator(this);
+    this.operations = new MeshOperations(this);
   }
 
   async initialize(): Promise<void> {
