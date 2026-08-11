@@ -1,10 +1,10 @@
 import { Card } from "../ui/Card";
 import { getKeeperActions } from "../../lib/keeper/keeperActions";
-import type { KeeperAlert } from "../../lib/keeper/keeperAlerts";
+import { getKeeperAlerts } from "../../lib/keeper/keeperAlerts";
 
 type Props = {
-  alerts: KeeperAlert[];
-  onNavigate?: (view: string, targetId?: string) => void;
+  state: any;
+  title?: string;
 };
 
 function priorityClass(priority: string) {
@@ -14,11 +14,17 @@ function priorityClass(priority: string) {
   return "border-white/10 bg-white/5 text-slate-300";
 }
 
-export function KeeperActionPanel({ alerts, onNavigate }: Props) {
-  const actions = getKeeperActions(alerts);
+export function KeeperActionPanel({ state, title = "Keeper Suggested Actions" }: Props) {
+  const actions = getKeeperActions(getKeeperAlerts(state));
+
+  const navigate = (view?: string) => {
+    if (view && typeof state?.setView === "function") {
+      state.setView(view);
+    }
+  };
 
   return (
-    <Card title="Keeper Suggested Actions" right={<span className="text-xs text-slate-500">Suggest-only</span>}>
+    <Card title={title} right={<span className="text-xs text-slate-500">Suggest-only</span>}>
       {actions.length === 0 ? (
         <div className="rounded-2xl border border-white/10 bg-[#0d131c] p-4 text-sm text-slate-400">
           No suggested actions right now.
@@ -40,7 +46,7 @@ export function KeeperActionPanel({ alerts, onNavigate }: Props) {
               {action.targetView ? (
                 <button
                   type="button"
-                  onClick={() => onNavigate?.(action.targetView!, action.targetId)}
+                  onClick={() => navigate(action.targetView)}
                   className="mt-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200 transition hover:bg-white/10"
                 >
                   Open related area
