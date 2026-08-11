@@ -71,6 +71,7 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
       MeshCapabilities.meshPublishEvent,
       MeshCapabilities.meshManageWorker,
       MeshCapabilities.meshEnterSafeMode,
+      MeshCapabilities.meshExitSafeMode,
       MeshCapabilities.watcherReadTelemetry,
       MeshCapabilities.systemServiceStart,
       MeshCapabilities.systemServiceStop,
