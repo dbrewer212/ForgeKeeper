@@ -1,12 +1,21 @@
+use serde::Serialize;
 use std::fs::{self, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 use tauri::Manager;
 
 const MESH_DIR: &str = "mesh";
 const SNAPSHOT_FILE: &str = "snapshot.json";
 const EVENT_JOURNAL_FILE: &str = "events.jsonl";
+
+#[derive(Serialize)]
+struct LocalHttpResponse {
+    status: u16,
+    body: String,
+}
 
 #[tauri::command]
 fn open_path(path: String) -> Result<(), String> {
@@ -28,6 +37,13 @@ fn launch_external_tool(tool_path: String, asset_path: Option<String>) -> Result
 }
 
 #[tauri::command]
+async fn local_http_get(url: String, timeout_ms: Option<u64>) -> Result<LocalHttpResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || local_http_get_blocking(&url, timeout_ms.unwrap_or(1500)))
+        .await
+        .map_err(|error| format!("Local service probe task failed: {error}"))?
+}
+
+#[tauri::command]
 fn mesh_load_snapshot(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let path = mesh_file_path(&app, SNAPSHOT_FILE)?;
     if !path.exists() {
@@ -43,11 +59,13 @@ fn mesh_load_snapshot(app: tauri::AppHandle) -> Result<Option<String>, String> {
 fn mesh_save_snapshot(app: tauri::AppHandle, content: String) -> Result<(), String> {
     let path = mesh_file_path(&app, SNAPSHOT_FILE)?;
     let temp_path = path.with_extension("json.tmp");
+    let backup_path = path.with_extension("json.bak");
 
     fs::write(&temp_path, content)
         .map_err(|error| format!("Failed to write temporary Foundry mesh snapshot: {error}"))?;
 
     if path.exists() {
+        let _ = fs::copy(&path, &backup_path);
         fs::remove_file(&path)
             .map_err(|error| format!("Failed to replace previous Foundry mesh snapshot: {error}"))?;
     }
@@ -94,6 +112,77 @@ fn mesh_read_events(app: tauri::AppHandle, limit: Option<usize>) -> Result<Vec<S
     }
 
     Ok(lines)
+}
+
+fn local_http_get_blocking(url: &str, timeout_ms: u64) -> Result<LocalHttpResponse, String> {
+    let (host, port, path) = parse_loopback_http_url(url)?;
+    let timeout = Duration::from_millis(timeout_ms.clamp(100, 10_000));
+    let mut stream = TcpStream::connect((host.as_str(), port))
+        .map_err(|error| format!("Could not connect to local service {host}:{port}: {error}"))?;
+    stream
+        .set_read_timeout(Some(timeout))
+        .map_err(|error| format!("Could not set local service read timeout: {error}"))?;
+    stream
+        .set_write_timeout(Some(timeout))
+        .map_err(|error| format!("Could not set local service write timeout: {error}"))?;
+
+    let request = format!(
+        "GET {path} HTTP/1.1\r\nHost: {host}:{port}\r\nAccept: application/json\r\nConnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| format!("Could not write local service probe: {error}"))?;
+
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .map_err(|error| format!("Could not read local service response: {error}"))?;
+
+    let (headers, body) = response
+        .split_once("\r\n\r\n")
+        .ok_or_else(|| "Local service returned an invalid HTTP response.".to_string())?;
+    let status = headers
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|value| value.parse::<u16>().ok())
+        .ok_or_else(|| "Local service response did not contain a valid HTTP status.".to_string())?;
+
+    Ok(LocalHttpResponse {
+        status,
+        body: body.to_string(),
+    })
+}
+
+fn parse_loopback_http_url(url: &str) -> Result<(String, u16, String), String> {
+    let remainder = url
+        .trim()
+        .strip_prefix("http://")
+        .ok_or_else(|| "Only loopback http:// service probes are permitted.".to_string())?;
+    let (authority, path) = match remainder.split_once('/') {
+        Some((authority, path)) => (authority, format!("/{path}")),
+        None => (remainder, "/".to_string()),
+    };
+
+    if authority.contains('@') {
+        return Err("Credentials are not permitted in local service probe URLs.".to_string());
+    }
+
+    let (host, port) = match authority.rsplit_once(':') {
+        Some((host, port)) => {
+            let parsed = port
+                .parse::<u16>()
+                .map_err(|_| "Local service probe port is invalid.".to_string())?;
+            (host.to_string(), parsed)
+        }
+        None => (authority.to_string(), 80),
+    };
+
+    if host != "127.0.0.1" && host != "localhost" {
+        return Err("Local service probes are restricted to localhost/127.0.0.1.".to_string());
+    }
+
+    Ok((host, port, path))
 }
 
 fn mesh_file_path(app: &tauri::AppHandle, file_name: &str) -> Result<PathBuf, String> {
@@ -176,6 +265,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_path,
             launch_external_tool,
+            local_http_get,
             mesh_load_snapshot,
             mesh_save_snapshot,
             mesh_append_event,
