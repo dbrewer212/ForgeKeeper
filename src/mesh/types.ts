@@ -119,6 +119,7 @@ export interface ActionRequest<TPayload = unknown> {
   state: ActionState;
   reason?: string;
   correlationId?: string;
+  audit?: boolean;
 }
 
 export interface ActionResult<TResult = unknown> {
