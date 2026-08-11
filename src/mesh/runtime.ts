@@ -10,6 +10,7 @@ import { TauriMeshPersistence } from "./persistence";
 import { InMemoryResourceBroker } from "./resourceBroker";
 import { InMemoryWorkerRegistry } from "./workerRegistry";
 import type { SystemHealth } from "./types";
+import { defaultFoundryWorkers } from "./workers";
 
 export class FoundryMeshRuntime {
   readonly workers = new InMemoryWorkerRegistry();
@@ -33,6 +34,7 @@ export class FoundryMeshRuntime {
     const snapshot = await this.persistence.loadSnapshot();
     if (snapshot) this.restore(snapshot);
 
+    this.ensureDefaultWorkers();
     this.initialized = true;
   }
 
@@ -93,6 +95,14 @@ export class FoundryMeshRuntime {
 
     if (snapshot.health.state === "safe-mode") {
       this.safeModeReason = snapshot.health.safeModeReason ?? "Safe Mode restored from persistent state.";
+    }
+  }
+
+  private ensureDefaultWorkers(): void {
+    for (const identity of defaultFoundryWorkers) {
+      if (!this.workers.get(identity.id)) {
+        this.workers.register(identity);
+      }
     }
   }
 }
