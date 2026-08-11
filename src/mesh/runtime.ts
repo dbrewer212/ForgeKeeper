@@ -1,4 +1,5 @@
 import { ActionGateway } from "./actionGateway";
+import { InMemoryApprovalStore } from "./approvalStore";
 import { InMemoryCheckpointStore } from "./checkpointStore";
 import { defaultPermissionRules } from "./defaultPolicies";
 import { DurableEventBus } from "./durableEventBus";
@@ -17,6 +18,7 @@ export class FoundryMeshRuntime {
   readonly resources = new InMemoryResourceBroker();
   readonly permissions = new InMemoryPermissionService(defaultPermissionRules);
   readonly checkpoints = new InMemoryCheckpointStore();
+  readonly approvals = new InMemoryApprovalStore();
   readonly health = new DefaultHealthAggregator(this.workers, this.resources);
   readonly actions = new ActionGateway(this.permissions);
   readonly events: DurableEventBus;
@@ -66,6 +68,7 @@ export class FoundryMeshRuntime {
       resources: this.resources.listStates(),
       permissions: this.permissions.listRules(),
       checkpoints: this.checkpoints.list(),
+      approvals: this.approvals.list(),
       health: this.getSystemHealth(),
     };
   }
@@ -92,6 +95,7 @@ export class FoundryMeshRuntime {
     }
 
     this.checkpoints.restore(snapshot.checkpoints);
+    this.approvals.restore(snapshot.approvals);
 
     if (snapshot.health.state === "safe-mode") {
       this.safeModeReason = snapshot.health.safeModeReason ?? "Safe Mode restored from persistent state.";
