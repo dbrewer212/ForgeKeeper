@@ -1,3 +1,4 @@
+import { MeshActionCoordinator } from "./actionCoordinator";
 import { ActionGateway } from "./actionGateway";
 import { InMemoryApprovalStore } from "./approvalStore";
 import { InMemoryCheckpointStore } from "./checkpointStore";
@@ -22,12 +23,14 @@ export class FoundryMeshRuntime {
   readonly health = new DefaultHealthAggregator(this.workers, this.resources);
   readonly actions = new ActionGateway(this.permissions);
   readonly events: DurableEventBus;
+  readonly coordinator: MeshActionCoordinator;
 
   private safeModeReason?: string;
   private initialized = false;
 
   constructor(readonly persistence: MeshPersistence = createDefaultMeshPersistence()) {
     this.events = new DurableEventBus(new InMemoryEventBus(), persistence);
+    this.coordinator = new MeshActionCoordinator(this);
   }
 
   async initialize(): Promise<void> {
