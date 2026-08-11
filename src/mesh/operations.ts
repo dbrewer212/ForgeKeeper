@@ -124,9 +124,7 @@ export class MeshOperations {
 
 function eventForWorkerTransition(previous: WorkerStatus | undefined, current: WorkerStatus): string {
   if (current.state === "failed" || current.health === "critical") return MeshEvents.workerFailed;
-  if (previous && (previous.state === "failed" || previous.health === "critical") && current.health !== "critical") {
-    return MeshEvents.workerRecovered;
-  }
+  if (previous && (previous.state === "failed" || previous.health === "critical")) return MeshEvents.workerRecovered;
   if (current.state === "starting" || (!previous && current.state !== "offline")) return MeshEvents.workerStarted;
   if (current.state === "offline" || current.state === "stopping") return MeshEvents.workerStopped;
   return MeshEvents.workerHeartbeat;
