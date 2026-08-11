@@ -8,6 +8,7 @@ import type {
   FilamentSpoolCondition,
   OrderRecord,
   ProductVariant,
+  MaterialImportRecord,
 } from "../types/domain";
 
 const MIGRATION_TIMESTAMP = "2026-08-09T00:00:00.000Z";
@@ -80,6 +81,8 @@ function profileFromLegacy(spool: Partial<FilamentRecord>): FilamentProfile {
     emptySpoolWeightGrams: spool.emptySpoolWeightGrams,
     reorderPointGrams: Math.max(0, Number(spool.reorderPointGrams) || 0),
     defaultSpoolPrice: Math.max(0, Number(spool.spoolPrice) || 0),
+    supplier: "",
+    supplierSku: "",
     notes: "Migrated from the earlier combined filament record.",
     createdAt: spool.createdAt || MIGRATION_TIMESTAMP,
     updatedAt: spool.updatedAt || MIGRATION_TIMESTAMP,
@@ -100,7 +103,7 @@ export function migrateFilamentInventory(
 ): FilamentCensusMigration {
   const removedPlaceholderSpoolIds = (sourceSpools ?? []).filter(isLegacyPlaceholderSpool).map((spool) => spool.id!).filter(Boolean);
   const retained = (sourceSpools ?? []).filter((spool) => !isLegacyPlaceholderSpool(spool));
-  const profiles = [...(sourceProfiles ?? [])];
+  const profiles = (sourceProfiles ?? []).map((profile) => ({ ...profile, supplier: profile.supplier ?? "", supplierSku: profile.supplierSku ?? "" }));
   const byIdentity = new Map(profiles.map((profile) => [profileIdentity(profile), profile]));
   const spools: FilamentRecord[] = [];
 
@@ -262,6 +265,8 @@ export function profileFromCsv(row: Record<string, string>): Omit<FilamentProfil
     emptySpoolWeightGrams: row.emptySpoolWeightGrams ? numberCell(row.emptySpoolWeightGrams) : undefined,
     reorderPointGrams: numberCell(row.reorderPointGrams, 250),
     defaultSpoolPrice: numberCell(row.spoolPrice),
+    supplier: row.supplier || "",
+    supplierSku: row.supplierSku || "",
     notes: row.profileNotes || "",
   };
 }
@@ -275,6 +280,66 @@ export function filamentCsvTemplate(): Array<Record<string, unknown>> {
     brand: "Elegoo", productLine: "Rapid PLA+", material: "PLA+", colorName: "Black", colorFamily: "Black",
     diameterMm: 1.75, nominalWeightGrams: 1000, emptySpoolWeightGrams: 230, reorderPointGrams: 250,
     condition: "Sealed", quantityConfidence: "Nominal", remainingGrams: 1000, grossWeightGrams: "",
-    estimatedPercent: "", quantity: 1, spoolPrice: "", storageLocation: "", purchaseDate: "", lotNumber: "", notes: "",
+    estimatedPercent: "", quantity: 1, spoolPrice: "", supplier: "", supplierSku: "", storageLocation: "", purchaseDate: "", lotNumber: "", notes: "",
   }];
+}
+
+export type FilamentCsvRowPreview = {
+  rowNumber: number;
+  row: Record<string, string>;
+  quantity: number;
+  errors: string[];
+  warnings: string[];
+};
+
+export type FilamentCsvPreview = {
+  fingerprint: string;
+  rows: FilamentCsvRowPreview[];
+  totalSpools: number;
+  valid: boolean;
+  duplicateImport: boolean;
+};
+
+export function filamentImportFingerprint(text: string): string {
+  let hash = 2166136261;
+  const normalized = text.replace(/\r\n/g, "\n").trim();
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash ^= normalized.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `csv-${(hash >>> 0).toString(16).padStart(8, "0")}-${normalized.length}`;
+}
+
+export function previewFilamentCsv(text: string, history: MaterialImportRecord[] = []): FilamentCsvPreview {
+  const parsed = parseFilamentCsv(text);
+  const fingerprint = filamentImportFingerprint(text);
+  const rows = parsed.map((row, index): FilamentCsvRowPreview => {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const quantity = Number(row.quantity || 1);
+    if (!row.brand?.trim()) errors.push("Brand is required.");
+    if (!row.colorName?.trim()) errors.push("Color name is required.");
+    if (!materialValues.some((value) => value.toLowerCase() === row.material?.trim().toLowerCase())) errors.push(`Unsupported material '${row.material || "blank"}'.`);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 500) errors.push("Quantity must be a whole number from 1 to 500.");
+    const condition = conditionFromCsv(row.condition);
+    const confidence = confidenceFromCsv(row.quantityConfidence);
+    const remaining = row.remainingGrams === "" || row.remainingGrams === undefined ? undefined : Number(row.remainingGrams);
+    const gross = row.grossWeightGrams === "" || row.grossWeightGrams === undefined ? undefined : Number(row.grossWeightGrams);
+    const tare = row.emptySpoolWeightGrams === "" || row.emptySpoolWeightGrams === undefined ? undefined : Number(row.emptySpoolWeightGrams);
+    if (remaining !== undefined && (!Number.isFinite(remaining) || remaining < 0)) errors.push("Remaining grams must be zero or greater.");
+    if (gross !== undefined && (!Number.isFinite(gross) || gross < 0)) errors.push("Gross weight must be zero or greater.");
+    if (gross !== undefined && tare === undefined) errors.push("Gross weight requires an empty-spool tare.");
+    if (confidence === "Exact" && remaining === undefined && gross === undefined && condition !== "Empty") errors.push("Exact quantity requires remaining grams or a gross weight.");
+    if (confidence === "Unknown" && remaining !== undefined && remaining > 0) warnings.push("Remaining grams are ignored when confidence is Unknown.");
+    if (condition === "Sealed" && confidence === "Exact") warnings.push("A sealed spool normally uses Nominal confidence unless it was weighed.");
+    return { rowNumber: index + 2, row, quantity: Number.isInteger(quantity) ? quantity : 0, errors, warnings };
+  });
+  const totalSpools = rows.reduce((sum, row) => sum + Math.max(0, row.quantity), 0);
+  return {
+    fingerprint,
+    rows,
+    totalSpools,
+    valid: rows.length > 0 && rows.every((row) => row.errors.length === 0),
+    duplicateImport: history.some((record) => record.fingerprint === fingerprint),
+  };
 }

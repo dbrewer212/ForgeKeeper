@@ -5,6 +5,7 @@ import {
   createPhysicalSpools,
   migrateFilamentInventory,
   parseFilamentCsv,
+  previewFilamentCsv,
 } from "./filamentInventory";
 import type { FilamentProfile, FilamentRecord, OrderRecord } from "../types/domain";
 
@@ -39,7 +40,7 @@ describe("physical spool creation", () => {
   const profile: FilamentProfile = {
     id: "FP-1", brand: "Elegoo", productLine: "Rapid PLA+", material: "PLA+", colorName: "Black", colorFamily: "Black",
     diameterMm: 1.75, nominalWeightGrams: 1000, emptySpoolWeightGrams: 230, reorderPointGrams: 250, defaultSpoolPrice: 20,
-    notes: "", createdAt: "2026-08-09T00:00:00.000Z", updatedAt: "2026-08-09T00:00:00.000Z",
+    supplier: "", supplierSku: "", notes: "", createdAt: "2026-08-09T00:00:00.000Z", updatedAt: "2026-08-09T00:00:00.000Z",
   };
 
   it("assigns unique sequential Foundry spool IDs", () => {
@@ -60,5 +61,14 @@ describe("CSV census parser", () => {
       { brand: "Elegoo", colorName: "Black", notes: "Shelf A, top" },
       { brand: "Overture", colorName: "Gray", notes: "Open" },
     ]);
+  });
+
+  it("blocks invalid rows and recognizes the same import twice", () => {
+    const text = "brand,material,colorName,quantity\nElegoo,PLA+,Black,2";
+    const first = previewFilamentCsv(text);
+    expect(first).toMatchObject({ valid: true, totalSpools: 2, duplicateImport: false });
+    const repeated = previewFilamentCsv(text, [{ id: "IMP-1", fingerprint: first.fingerprint, filename: "stock.csv", importedAt: "", profileCount: 1, spoolCount: 2 }]);
+    expect(repeated.duplicateImport).toBe(true);
+    expect(previewFilamentCsv("brand,material,colorName,quantity\n,WOOD,,0").valid).toBe(false);
   });
 });

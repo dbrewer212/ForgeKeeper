@@ -1,9 +1,10 @@
 import type { AppData } from "../types/domain";
+import { downloadText, type CsvDownloadResult } from "./csv";
 import type Database from "@tauri-apps/plugin-sql";
 
 export const STORAGE_KEY = "forgekeeper.app.v1";
 export const DATABASE_URL = "sqlite:forgekeeper.db";
-const WORKSPACE_SCHEMA_VERSION = 2;
+const WORKSPACE_SCHEMA_VERSION = 3;
 const WORKSPACE_TABLE = "forgekeeper_workspace_state";
 const LEGACY_WORKSPACE_ID = "local-foundry";
 
@@ -128,13 +129,6 @@ export function clearStoredData(): void {
   window.localStorage.removeItem(STORAGE_KEY);
 }
 
-export function downloadJson(filename: string, data: unknown): void {
-  if (typeof window === "undefined") return;
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
+export function downloadJson(filename: string, data: unknown): Promise<CsvDownloadResult> {
+  return downloadText(filename, JSON.stringify(data, null, 2), "application/json;charset=utf-8;");
 }

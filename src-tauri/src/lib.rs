@@ -88,6 +88,12 @@ struct CredentialFileHealth {
     message: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SavedTextFile {
+    output_path: String,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MeshyGenerationOptions {
@@ -225,6 +231,53 @@ fn inspect_credential_file(api_file_path: String) -> CredentialFileHealth {
             message,
         },
     }
+}
+
+#[tauri::command]
+fn save_text_file_to_downloads(
+    app: tauri::AppHandle,
+    filename: String,
+    contents: String,
+) -> Result<SavedTextFile, String> {
+    use tauri::Manager;
+
+    let requested = Path::new(&filename);
+    if filename.trim().is_empty()
+        || requested.components().count() != 1
+        || requested.file_name().and_then(|value| value.to_str()) != Some(filename.as_str())
+    {
+        return Err("The download filename is invalid.".into());
+    }
+
+    let downloads = app
+        .path()
+        .download_dir()
+        .map_err(|error| format!("Could not locate the Downloads folder: {error}"))?;
+    fs::create_dir_all(&downloads)
+        .map_err(|error| format!("Could not open the Downloads folder: {error}"))?;
+
+    let stem = requested
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("forgekeeper-export");
+    let extension = requested.extension().and_then(|value| value.to_str());
+    let mut output = downloads.join(requested);
+    let mut suffix = 1_u32;
+    while output.exists() {
+        let candidate = match extension {
+            Some(extension) => format!("{stem} ({suffix}).{extension}"),
+            None => format!("{stem} ({suffix})"),
+        };
+        output = downloads.join(candidate);
+        suffix += 1;
+    }
+
+    fs::write(&output, contents.as_bytes())
+        .map_err(|error| format!("Could not save the download: {error}"))?;
+
+    Ok(SavedTextFile {
+        output_path: output.to_string_lossy().to_string(),
+    })
 }
 
 fn value_number(value: &Value, names: &[&str]) -> Option<f64> {
@@ -657,7 +710,8 @@ pub fn run() {
             get_generation_status,
             download_generation_asset,
             inspect_local_paths,
-            inspect_credential_file
+            inspect_credential_file,
+            save_text_file_to_downloads
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

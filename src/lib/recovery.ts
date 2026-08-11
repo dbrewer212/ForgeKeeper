@@ -10,7 +10,7 @@ import type {
 import { isLegacyPlaceholderSpool } from "./filamentInventory";
 
 export const BACKUP_FORMAT = "forgekeeper.backup";
-export const BACKUP_SCHEMA_VERSION = 2;
+export const BACKUP_SCHEMA_VERSION = 3;
 export const RECOVERY_STORAGE_KEY = "forgekeeper.recovery.checkpoints.v1";
 const MAX_CHECKPOINTS = 6;
 
@@ -87,7 +87,7 @@ export async function verifyBackupEnvelope(value: unknown): Promise<{ valid: boo
   if (!candidate.data || candidate.checksumAlgorithm !== "SHA-256" || !candidate.checksum) {
     return { valid: false, message: "The backup envelope is incomplete." };
   }
-  if (![1, BACKUP_SCHEMA_VERSION].includes(Number(candidate.schemaVersion))) {
+  if (![1, 2, BACKUP_SCHEMA_VERSION].includes(Number(candidate.schemaVersion))) {
     return { valid: false, message: `Unsupported backup schema ${String(candidate.schemaVersion)}.` };
   }
   const actual = await sha256Text(JSON.stringify(candidate.data));

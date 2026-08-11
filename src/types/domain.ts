@@ -11,6 +11,8 @@ export type FilamentSpoolCondition = "Sealed" | "Used" | "Empty";
 export type FilamentQuantityConfidence = "Exact" | "Nominal" | "Estimated" | "Unknown";
 export type FilamentSpoolStatus = "In Stock" | "In Use" | "Empty" | "Archived";
 export type FilamentDryingStatus = "Unknown" | "Dry" | "Needs Drying" | "Dried";
+export type MaterialTransactionType = "Opening Balance" | "Receipt" | "Measurement" | "Correction" | "Consumption" | "Waste" | "Reservation" | "Reservation Release" | "Drying" | "Archived" | "Restored" | "Reversal";
+export type MaterialReservationStatus = "Active" | "Consumed" | "Released";
 export type PrinterStatus = "Available" | "Printing" | "Maintenance" | "Offline";
 export type ProductTab = "overview" | "stls" | "concepts" | "variants" | "orders";
 export type AssetStatus = "Planned" | "Linked" | "Needs Update" | "Archived";
@@ -284,6 +286,8 @@ export type FilamentProfile = {
   emptySpoolWeightGrams?: number;
   reorderPointGrams: number;
   defaultSpoolPrice: number;
+  supplier: string;
+  supplierSku: string;
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -316,6 +320,54 @@ export type FilamentRecord = {
   notes: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type MaterialTransaction = {
+  id: string;
+  spoolId: string;
+  profileId: string;
+  type: MaterialTransactionType;
+  deltaGrams: number;
+  balanceAfterGrams: number;
+  quantityConfidence: FilamentQuantityConfidence;
+  reason: string;
+  orderId?: string;
+  reservationId?: string;
+  reversesTransactionId?: string;
+  reversedByTransactionId?: string;
+  occurredAt: string;
+  notes: string;
+};
+
+export type MaterialReservation = {
+  id: string;
+  profileId: string;
+  spoolId?: string;
+  orderId?: string;
+  grams: number;
+  status: MaterialReservationStatus;
+  purpose: string;
+  createdAt: string;
+  resolvedAt?: string;
+};
+
+export type FilamentDryingRecord = {
+  id: string;
+  spoolId: string;
+  temperatureC: number;
+  durationHours: number;
+  outcome: "Dry" | "Needs More Drying" | "Unknown";
+  occurredAt: string;
+  notes: string;
+};
+
+export type MaterialImportRecord = {
+  id: string;
+  fingerprint: string;
+  filename: string;
+  importedAt: string;
+  profileCount: number;
+  spoolCount: number;
 };
 
 export type PrinterRecord = {
@@ -522,6 +574,10 @@ export type AppData = {
   orders: OrderRecord[];
   filamentProfiles: FilamentProfile[];
   filament: FilamentRecord[];
+  materialTransactions: MaterialTransaction[];
+  materialReservations: MaterialReservation[];
+  filamentDryingRecords: FilamentDryingRecord[];
+  materialImportHistory: MaterialImportRecord[];
   printers: PrinterRecord[];
   maintenance: MaintenanceRecord[];
   generationJobs: GenerationJobRecord[];
