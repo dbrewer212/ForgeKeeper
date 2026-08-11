@@ -22,6 +22,7 @@ export interface FoundryToolDefinition {
   inputSchema?: JsonSchema;
   outputSchema?: JsonSchema;
   enabled?: boolean;
+  audit?: boolean;
 }
 
 export interface ToolInvocation<TPayload = unknown> {
@@ -50,7 +51,7 @@ export class FoundryToolGateway {
       throw new Error(`Foundry tool ${definition.name} is already registered.`);
     }
 
-    this.tools.set(definition.name, { ...definition, enabled: definition.enabled ?? true });
+    this.tools.set(definition.name, { ...definition, enabled: definition.enabled ?? true, audit: definition.audit ?? true });
     this.runtime.coordinator.registerHandler(definition.name, handler);
   }
 
@@ -84,6 +85,7 @@ export class FoundryToolGateway {
       state: "requested",
       reason: invocation.reason,
       correlationId: invocation.correlationId,
+      audit: tool.audit,
     };
 
     const coordinated = await this.runtime.coordinator.submit(request);
