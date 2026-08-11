@@ -9,6 +9,7 @@ export * from "./permissionService";
 export * from "./resourceBroker";
 export * from "./workerRegistry";
 export * from "./actionGateway";
+export * from "./actionCoordinator";
 export * from "./approvalStore";
 export * from "./checkpointStore";
 export * from "./healthAggregator";
