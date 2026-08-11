@@ -2,6 +2,7 @@ import { MeshActionCoordinator } from "./actionCoordinator";
 import { ActionGateway } from "./actionGateway";
 import { InMemoryApprovalStore } from "./approvalStore";
 import { InMemoryCheckpointStore } from "./checkpointStore";
+import { registerCoreMeshTools } from "./coreTools";
 import { defaultPermissionRules } from "./defaultPolicies";
 import { DurableEventBus } from "./durableEventBus";
 import { InMemoryEventBus } from "./eventBus";
@@ -37,6 +38,7 @@ export class FoundryMeshRuntime {
     this.coordinator = new MeshActionCoordinator(this);
     this.operations = new MeshOperations(this);
     this.tools = new FoundryToolGateway(this);
+    registerCoreMeshTools(this);
   }
 
   async initialize(): Promise<void> {
