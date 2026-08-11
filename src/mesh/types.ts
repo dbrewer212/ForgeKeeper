@@ -113,6 +113,7 @@ export interface ActionRequest<TPayload = unknown> {
   requestedAt: string;
   requesterWorkerId: WorkerId;
   capabilityId: CapabilityId;
+  operationId?: string;
   risk: ActionRisk;
   payload: TPayload;
   state: ActionState;
