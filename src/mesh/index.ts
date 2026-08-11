@@ -1,5 +1,7 @@
 export * from "./types";
 export * from "./catalog";
+export * from "./events";
+export * from "./workers";
 export * from "./defaultPolicies";
 export * from "./eventBus";
 export * from "./durableEventBus";
