@@ -141,7 +141,9 @@ export class MeshActionCoordinator {
         completedAt: new Date().toISOString(),
         result: value,
       };
-      await this.publishResult(MeshEvents.actionCompleted, worker.id, request, result);
+      if (request.audit !== false) {
+        await this.publishResult(MeshEvents.actionCompleted, worker.id, request, result);
+      }
       return result;
     } catch (error) {
       const result: ActionResult = {
