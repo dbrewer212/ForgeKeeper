@@ -51,14 +51,13 @@ export class FoundryToolGateway {
     }
 
     this.tools.set(definition.name, { ...definition, enabled: definition.enabled ?? true });
-    this.runtime.coordinator.registerHandler(definition.capabilityId, handler);
+    this.runtime.coordinator.registerHandler(definition.name, handler);
   }
 
   unregister(toolName: string): void {
-    const definition = this.tools.get(toolName);
-    if (!definition) return;
+    if (!this.tools.has(toolName)) return;
     this.tools.delete(toolName);
-    this.runtime.coordinator.unregisterHandler(definition.capabilityId);
+    this.runtime.coordinator.unregisterHandler(toolName);
   }
 
   get(toolName: string): FoundryToolDefinition | undefined {
@@ -79,6 +78,7 @@ export class FoundryToolGateway {
       requestedAt: new Date().toISOString(),
       requesterWorkerId: invocation.requesterWorkerId,
       capabilityId: tool.capabilityId,
+      operationId: tool.name,
       risk: tool.risk,
       payload: invocation.payload,
       state: "requested",
