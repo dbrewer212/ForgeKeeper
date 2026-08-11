@@ -39,6 +39,12 @@ export const defaultPermissionRules: PermissionRule[] = [
     reason: "Safe Mode changes system-wide behavior and defaults to human approval.",
   },
   {
+    id: "global-exit-safe-mode",
+    capabilityId: MeshCapabilities.meshExitSafeMode,
+    effect: "approval-required",
+    reason: "Returning autonomous execution after Safe Mode requires explicit human authority.",
+  },
+  {
     id: "production-steward-read-production",
     workerKind: "production-steward",
     capabilityId: MeshCapabilities.productionRead,
