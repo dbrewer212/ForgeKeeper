@@ -8,6 +8,7 @@ import type {
 export interface ResourceBroker {
   updateState(state: ResourceState): void;
   getState(resourceId: string): ResourceState | undefined;
+  listStates(): ResourceState[];
   request(request: ResourceRequest): ResourceLease | null;
   release(leaseId: string): void;
   listActiveLeases(): ResourceLease[];
@@ -23,6 +24,10 @@ export class InMemoryResourceBroker implements ResourceBroker {
 
   getState(resourceId: string): ResourceState | undefined {
     return this.states.get(resourceId);
+  }
+
+  listStates(): ResourceState[] {
+    return [...this.states.values()];
   }
 
   request(request: ResourceRequest): ResourceLease | null {
