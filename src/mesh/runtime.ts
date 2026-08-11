@@ -6,7 +6,7 @@ import { InMemoryEventBus } from "./eventBus";
 import { DefaultHealthAggregator } from "./healthAggregator";
 import { InMemoryPermissionService } from "./permissionService";
 import type { MeshPersistence, MeshSnapshot } from "./persistence";
-import { TauriMeshPersistence } from "./persistence";
+import { createDefaultMeshPersistence } from "./persistence";
 import { InMemoryResourceBroker } from "./resourceBroker";
 import { InMemoryWorkerRegistry } from "./workerRegistry";
 import type { SystemHealth } from "./types";
@@ -24,7 +24,7 @@ export class FoundryMeshRuntime {
   private safeModeReason?: string;
   private initialized = false;
 
-  constructor(readonly persistence: MeshPersistence = new TauriMeshPersistence()) {
+  constructor(readonly persistence: MeshPersistence = createDefaultMeshPersistence()) {
     this.events = new DurableEventBus(new InMemoryEventBus(), persistence);
   }
 
