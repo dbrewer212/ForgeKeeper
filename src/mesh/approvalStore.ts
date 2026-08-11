@@ -1,9 +1,10 @@
-import type { ApprovalRequest } from "./types";
+import type { ActionRequest, ApprovalRequest } from "./types";
 
 export type ApprovalState = "pending" | "approved" | "denied" | "expired";
 
 export interface ApprovalRecord<TPayload = unknown> {
   request: ApprovalRequest<TPayload>;
+  actionRequest?: ActionRequest<TPayload>;
   state: ApprovalState;
   decidedAt?: string;
   decidedBy?: "human";
@@ -11,7 +12,7 @@ export interface ApprovalRecord<TPayload = unknown> {
 }
 
 export interface ApprovalStore {
-  enqueue<TPayload>(request: ApprovalRequest<TPayload>): ApprovalRecord<TPayload>;
+  enqueue<TPayload>(request: ApprovalRequest<TPayload>, actionRequest?: ActionRequest<TPayload>): ApprovalRecord<TPayload>;
   approve(approvalId: string, reason?: string): ApprovalRecord;
   deny(approvalId: string, reason?: string): ApprovalRecord;
   get(approvalId: string): ApprovalRecord | undefined;
@@ -22,8 +23,8 @@ export interface ApprovalStore {
 export class InMemoryApprovalStore implements ApprovalStore {
   private readonly records = new Map<string, ApprovalRecord>();
 
-  enqueue<TPayload>(request: ApprovalRequest<TPayload>): ApprovalRecord<TPayload> {
-    const record: ApprovalRecord<TPayload> = { request, state: "pending" };
+  enqueue<TPayload>(request: ApprovalRequest<TPayload>, actionRequest?: ActionRequest<TPayload>): ApprovalRecord<TPayload> {
+    const record: ApprovalRecord<TPayload> = { request, actionRequest, state: "pending" };
     this.records.set(request.id, record as ApprovalRecord);
     return record;
   }
@@ -37,6 +38,7 @@ export class InMemoryApprovalStore implements ApprovalStore {
   }
 
   get(approvalId: string): ApprovalRecord | undefined {
+    this.expireOverdue();
     return this.records.get(approvalId);
   }
 
@@ -53,6 +55,7 @@ export class InMemoryApprovalStore implements ApprovalStore {
   }
 
   private decide(approvalId: string, state: Extract<ApprovalState, "approved" | "denied">, reason?: string): ApprovalRecord {
+    this.expireOverdue();
     const current = this.records.get(approvalId);
     if (!current) throw new Error(`Approval ${approvalId} does not exist.`);
     if (current.state !== "pending") throw new Error(`Approval ${approvalId} is already ${current.state}.`);
