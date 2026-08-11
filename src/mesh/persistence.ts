@@ -80,3 +80,12 @@ export class InMemoryMeshPersistence implements MeshPersistence {
     return structuredClone(this.events.slice(-Math.max(0, limit)));
   }
 }
+
+export function isTauriRuntime(): boolean {
+  if (typeof window === "undefined") return false;
+  return "__TAURI_INTERNALS__" in window;
+}
+
+export function createDefaultMeshPersistence(): MeshPersistence {
+  return isTauriRuntime() ? new TauriMeshPersistence() : new InMemoryMeshPersistence();
+}
