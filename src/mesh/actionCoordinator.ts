@@ -24,12 +24,12 @@ export class MeshActionCoordinator {
 
   constructor(private readonly runtime: FoundryMeshRuntime) {}
 
-  registerHandler<TPayload, TResult>(capabilityId: string, handler: ActionHandler<TPayload, TResult>): void {
-    this.handlers.set(capabilityId, handler as ActionHandler);
+  registerHandler<TPayload, TResult>(operationId: string, handler: ActionHandler<TPayload, TResult>): void {
+    this.handlers.set(operationId, handler as ActionHandler);
   }
 
-  unregisterHandler(capabilityId: string): void {
-    this.handlers.delete(capabilityId);
+  unregisterHandler(operationId: string): void {
+    this.handlers.delete(operationId);
   }
 
   async submit<TPayload>(request: ActionRequest<TPayload>): Promise<CoordinatedAction<TPayload>> {
@@ -120,13 +120,14 @@ export class MeshActionCoordinator {
   }
 
   private async execute(worker: WorkerIdentity, request: ActionRequest): Promise<ActionResult> {
-    const handler = this.handlers.get(request.capabilityId);
+    const handlerKey = request.operationId ?? request.capabilityId;
+    const handler = this.handlers.get(handlerKey);
     if (!handler) {
       const result: ActionResult = {
         requestId: request.id,
         state: "failed",
         completedAt: new Date().toISOString(),
-        error: `No handler is registered for capability ${request.capabilityId}.`,
+        error: `No handler is registered for operation ${handlerKey}.`,
       };
       await this.publishResult(MeshEvents.actionFailed, worker.id, request, result);
       return result;
