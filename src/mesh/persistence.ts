@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ApprovalRecord } from "./approvalStore";
 import type {
   Checkpoint,
   FoundryEvent,
@@ -15,6 +16,7 @@ export interface MeshSnapshot {
   resources: ResourceState[];
   permissions: PermissionRule[];
   checkpoints: Checkpoint[];
+  approvals: ApprovalRecord[];
   health: SystemHealth;
 }
 
@@ -29,7 +31,7 @@ export class TauriMeshPersistence implements MeshPersistence {
   async loadSnapshot(): Promise<MeshSnapshot | null> {
     const content = await invoke<string | null>("mesh_load_snapshot");
     if (!content) return null;
-    return JSON.parse(content) as MeshSnapshot;
+    return normalizeSnapshot(JSON.parse(content) as Partial<MeshSnapshot>);
   }
 
   async saveSnapshot(snapshot: MeshSnapshot): Promise<void> {
@@ -88,4 +90,28 @@ export function isTauriRuntime(): boolean {
 
 export function createDefaultMeshPersistence(): MeshPersistence {
   return isTauriRuntime() ? new TauriMeshPersistence() : new InMemoryMeshPersistence();
+}
+
+function normalizeSnapshot(snapshot: Partial<MeshSnapshot>): MeshSnapshot {
+  if (snapshot.schemaVersion !== 1) {
+    throw new Error(`Unsupported mesh snapshot schema version: ${String(snapshot.schemaVersion)}`);
+  }
+
+  return {
+    schemaVersion: 1,
+    savedAt: snapshot.savedAt ?? new Date(0).toISOString(),
+    workers: snapshot.workers ?? [],
+    resources: snapshot.resources ?? [],
+    permissions: snapshot.permissions ?? [],
+    checkpoints: snapshot.checkpoints ?? [],
+    approvals: snapshot.approvals ?? [],
+    health:
+      snapshot.health ?? {
+        state: "nominal",
+        summary: "Recovered mesh snapshot without recorded health state.",
+        updatedAt: new Date(0).toISOString(),
+        degradedWorkers: [],
+        criticalWorkers: [],
+      },
+  };
 }
