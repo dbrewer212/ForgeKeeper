@@ -11,6 +11,7 @@ import { InMemoryPermissionService } from "./permissionService";
 import type { MeshPersistence, MeshSnapshot } from "./persistence";
 import { createDefaultMeshPersistence } from "./persistence";
 import { InMemoryResourceBroker } from "./resourceBroker";
+import { FoundryToolGateway } from "./toolGateway";
 import { InMemoryWorkerRegistry } from "./workerRegistry";
 import type { SystemHealth } from "./types";
 import { defaultFoundryWorkers } from "./workers";
@@ -26,6 +27,7 @@ export class FoundryMeshRuntime {
   readonly events: DurableEventBus;
   readonly coordinator: MeshActionCoordinator;
   readonly operations: MeshOperations;
+  readonly tools: FoundryToolGateway;
 
   private safeModeReason?: string;
   private initialized = false;
@@ -34,6 +36,7 @@ export class FoundryMeshRuntime {
     this.events = new DurableEventBus(new InMemoryEventBus(), persistence);
     this.coordinator = new MeshActionCoordinator(this);
     this.operations = new MeshOperations(this);
+    this.tools = new FoundryToolGateway(this);
   }
 
   async initialize(): Promise<void> {
