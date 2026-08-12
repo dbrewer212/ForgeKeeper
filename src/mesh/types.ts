@@ -17,6 +17,17 @@ export type WorkerKind =
   | "service"
   | "other";
 
+export type CommissioningState =
+  | "unconfigured"
+  | "configured"
+  | "validated"
+  | "dormant"
+  | "commissioning"
+  | "active"
+  | "degraded"
+  | "disabled"
+  | "failed";
+
 export type WorkerLifecycleState =
   | "offline"
   | "starting"
@@ -49,6 +60,7 @@ export interface WorkerIdentity {
   description?: string;
   capabilities: CapabilityId[];
   enabled: boolean;
+  commissioningState?: CommissioningState;
 }
 
 export interface WorkerStatus {
@@ -159,6 +171,9 @@ export interface ResourceRequest {
   resourceId: ResourceId;
   priority: number;
   estimatedCost?: number;
+  requestedUnits?: number;
+  leaseDurationMs?: number;
+  exclusive?: boolean;
   metadata?: Record<string, unknown>;
 }
 
@@ -168,6 +183,8 @@ export interface ResourceLease {
   workerId: WorkerId;
   resourceId: ResourceId;
   grantedAt: string;
+  units?: number;
+  exclusive?: boolean;
   expiresAt?: string;
 }
 
