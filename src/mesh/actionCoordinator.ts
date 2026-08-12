@@ -1,4 +1,5 @@
 import type { ActionEvaluation } from "./actionGateway";
+import { MeshCapabilities } from "./catalog";
 import { MeshEvents } from "./events";
 import { createFoundryEvent } from "./eventBus";
 import type { FoundryMeshRuntime } from "./runtime";
@@ -46,6 +47,20 @@ export class MeshActionCoordinator {
       };
     }
 
+    const guardReason = this.executionGuard(registered.identity, request);
+    if (guardReason) {
+      const result = deniedResult(request.id, guardReason);
+      await this.publishResult(MeshEvents.actionDenied, registered.identity.id, request, result);
+      await this.runtime.save();
+      return {
+        evaluation: {
+          request: { ...request, state: "denied" },
+          permission: { effect: "deny", reason: guardReason },
+        },
+        result,
+      };
+    }
+
     const evaluation = this.runtime.actions.evaluate(registered.identity, request);
 
     if (evaluation.permission.effect === "deny") {
@@ -85,6 +100,14 @@ export class MeshActionCoordinator {
     const registered = this.runtime.workers.get(request.requesterWorkerId);
     if (!registered) throw new Error(`Worker ${request.requesterWorkerId} is no longer registered.`);
 
+    const guardReason = this.executionGuard(registered.identity, request);
+    if (guardReason) {
+      const result = deniedResult(request.id, `Approved action cannot execute: ${guardReason}`);
+      await this.publishResult(MeshEvents.actionDenied, registered.identity.id, request, result);
+      await this.runtime.save();
+      return result;
+    }
+
     await this.runtime.events.publish(
       createFoundryEvent({
         type: MeshEvents.actionApproved,
@@ -120,6 +143,13 @@ export class MeshActionCoordinator {
   }
 
   private async execute(worker: WorkerIdentity, request: ActionRequest): Promise<ActionResult> {
+    const guardReason = this.executionGuard(worker, request);
+    if (guardReason) {
+      const result = deniedResult(request.id, guardReason);
+      await this.publishResult(MeshEvents.actionDenied, worker.id, request, result);
+      return result;
+    }
+
     const handlerKey = request.operationId ?? request.capabilityId;
     const handler = this.handlers.get(handlerKey);
     if (!handler) {
@@ -155,6 +185,25 @@ export class MeshActionCoordinator {
       await this.publishResult(MeshEvents.actionFailed, worker.id, request, result);
       return result;
     }
+  }
+
+  private executionGuard(worker: WorkerIdentity, request: ActionRequest): string | undefined {
+    if (worker.id !== "foundry-core" && !this.runtime.commissioning.canExecute(worker.id)) {
+      return `Worker ${worker.id} is dormant or not commissioned for execution.`;
+    }
+
+    if (!this.runtime.isSafeMode()) return undefined;
+
+    if (request.risk === "read") return undefined;
+
+    const safeModeAllowedCapabilities = new Set<string>([
+      MeshCapabilities.meshExitSafeMode,
+      MeshCapabilities.systemServiceStop,
+    ]);
+
+    if (safeModeAllowedCapabilities.has(request.capabilityId)) return undefined;
+
+    return `Safe Mode blocks capability ${request.capabilityId}; only reads, managed service stop, and Safe Mode exit are permitted.`;
   }
 
   private async publishResult(
