@@ -2,6 +2,7 @@ import { MeshActionCoordinator } from "./actionCoordinator";
 import { ActionGateway } from "./actionGateway";
 import { InMemoryApprovalStore } from "./approvalStore";
 import { InMemoryCheckpointStore } from "./checkpointStore";
+import { CommissioningController } from "./commissioning";
 import { registerCoreMeshTools } from "./coreTools";
 import { defaultPermissionRules } from "./defaultPolicies";
 import { FoundryDomainRegistry } from "./domainRegistry";
@@ -13,6 +14,7 @@ import { InMemoryPermissionService } from "./permissionService";
 import type { MeshPersistence, MeshSnapshot } from "./persistence";
 import { createDefaultMeshPersistence } from "./persistence";
 import { InMemoryResourceBroker } from "./resourceBroker";
+import { defaultFoundryServices, ServiceRegistry } from "./serviceRegistry";
 import { FoundryToolGateway } from "./toolGateway";
 import { InMemoryWorkerRegistry } from "./workerRegistry";
 import type { SystemHealth } from "./types";
@@ -25,12 +27,14 @@ export class FoundryMeshRuntime {
   readonly checkpoints = new InMemoryCheckpointStore();
   readonly approvals = new InMemoryApprovalStore();
   readonly domain = new FoundryDomainRegistry();
+  readonly services = new ServiceRegistry();
   readonly health = new DefaultHealthAggregator(this.workers, this.resources);
   readonly actions = new ActionGateway(this.permissions);
   readonly events: DurableEventBus;
   readonly coordinator: MeshActionCoordinator;
   readonly operations: MeshOperations;
   readonly tools: FoundryToolGateway;
+  readonly commissioning: CommissioningController;
 
   private safeModeReason?: string;
   private initialized = false;
@@ -40,6 +44,7 @@ export class FoundryMeshRuntime {
     this.coordinator = new MeshActionCoordinator(this);
     this.operations = new MeshOperations(this);
     this.tools = new FoundryToolGateway(this);
+    this.commissioning = new CommissioningController(this);
     registerCoreMeshTools(this);
   }
 
@@ -50,6 +55,7 @@ export class FoundryMeshRuntime {
     if (snapshot) this.restore(snapshot);
 
     this.ensureDefaultWorkers();
+    this.ensureDefaultServices();
     this.initialized = true;
   }
 
@@ -82,6 +88,7 @@ export class FoundryMeshRuntime {
       permissions: this.permissions.listRules(),
       checkpoints: this.checkpoints.list(),
       approvals: this.approvals.list(),
+      services: this.services.list(),
       health: this.getSystemHealth(),
     };
   }
@@ -97,6 +104,10 @@ export class FoundryMeshRuntime {
 
     for (const resource of snapshot.resources) {
       this.resources.updateState(resource);
+    }
+
+    for (const service of snapshot.services) {
+      this.services.register(service);
     }
 
     for (const existing of this.permissions.listRules()) {
@@ -116,10 +127,27 @@ export class FoundryMeshRuntime {
   }
 
   private ensureDefaultWorkers(): void {
-    for (const identity of defaultFoundryWorkers) {
-      if (!this.workers.get(identity.id)) {
-        this.workers.register(identity);
+    for (const defaultIdentity of defaultFoundryWorkers) {
+      const existing = this.workers.get(defaultIdentity.id);
+      if (!existing) {
+        this.workers.register(defaultIdentity);
+        continue;
       }
+
+      const hasCommissioningState = Boolean(existing.identity.commissioningState);
+      this.workers.updateIdentity({
+        ...defaultIdentity,
+        enabled: hasCommissioningState ? existing.identity.enabled : defaultIdentity.enabled,
+        commissioningState: hasCommissioningState
+          ? existing.identity.commissioningState
+          : defaultIdentity.commissioningState,
+      });
+    }
+  }
+
+  private ensureDefaultServices(): void {
+    for (const service of defaultFoundryServices) {
+      if (!this.services.get(service.id)) this.services.register(service);
     }
   }
 }
