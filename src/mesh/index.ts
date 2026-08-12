@@ -16,5 +16,7 @@ export * from "./healthAggregator";
 export * from "./operations";
 export * from "./toolGateway";
 export * from "./coreTools";
+export * from "./domainServices";
+export * from "./domainRegistry";
 export * from "./persistence";
 export * from "./runtime";
