@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ApprovalRecord } from "./approvalStore";
+import type { ServiceDescriptor } from "./serviceRegistry";
 import type {
   Checkpoint,
   FoundryEvent,
@@ -17,6 +18,7 @@ export interface MeshSnapshot {
   permissions: PermissionRule[];
   checkpoints: Checkpoint[];
   approvals: ApprovalRecord[];
+  services: ServiceDescriptor[];
   health: SystemHealth;
 }
 
@@ -105,6 +107,7 @@ function normalizeSnapshot(snapshot: Partial<MeshSnapshot>): MeshSnapshot {
     permissions: snapshot.permissions ?? [],
     checkpoints: snapshot.checkpoints ?? [],
     approvals: snapshot.approvals ?? [],
+    services: snapshot.services ?? [],
     health:
       snapshot.health ?? {
         state: "nominal",
