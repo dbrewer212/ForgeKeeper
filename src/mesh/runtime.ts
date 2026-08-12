@@ -14,7 +14,9 @@ import { InMemoryPermissionService } from "./permissionService";
 import type { MeshPersistence, MeshSnapshot } from "./persistence";
 import { createDefaultMeshPersistence } from "./persistence";
 import { InMemoryResourceBroker } from "./resourceBroker";
+import { ServiceLifecycleManager } from "./serviceLifecycle";
 import { defaultFoundryServices, ServiceRegistry } from "./serviceRegistry";
+import { registerServiceTools } from "./serviceTools";
 import { FoundryToolGateway } from "./toolGateway";
 import { InMemoryWorkerRegistry } from "./workerRegistry";
 import type { SystemHealth } from "./types";
@@ -35,6 +37,7 @@ export class FoundryMeshRuntime {
   readonly operations: MeshOperations;
   readonly tools: FoundryToolGateway;
   readonly commissioning: CommissioningController;
+  readonly serviceLifecycle: ServiceLifecycleManager;
 
   private safeModeReason?: string;
   private initialized = false;
@@ -45,7 +48,9 @@ export class FoundryMeshRuntime {
     this.operations = new MeshOperations(this);
     this.tools = new FoundryToolGateway(this);
     this.commissioning = new CommissioningController(this);
+    this.serviceLifecycle = new ServiceLifecycleManager(this);
     registerCoreMeshTools(this);
+    registerServiceTools(this);
   }
 
   async initialize(): Promise<void> {
