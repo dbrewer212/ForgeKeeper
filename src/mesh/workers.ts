@@ -16,6 +16,7 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
       MeshCapabilities.foundryCanonWrite,
     ],
     enabled: true,
+    commissioningState: "active",
   },
   forgekeeper: {
     id: "forgekeeper",
@@ -28,7 +29,8 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
       MeshCapabilities.foundryProjectRead,
       MeshCapabilities.productionRead,
     ],
-    enabled: true,
+    enabled: false,
+    commissioningState: "dormant",
   },
   productionSteward: {
     id: "production-steward",
@@ -45,7 +47,8 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
       MeshCapabilities.productionRecommendNextAction,
       MeshCapabilities.productionAdvanceStage,
     ],
-    enabled: true,
+    enabled: false,
+    commissioningState: "dormant",
   },
   watcher: {
     id: "watcher",
@@ -59,7 +62,8 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
       MeshCapabilities.watcherPublishFinding,
       MeshCapabilities.watcherSuspendHeavyCompute,
     ],
-    enabled: true,
+    enabled: false,
+    commissioningState: "dormant",
   },
   bastion: {
     id: "bastion",
@@ -77,7 +81,8 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
       MeshCapabilities.systemServiceStop,
       MeshCapabilities.systemServiceRestart,
     ],
-    enabled: true,
+    enabled: false,
+    commissioningState: "dormant",
   },
   openclaw: {
     id: "openclaw",
@@ -93,7 +98,8 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
       MeshCapabilities.systemServiceStart,
       MeshCapabilities.systemServiceRestart,
     ],
-    enabled: true,
+    enabled: false,
+    commissioningState: "dormant",
   },
   odysseus: {
     id: "odysseus",
@@ -109,7 +115,8 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
       MeshCapabilities.productionRead,
       MeshCapabilities.productionThoughtCapture,
     ],
-    enabled: true,
+    enabled: false,
+    commissioningState: "dormant",
   },
   ollama: {
     id: "ollama",
@@ -117,7 +124,8 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
     kind: "ollama",
     description: "Shared local inference provider for mesh workers.",
     capabilities: [MeshCapabilities.meshReadState, MeshCapabilities.meshPublishEvent, MeshCapabilities.meshRequestResource],
-    enabled: true,
+    enabled: false,
+    commissioningState: "dormant",
   },
 };
 
