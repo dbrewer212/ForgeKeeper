@@ -4,6 +4,7 @@ import { InMemoryApprovalStore } from "./approvalStore";
 import { InMemoryCheckpointStore } from "./checkpointStore";
 import { registerCoreMeshTools } from "./coreTools";
 import { defaultPermissionRules } from "./defaultPolicies";
+import { FoundryDomainRegistry } from "./domainRegistry";
 import { DurableEventBus } from "./durableEventBus";
 import { InMemoryEventBus } from "./eventBus";
 import { DefaultHealthAggregator } from "./healthAggregator";
@@ -23,6 +24,7 @@ export class FoundryMeshRuntime {
   readonly permissions = new InMemoryPermissionService(defaultPermissionRules);
   readonly checkpoints = new InMemoryCheckpointStore();
   readonly approvals = new InMemoryApprovalStore();
+  readonly domain = new FoundryDomainRegistry();
   readonly health = new DefaultHealthAggregator(this.workers, this.resources);
   readonly actions = new ActionGateway(this.permissions);
   readonly events: DurableEventBus;
