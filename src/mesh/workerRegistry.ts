@@ -7,6 +7,7 @@ import type {
 export interface WorkerRegistry {
   register(identity: WorkerIdentity, status?: WorkerStatus): void;
   unregister(workerId: string): void;
+  updateIdentity(identity: WorkerIdentity): void;
   updateStatus(status: WorkerStatus): void;
   get(workerId: string): RegisteredWorker | undefined;
   list(): RegisteredWorker[];
@@ -29,6 +30,12 @@ export class InMemoryWorkerRegistry implements WorkerRegistry {
 
   unregister(workerId: string): void {
     this.workers.delete(workerId);
+  }
+
+  updateIdentity(identity: WorkerIdentity): void {
+    const existing = this.workers.get(identity.id);
+    if (!existing) throw new Error(`Worker ${identity.id} is not registered.`);
+    this.workers.set(identity.id, { ...existing, identity });
   }
 
   updateStatus(status: WorkerStatus): void {
