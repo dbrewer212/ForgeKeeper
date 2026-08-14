@@ -45,6 +45,10 @@ function defaultLaunchTargets(state: any): LaunchTarget[] {
   return [
     { id: "obs", label: "OBS Studio", target: "C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe", group: "stream", enabled: true },
     { id: "discord", label: "Discord", target: "Discord.exe", group: "stream", enabled: true },
+    { id: "crunchyroll", label: "Crunchyroll", target: "https://www.crunchyroll.com/", group: "stream", enabled: true },
+    { id: "disney-plus", label: "Disney+", target: "https://www.disneyplus.com/", group: "stream", enabled: true },
+    { id: "hidive", label: "HIDIVE", target: "https://www.hidive.com/", group: "stream", enabled: true },
+    { id: "prime-video", label: "Prime Video", target: "https://www.primevideo.com/", group: "stream", enabled: true },
     { id: "terminal", label: "Terminal", target: "wt.exe", group: "system", enabled: true },
     { id: "explorer", label: "Explorer", target: "explorer.exe", group: "system", enabled: true },
     { id: "orca", label: "OrcaSlicer", target: state.settings?.orcaSlicerPath ?? "OrcaSlicer.exe", group: "maker", enabled: true },
@@ -52,6 +56,11 @@ function defaultLaunchTargets(state: any): LaunchTarget[] {
     { id: "blender", label: "Blender", target: state.settings?.blenderPath ?? "blender.exe", group: "maker", enabled: true },
     { id: "meshy", label: "Meshy", target: state.settings?.meshyUrl ?? "https://www.meshy.ai/", group: "maker", enabled: true },
   ];
+}
+
+function mergeLaunchTargets(stored: LaunchTarget[], defaults: LaunchTarget[]): LaunchTarget[] {
+  const storedIds = new Set(stored.map((target) => target.id));
+  return [...stored, ...defaults.filter((target) => !storedIds.has(target.id))];
 }
 
 function percent(used?: number, total?: number): number | undefined {
@@ -91,7 +100,8 @@ export function BastionView({ state, onExit }: { state: any; onExit: () => void 
       if (stored && typeof stored === "object") {
         const candidates = (stored as Record<string, unknown>).launchTargets;
         if (Array.isArray(candidates) && candidates.length > 0) {
-          setLaunchTargets(candidates.filter(isLaunchTarget));
+          const validStored = candidates.filter(isLaunchTarget);
+          setLaunchTargets(mergeLaunchTargets(validStored, defaultLaunchTargets(state)));
         }
       }
 
