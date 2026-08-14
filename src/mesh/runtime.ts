@@ -9,6 +9,7 @@ import { defaultPermissionRules } from "./defaultPolicies";
 import { registerDiagnosticTools } from "./diagnosticTools";
 import { FoundryDomainRegistry } from "./domainRegistry";
 import { FoundryDomainStateStore } from "./domainState";
+import { registerDomainTools } from "./domainTools";
 import { DurableEventBus } from "./durableEventBus";
 import { InMemoryEventBus } from "./eventBus";
 import { DefaultHealthAggregator } from "./healthAggregator";
@@ -63,6 +64,7 @@ export class FoundryMeshRuntime {
     registerCoreMeshTools(this);
     registerServiceTools(this);
     registerDiagnosticTools(this);
+    registerDomainTools(this);
   }
 
   async initialize(): Promise<void> {
