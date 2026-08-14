@@ -6,7 +6,13 @@ export type ProductStatus = "Concept" | "Prototype" | "Active" | "Production" | 
 export type OrderStatus = "Queued" | "Printing" | "Finishing" | "Packed" | "Shipped";
 export type OrderPriority = "Low" | "Normal" | "High" | "Rush";
 export type ReleaseStatus = "Planning" | "Scheduled" | "Live";
-export type FilamentMaterial = "PLA" | "PLA+" | "PETG" | "ABS" | "TPU";
+export type FilamentMaterial = "PLA" | "PLA+" | "PETG" | "ABS" | "ASA" | "TPU" | "Nylon" | "PC" | "Other";
+export type FilamentSpoolCondition = "Sealed" | "Used" | "Empty";
+export type FilamentQuantityConfidence = "Exact" | "Nominal" | "Estimated" | "Unknown";
+export type FilamentSpoolStatus = "In Stock" | "In Use" | "Empty" | "Archived";
+export type FilamentDryingStatus = "Unknown" | "Dry" | "Needs Drying" | "Dried";
+export type MaterialTransactionType = "Opening Balance" | "Receipt" | "Measurement" | "Correction" | "Consumption" | "Waste" | "Reservation" | "Reservation Release" | "Drying" | "Archived" | "Restored" | "Reversal";
+export type MaterialReservationStatus = "Active" | "Consumed" | "Released";
 export type PrinterStatus = "Available" | "Printing" | "Maintenance" | "Offline";
 export type ProductTab = "overview" | "stls" | "concepts" | "variants" | "orders";
 export type AssetStatus = "Planned" | "Linked" | "Needs Update" | "Archived";
@@ -268,17 +274,100 @@ export type OrderRecord = {
   notes: string;
 };
 
+export type FilamentProfile = {
+  id: string;
+  brand: string;
+  productLine: string;
+  material: FilamentMaterial;
+  colorName: string;
+  colorFamily: string;
+  diameterMm: number;
+  nominalWeightGrams: number;
+  emptySpoolWeightGrams?: number;
+  reorderPointGrams: number;
+  defaultSpoolPrice: number;
+  supplier: string;
+  supplierSku: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Physical spool. Legacy material fields remain as a compatibility snapshot for orders and costing. */
 export type FilamentRecord = {
   id: string;
+  profileId: string;
+  foundrySpoolCode: string;
   brand: string;
   material: FilamentMaterial;
   colorName: string;
   colorFamily: string;
   gramsAvailable: number;
+  quantityConfidence: FilamentQuantityConfidence;
+  condition: FilamentSpoolCondition;
+  status: FilamentSpoolStatus;
+  grossWeightGrams?: number;
+  estimatedPercent?: number;
   reorderPointGrams: number;
   spoolPrice: number;
   spoolWeightGrams: number;
+  emptySpoolWeightGrams?: number;
+  storageLocation: string;
+  purchaseDate: string;
+  lotNumber: string;
+  dryingStatus: FilamentDryingStatus;
+  dryingHistory: string;
   notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MaterialTransaction = {
+  id: string;
+  spoolId: string;
+  profileId: string;
+  type: MaterialTransactionType;
+  deltaGrams: number;
+  balanceAfterGrams: number;
+  quantityConfidence: FilamentQuantityConfidence;
+  reason: string;
+  orderId?: string;
+  reservationId?: string;
+  reversesTransactionId?: string;
+  reversedByTransactionId?: string;
+  occurredAt: string;
+  notes: string;
+};
+
+export type MaterialReservation = {
+  id: string;
+  profileId: string;
+  spoolId?: string;
+  orderId?: string;
+  grams: number;
+  status: MaterialReservationStatus;
+  purpose: string;
+  createdAt: string;
+  resolvedAt?: string;
+};
+
+export type FilamentDryingRecord = {
+  id: string;
+  spoolId: string;
+  temperatureC: number;
+  durationHours: number;
+  outcome: "Dry" | "Needs More Drying" | "Unknown";
+  occurredAt: string;
+  notes: string;
+};
+
+export type MaterialImportRecord = {
+  id: string;
+  fingerprint: string;
+  filename: string;
+  importedAt: string;
+  profileCount: number;
+  spoolCount: number;
 };
 
 export type PrinterRecord = {
@@ -348,7 +437,7 @@ export type AuditEvent = {
 export type IntegrityFinding = {
   id: string;
   severity: IntegritySeverity;
-  category: "Relationship" | "Asset" | "Checksum" | "Provider Job" | "Credential" | "Backup";
+  category: "Relationship" | "Asset" | "Checksum" | "Provider Job" | "Credential" | "Backup" | "Inventory";
   title: string;
   detail: string;
   subjectId?: string;
@@ -483,7 +572,12 @@ export type AppData = {
   collections: CollectionRecord[];
   releases: ReleaseRecord[];
   orders: OrderRecord[];
+  filamentProfiles: FilamentProfile[];
   filament: FilamentRecord[];
+  materialTransactions: MaterialTransaction[];
+  materialReservations: MaterialReservation[];
+  filamentDryingRecords: FilamentDryingRecord[];
+  materialImportHistory: MaterialImportRecord[];
   printers: PrinterRecord[];
   maintenance: MaintenanceRecord[];
   generationJobs: GenerationJobRecord[];

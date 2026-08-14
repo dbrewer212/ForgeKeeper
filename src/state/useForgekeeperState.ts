@@ -1,17 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { defaultControlCenter, defaultSettings, seedCanonRecords, seedCollections, seedConcepts, seedFilament, seedLibraryAssets, seedOrders, seedPrinters, seedProducts, seedReleases, seedStls, seedVariants } from "../data/seed";
+import { defaultControlCenter, defaultSettings, seedCanonRecords, seedCollections, seedConcepts, seedFilament, seedFilamentProfiles, seedLibraryAssets, seedOrders, seedPrinters, seedProducts, seedReleases, seedStls, seedVariants } from "../data/seed";
 import { seedPlannedFilament, seedProductPlanning, seedPrototypes, seedRealmMaterials } from "../data/planningSeed";
 import { directCost, getOrderCostBreakdown } from "../lib/cost";
 import { calculateProductionMetrics, orderMaterialGrams } from "../lib/production";
-import { downloadCsv } from "../lib/csv";
+import { downloadCsv, downloadText } from "../lib/csv";
 import { uid } from "../lib/ids";
-import { clearStoredData, downloadJson, loadStoredData, saveStoredData } from "../lib/storage";
+import { clearNativeStoredData, clearStoredData, downloadJson, isTauriRuntime, loadNativeStoredData, loadStoredData, saveNativeStoredData, saveStoredData, selectStartupWorkspace } from "../lib/storage";
 import { defaultExternalTools, getToolPath, openLocalPathBestEffort, openWebUrl, slicerForPrinter } from "../lib/externalTools";
 import { filenameFromPath, folderFromPath, suggestedLibraryPath } from "../lib/assetLibrary";
 import { emptyProductionReferenceChecks, productionReferenceReady, referenceChecksPassed } from "../lib/productionReferences";
 import { canApproveForgeability, checksAllPass, defaultMeshChecks, defaultVisualChecks, requiredViewsPresent } from "../lib/modelVerification";
 import { defaultPrintTrialCriteria, printTrialCanFail, printTrialCanPass, printTrialReadyToStart } from "../lib/printTrials";
 import { getGenerationStatus } from "../lib/generationProviders";
+import {
+  cleanLegacyOrderAndVariantLinks,
+  createPhysicalSpools,
+  filamentProfileIdentity,
+  migrateFilamentInventory,
+  parseFilamentCsv,
+  profileFromCsv,
+  confidenceFromCsv,
+  conditionFromCsv,
+  previewFilamentCsv,
+  type FilamentSpoolDraft,
+} from "../lib/filamentInventory";
+import {
+  calculateRemainingFromGross,
+  materialTransaction,
+  openingBalanceTransactions,
+  purchaseList,
+  summarizeMaterialProfiles,
+  validateMaterialIntegrity,
+} from "../lib/materialOperations";
 import {
   collectInspectablePaths,
   collectStructuralFindings,
@@ -35,9 +55,14 @@ import type {
   ConceptSpec,
   ControlCenterRecord,
   FilamentRecord,
+  FilamentProfile,
+  FilamentDryingRecord,
   GenerationJobRecord,
   LibraryAssetRecord,
   MaintenanceRecord,
+  MaterialImportRecord,
+  MaterialReservation,
+  MaterialTransaction,
   ModelVerificationRecord,
   OrderRecord,
   OrderStatus,
@@ -61,11 +86,16 @@ const seedData: AppData = {
   productionReferences: [],
   modelVerifications: [],
   printTrials: [],
-  variants: seedVariants,
+  variants: seedVariants.map((variant) => ({ ...variant, filamentId: undefined })),
   collections: seedCollections,
   releases: seedReleases,
   orders: seedOrders,
+  filamentProfiles: seedFilamentProfiles,
   filament: seedFilament,
+  materialTransactions: [],
+  materialReservations: [],
+  filamentDryingRecords: [],
+  materialImportHistory: [],
   printers: seedPrinters,
   maintenance: [],
   generationJobs: [],
@@ -104,6 +134,20 @@ function mergeLibraryAssets(assets?: LibraryAssetRecord[]): LibraryAssetRecord[]
     })),
     ...(assets ?? []).filter((asset) => !seedLibraryAssets.some((seed) => seed.id === asset.id)),
   ];
+}
+
+function hydratePrinters(printers?: PrinterRecord[]): PrinterRecord[] {
+  const restored = printers ?? seedPrinters;
+  const kobraS1Max = seedPrinters.find((printer) => printer.id === "PR-KOBRA-S1-MAX-COMBO");
+  const hasKobraS1Max = restored.some((printer) => {
+    const identity = `${printer.name} ${printer.model}`.toLowerCase();
+    return printer.id === kobraS1Max?.id || identity.includes("kobra s1 max");
+  });
+  const complete = !hasKobraS1Max && kobraS1Max ? [...restored, kobraS1Max] : restored;
+  return complete.map((printer) => ({
+    ...printer,
+    watts: printer.watts ?? defaultSettings.machineWatts,
+  }));
 }
 
 function hydrateConcepts(concepts: ConceptSpec[]): ConceptSpec[] {
@@ -182,10 +226,20 @@ function hydratePrintTrials(records?: PrintTrialRecord[]): PrintTrialRecord[] {
   }));
 }
 
-function hydrateData(): AppData {
-  const stored = loadStoredData();
+export function hydrateDataFrom(stored: Partial<AppData> | null): AppData {
   if (!stored) return seedData;
   const concepts = hydrateConcepts(stored.concepts ?? seedData.concepts);
+  const inventory = migrateFilamentInventory(stored.filament ?? seedData.filament, stored.filamentProfiles ?? seedData.filamentProfiles);
+  const validSpoolIds = new Set(inventory.spools.map((spool) => spool.id));
+  const invalidSpoolLinks = [
+    ...(stored.orders ?? seedData.orders).map((order) => order.filamentId),
+    ...(stored.variants ?? seedData.variants).map((variant) => variant.filamentId),
+  ].filter((id): id is string => Boolean(id) && !validSpoolIds.has(id!));
+  const cleanedLinks = cleanLegacyOrderAndVariantLinks(
+    stored.orders ?? seedData.orders,
+    stored.variants ?? seedData.variants,
+    [...inventory.removedPlaceholderSpoolIds, ...invalidSpoolLinks],
+  );
   return {
     products: (stored.products ?? seedData.products).map((product) => ({
       ...product,
@@ -207,7 +261,7 @@ function hydrateData(): AppData {
     productionReferences: hydrateProductionReferences(concepts, stored.productionReferences),
     modelVerifications: hydrateModelVerifications(stored.modelVerifications),
     printTrials: hydratePrintTrials(stored.printTrials),
-    variants: (stored.variants ?? seedData.variants).map((variant) => ({
+    variants: cleanedLinks.variants.map((variant) => ({
       ...variant,
       productImagePath: variant.productImagePath ?? "",
       conceptImagePath: variant.conceptImagePath ?? "",
@@ -216,22 +270,23 @@ function hydrateData(): AppData {
     })),
     collections: stored.collections ?? seedData.collections,
     releases: stored.releases ?? seedData.releases,
-    orders: (stored.orders ?? seedData.orders).map((order) => ({
+    orders: cleanedLinks.orders.map((order) => ({
       ...order,
-      filamentId: order.filamentId ?? (stored.filament ?? seedData.filament)[0]?.id,
+      filamentId: order.filamentId,
       materialGrams: order.materialGrams ?? (stored.products ?? seedData.products).find((p) => p.id === order.productId)?.estimatedFilamentGrams ?? 0,
       electricityRate: order.electricityRate ?? defaultSettings.electricityRate,
       materialConsumed: order.materialConsumed ?? false,
     })),
-    filament: (stored.filament ?? seedData.filament).map((item) => ({
-      ...item,
-      spoolPrice: item.spoolPrice ?? 22,
-      spoolWeightGrams: item.spoolWeightGrams ?? 1000,
-    })),
-    printers: (stored.printers ?? seedData.printers).map((printer) => ({
-      ...printer,
-      watts: printer.watts ?? defaultSettings.machineWatts,
-    })),
+    filamentProfiles: inventory.profiles,
+    filament: inventory.spools,
+    materialTransactions: [
+      ...(stored.materialTransactions ?? []),
+      ...openingBalanceTransactions(inventory.spools, stored.materialTransactions ?? []),
+    ],
+    materialReservations: stored.materialReservations ?? [],
+    filamentDryingRecords: stored.filamentDryingRecords ?? [],
+    materialImportHistory: stored.materialImportHistory ?? [],
+    printers: hydratePrinters(stored.printers),
     maintenance: stored.maintenance ?? [],
     generationJobs: stored.generationJobs ?? [],
     controlCenter: stored.controlCenter ? {
@@ -251,6 +306,10 @@ function hydrateData(): AppData {
     productPlanning: stored.productPlanning ?? seedData.productPlanning,
     realmMaterials: stored.realmMaterials ?? seedData.realmMaterials,
   };
+}
+
+function hydrateData(): AppData {
+  return hydrateDataFrom(loadStoredData());
 }
 
 function printerStatusFromOrders(printer: PrinterRecord, orders: OrderRecord[], products: Product[]): PrinterRecord {
@@ -282,7 +341,12 @@ export function useForgekeeperState() {
   const [collections, setCollections] = useState<CollectionRecord[]>(initial.collections);
   const [releases, setReleases] = useState<ReleaseRecord[]>(initial.releases);
   const [orders, setOrders] = useState<OrderRecord[]>(initial.orders);
+  const [filamentProfiles, setFilamentProfiles] = useState<FilamentProfile[]>(initial.filamentProfiles);
   const [filament, setFilament] = useState<FilamentRecord[]>(initial.filament);
+  const [materialTransactions, setMaterialTransactions] = useState<MaterialTransaction[]>(initial.materialTransactions);
+  const [materialReservations, setMaterialReservations] = useState<MaterialReservation[]>(initial.materialReservations);
+  const [filamentDryingRecords, setFilamentDryingRecords] = useState<FilamentDryingRecord[]>(initial.filamentDryingRecords);
+  const [materialImportHistory, setMaterialImportHistory] = useState<MaterialImportRecord[]>(initial.materialImportHistory);
   const [printers, setPrinters] = useState<PrinterRecord[]>(initial.printers);
   const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>(initial.maintenance);
   const [generationJobs, setGenerationJobs] = useState<GenerationJobRecord[]>(initial.generationJobs);
@@ -309,6 +373,9 @@ export function useForgekeeperState() {
   const [newPrinterName, setNewPrinterName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [quickAction, setQuickAction] = useState<QuickActionKey | null>(null);
+  const [storageReady, setStorageReady] = useState(!isTauriRuntime());
+  const [storageStatus, setStorageStatus] = useState<"Loading" | "SQLite" | "Browser fallback" | "Error">(isTauriRuntime() ? "Loading" : "Browser fallback");
+  const [storageError, setStorageError] = useState("");
 
   const appData: AppData = {
     products,
@@ -321,7 +388,12 @@ export function useForgekeeperState() {
     collections,
     releases,
     orders,
+    filamentProfiles,
     filament,
+    materialTransactions,
+    materialReservations,
+    filamentDryingRecords,
+    materialImportHistory,
     printers,
     maintenance,
     generationJobs,
@@ -336,14 +408,57 @@ export function useForgekeeperState() {
     realmMaterials,
   };
 
+  const nativeStorageStarted = useRef(false);
   useEffect(() => {
-    saveStoredData(appData);
-  }, [products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, recovery, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
+    if (nativeStorageStarted.current || !isTauriRuntime()) return;
+    nativeStorageStarted.current = true;
+    void loadNativeStoredData()
+      .then(async (nativeData) => {
+        // Browser fallback is the newest authority after a SQLite failure. Persist it before
+        // considering older native data so an intake made during recovery cannot be lost.
+        const fallbackData = loadStoredData();
+        const startupData = selectStartupWorkspace(fallbackData, nativeData);
+        if (startupData) {
+          const hydratedData = hydrateDataFrom(startupData);
+          replaceWorkspaceData(hydratedData);
+          await saveNativeStoredData(hydratedData);
+        } else {
+          await saveNativeStoredData(appData);
+        }
+        clearStoredData();
+        setStorageError("");
+        setStorageStatus("SQLite");
+        setStorageReady(true);
+      })
+      .catch((error) => {
+        console.error("Forgekeeper SQLite initialization failed", error);
+        setStorageError(error instanceof Error ? error.message : String(error));
+        setStorageStatus("Error");
+        setStorageReady(true);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    if (!isTauriRuntime() || storageStatus === "Error") {
+      saveStoredData(appData);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void saveNativeStoredData(appData).catch((error) => {
+        console.error("Forgekeeper SQLite save failed", error);
+        setStorageError(error instanceof Error ? error.message : String(error));
+        setStorageStatus("Error");
+        saveStoredData(appData);
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [storageReady, storageStatus, products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filamentProfiles, filament, materialTransactions, materialReservations, filamentDryingRecords, materialImportHistory, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, recovery, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
 
   const automaticCheckpointStarted = useRef(false);
   const lastAutomaticCheckpointAt = useRef(Date.now());
   useEffect(() => {
-    if (automaticCheckpointStarted.current) return;
+    if (!storageReady || automaticCheckpointStarted.current) return;
     automaticCheckpointStarted.current = true;
     void saveRecoveryCheckpoint(appData, "Automatic session-start checkpoint")
       .then(() => {
@@ -351,7 +466,7 @@ export function useForgekeeperState() {
         setRecoveryCheckpoints(loadRecoveryCheckpoints());
       })
       .catch((error) => console.warn("Forgekeeper automatic checkpoint failed", error));
-  }, []);
+  }, [storageReady]);
 
   useEffect(() => {
     if (Date.now() - lastAutomaticCheckpointAt.current < 15 * 60 * 1000) return;
@@ -364,7 +479,7 @@ export function useForgekeeperState() {
         .catch((error) => console.warn("Forgekeeper timed checkpoint failed", error));
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, recovery, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
+  }, [products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filamentProfiles, filament, materialTransactions, materialReservations, filamentDryingRecords, materialImportHistory, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, recovery, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
 
   useEffect(() => {
     setPrinters((prev) => prev.map((printer) => printerStatusFromOrders(printer, orders, products)));
@@ -388,6 +503,19 @@ export function useForgekeeperState() {
   const productOrders = orders.filter((o) => o.productId === selectedProductId);
   const productVariants = variants.filter((variant) => variant.productId === selectedProductId);
   const productRelease = releases.find((r) => r.productIds.includes(selectedProductId));
+  const materialSummaries = useMemo(
+    () => summarizeMaterialProfiles(filamentProfiles, filament, materialReservations),
+    [filamentProfiles, filament, materialReservations],
+  );
+  const materialPurchaseList = useMemo(() => purchaseList(materialSummaries), [materialSummaries]);
+  const materialIntegrityFindings = useMemo(() => validateMaterialIntegrity({
+    profiles: filamentProfiles,
+    spools: filament,
+    transactions: materialTransactions,
+    reservations: materialReservations,
+    dryingRecords: filamentDryingRecords,
+    orders,
+  }), [filamentProfiles, filament, materialTransactions, materialReservations, filamentDryingRecords, orders]);
 
   function getPrimaryStlForProduct(productId: string) {
     return stls.find((stl) => stl.productId === productId && stl.isPrimary) ?? stls.find((stl) => stl.productId === productId);
@@ -446,7 +574,8 @@ export function useForgekeeperState() {
   const metrics = useMemo(() => {
     const revenue = orders.reduce((sum, order) => sum + order.quotedPrice, 0);
     const costs = orders.reduce((sum, order) => sum + getCostBreakdownForOrder(order).total, 0);
-    const totalFilamentKg = filament.reduce((sum, item) => sum + item.gramsAvailable, 0) / 1000;
+    const inventorySpools = filament.filter((item) => item.status !== "Archived");
+    const totalFilamentKg = inventorySpools.filter((item) => item.quantityConfidence !== "Unknown").reduce((sum, item) => sum + item.gramsAvailable, 0) / 1000;
     return {
       products: products.length,
       stls: stls.length,
@@ -455,7 +584,7 @@ export function useForgekeeperState() {
       collections: collections.length,
       releases: releases.length,
       orders: orders.length,
-      filament: filament.length,
+      filament: inventorySpools.length,
       printers: printers.length,
       revenue,
       costs,
@@ -965,32 +1094,281 @@ export function useForgekeeperState() {
       window.alert("Selected filament could not be found.");
       return;
     }
-    const confirmed = window.confirm(`Deduct ${grams.toFixed(0)}g from ${spool.colorName}?`);
+    if (spool.quantityConfidence === "Unknown") {
+      window.alert("This spool's remaining quantity is unknown. Measure or estimate it before assigning consumption.");
+      return;
+    }
+    if (spool.gramsAvailable < grams) {
+      window.alert(`${spool.foundrySpoolCode} has ${spool.gramsAvailable.toFixed(0)}g recorded, but this order requires ${grams.toFixed(0)}g.`);
+      return;
+    }
+    const confirmed = window.confirm(`Record ${grams.toFixed(0)}g of actual material use from ${spool.foundrySpoolCode}?`);
     if (!confirmed) return;
-    setFilament((prev) => prev.map((item) => item.id === order.filamentId ? { ...item, gramsAvailable: Math.max(0, item.gramsAvailable - grams) } : item));
-    setOrders((prev) => prev.map((item) => item.id === id ? { ...item, materialConsumed: true } : item));
+    consumeMaterialForOrder(id, [{ spoolId: spool.id, grams }], `Production use for ${product?.name ?? order.id}`);
   }
 
   function addFilament() {
     if (!newFilamentName.trim()) return;
-    setFilament((prev) => [{ id: uid("FIL"), brand: "Generic", material: "PLA", colorName: newFilamentName.trim(), colorFamily: "Unknown", gramsAvailable: 1000, reorderPointGrams: 250, spoolPrice: 22, spoolWeightGrams: 1000, notes: "" }, ...prev]);
+    const now = new Date().toISOString();
+    const profile: FilamentProfile = {
+      id: uid("FP"), brand: "Unknown", productLine: "", material: "PLA", colorName: newFilamentName.trim(), colorFamily: "Unknown",
+      diameterMm: 1.75, nominalWeightGrams: 1000, reorderPointGrams: 250, defaultSpoolPrice: 0, supplier: "", supplierSku: "", notes: "", createdAt: now, updatedAt: now,
+    };
+    const spools = createPhysicalSpools(profile, [{ condition: "Sealed", quantityConfidence: "Nominal", gramsAvailable: 1000 }], filament);
+    setFilamentProfiles((previous) => [profile, ...previous]);
+    setFilament((previous) => [...spools, ...previous]);
+    setMaterialTransactions((previous) => [...spools.map((spool) => materialTransaction({ ...spool, gramsAvailable: 0 }, "Receipt", spool.gramsAvailable, "Quick-add filament receipt", { confidence: spool.quantityConfidence }).transaction), ...previous]);
     setNewFilamentName("");
     clearQuickAction("newFilament");
   }
 
-  function updateFilament(id: string, patch: Partial<FilamentRecord>) {
-    setFilament((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  function addFilamentProfile(input: Omit<FilamentProfile, "id" | "createdAt" | "updatedAt">): FilamentProfile {
+    const now = new Date().toISOString();
+    const profile: FilamentProfile = { ...input, id: uid("FP"), createdAt: now, updatedAt: now };
+    setFilamentProfiles((previous) => [profile, ...previous]);
+    return profile;
   }
 
-  function adjustFilament(id: string, delta: number) {
-    setFilament((prev) => prev.map((item) => (item.id === id ? { ...item, gramsAvailable: Math.max(0, item.gramsAvailable + delta) } : item)));
+  function updateFilamentProfile(id: string, patch: Partial<FilamentProfile>) {
+    setFilamentProfiles((previous) => previous.map((profile) => profile.id === id ? { ...profile, ...patch, updatedAt: new Date().toISOString() } : profile));
+    setFilament((previous) => previous.map((spool) => {
+      if (spool.profileId !== id) return spool;
+      const profile = filamentProfiles.find((item) => item.id === id);
+      const next = profile ? { ...profile, ...patch } : undefined;
+      if (!next) return spool;
+      return {
+        ...spool,
+        brand: next.brand,
+        material: next.material,
+        colorName: next.colorName,
+        colorFamily: next.colorFamily,
+        reorderPointGrams: next.reorderPointGrams,
+        spoolWeightGrams: next.nominalWeightGrams,
+        emptySpoolWeightGrams: next.emptySpoolWeightGrams,
+        updatedAt: new Date().toISOString(),
+      };
+    }));
+  }
+
+  function removeFilamentProfile(id: string) {
+    const profile = filamentProfiles.find((item) => item.id === id);
+    if (!profile) return;
+    if (filament.some((spool) => spool.profileId === id)) {
+      window.alert("This profile still has physical spools. Remove or reassign those spools first.");
+      return;
+    }
+    if (!window.confirm(`Remove filament profile ${profile.brand} ${profile.colorName}?`)) return;
+    setFilamentProfiles((previous) => previous.filter((item) => item.id !== id));
+  }
+
+  function receiveFilamentBatch(profileId: string, drafts: FilamentSpoolDraft[], profileOverride?: FilamentProfile): FilamentRecord[] {
+    const profile = filamentProfiles.find((item) => item.id === profileId) ?? (profileOverride?.id === profileId ? profileOverride : undefined);
+    if (!profile || !drafts.length) return [];
+    const created = createPhysicalSpools(profile, drafts, filament);
+    setFilament((previous) => [...created, ...previous]);
+    setMaterialTransactions((previous) => [...created.map((spool) => materialTransaction({ ...spool, gramsAvailable: 0 }, "Receipt", spool.gramsAvailable, "Physical spool received", { confidence: spool.quantityConfidence, notes: spool.lotNumber ? `Lot ${spool.lotNumber}` : "" }).transaction), ...previous]);
+    appendAudit("Data Change", "Receive filament", "Success", `${created.length} physical spool${created.length === 1 ? "" : "s"} received under ${profile.brand} ${profile.colorName}.`, profile.id);
+    return created;
+  }
+
+  function importFilamentCensusCsv(text: string, filename = "filament-census.csv") {
+    const preview = previewFilamentCsv(text, materialImportHistory);
+    if (preview.duplicateImport) throw new Error("This exact CSV was already imported. No records were changed.");
+    if (!preview.valid) {
+      const failures = preview.rows.flatMap((row) => row.errors.map((error) => `Row ${row.rowNumber}: ${error}`));
+      throw new Error(failures.join(" ") || "The CSV contains no importable rows.");
+    }
+    const rows = parseFilamentCsv(text);
+    const workingProfiles = [...filamentProfiles];
+    const draftsByProfile = new Map<string, FilamentSpoolDraft[]>();
+    let spoolCount = 0;
+    rows.forEach((row) => {
+      const proposed = profileFromCsv(row);
+      const identity = filamentProfileIdentity(proposed);
+      let profile = workingProfiles.find((candidate) => filamentProfileIdentity(candidate) === identity);
+      if (!profile) {
+        const now = new Date().toISOString();
+        profile = { ...proposed, id: uid("FP"), createdAt: now, updatedAt: now };
+        workingProfiles.push(profile);
+      }
+      const quantity = Math.max(1, Math.floor(Number(row.quantity) || 1));
+      const condition = conditionFromCsv(row.condition);
+      const gross = row.grossWeightGrams ? Number(row.grossWeightGrams) : undefined;
+      const percent = row.estimatedPercent ? Number(row.estimatedPercent) : undefined;
+      const confidence = row.quantityConfidence
+        ? confidenceFromCsv(row.quantityConfidence)
+        : condition === "Sealed" ? "Nominal" : condition === "Empty" || gross !== undefined || row.remainingGrams ? "Exact" : percent !== undefined ? "Estimated" : "Unknown";
+      let remaining = Number(row.remainingGrams);
+      if (!Number.isFinite(remaining)) {
+        if (condition === "Sealed") remaining = profile.nominalWeightGrams;
+        else if (condition === "Empty") remaining = 0;
+        else if (gross !== undefined && profile.emptySpoolWeightGrams !== undefined) remaining = Math.max(0, gross - profile.emptySpoolWeightGrams);
+        else if (percent !== undefined) remaining = Math.max(0, profile.nominalWeightGrams * percent / 100);
+        else remaining = 0;
+      }
+      const batch = draftsByProfile.get(profile.id) ?? [];
+      for (let index = 0; index < quantity; index += 1) batch.push({
+        condition,
+        quantityConfidence: confidence,
+        gramsAvailable: remaining,
+        grossWeightGrams: gross,
+        estimatedPercent: percent,
+        spoolPrice: row.spoolPrice ? Number(row.spoolPrice) : undefined,
+        storageLocation: row.storageLocation,
+        purchaseDate: row.purchaseDate,
+        lotNumber: row.lotNumber,
+        notes: row.notes,
+      });
+      draftsByProfile.set(profile.id, batch);
+      spoolCount += quantity;
+    });
+    const createdProfiles = workingProfiles.filter((profile) => !filamentProfiles.some((existing) => existing.id === profile.id));
+    const createdSpools: FilamentRecord[] = [];
+    draftsByProfile.forEach((drafts, profileId) => {
+      const profile = workingProfiles.find((item) => item.id === profileId)!;
+      createdSpools.push(...createPhysicalSpools(profile, drafts, [...filament, ...createdSpools]));
+    });
+    setFilamentProfiles(workingProfiles);
+    setFilament((previous) => [...createdSpools, ...previous]);
+    setMaterialTransactions((previous) => [...createdSpools.map((spool) => materialTransaction({ ...spool, gramsAvailable: 0 }, "Receipt", spool.gramsAvailable, `Imported from ${filename}`, { confidence: spool.quantityConfidence }).transaction), ...previous]);
+    setMaterialImportHistory((previous) => [{ id: uid("IMP"), fingerprint: preview.fingerprint, filename, importedAt: new Date().toISOString(), profileCount: createdProfiles.length, spoolCount }, ...previous]);
+    appendAudit("Data Change", "Import filament census", "Success", `${createdProfiles.length} profiles and ${spoolCount} physical spools imported from CSV.`);
+    return { profiles: createdProfiles.length, spools: spoolCount };
+  }
+
+  function updateFilament(id: string, patch: Partial<FilamentRecord>) {
+    const current = filament.find((item) => item.id === id);
+    if (!current) return;
+    if (patch.status && patch.status !== current.status) {
+      const transactionType = patch.status === "Archived" ? "Archived" : current.status === "Archived" ? "Restored" : "Correction";
+      const nextBalance = patch.status === "Empty" ? 0 : current.gramsAvailable;
+      const result = materialTransaction(current, transactionType, nextBalance, `Spool lifecycle changed: ${current.status} → ${patch.status}`, { confidence: current.quantityConfidence });
+      setFilament((previous) => previous.map((item) => item.id === id ? { ...result.spool, ...patch, condition: patch.status === "Empty" ? "Empty" : result.spool.condition } : item));
+      setMaterialTransactions((previous) => [result.transaction, ...previous]);
+      return;
+    }
+    if (patch.grossWeightGrams !== undefined) {
+      const remaining = calculateRemainingFromGross(patch.grossWeightGrams, patch.emptySpoolWeightGrams ?? current.emptySpoolWeightGrams);
+      if (remaining !== null) {
+        const result = materialTransaction(current, "Measurement", remaining, "Gross spool weight recorded", { confidence: "Exact" });
+        setFilament((previous) => previous.map((item) => item.id === id ? { ...result.spool, ...patch, quantityConfidence: "Exact" } : item));
+        setMaterialTransactions((previous) => [result.transaction, ...previous]);
+        return;
+      }
+    }
+    setFilament((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch, updatedAt: new Date().toISOString() } : item)));
+  }
+
+  function adjustFilament(id: string, delta: number, reason = "Manual inventory correction", type: "Correction" | "Waste" = "Correction") {
+    const current = filament.find((item) => item.id === id);
+    if (!current || current.quantityConfidence === "Unknown") return false;
+    const result = materialTransaction(current, type, current.gramsAvailable + delta, reason, { confidence: current.quantityConfidence });
+    setFilament((previous) => previous.map((item) => item.id === id ? result.spool : item));
+    setMaterialTransactions((previous) => [result.transaction, ...previous]);
+    return true;
   }
 
   function removeFilament(id: string) {
     const item = filament.find((record) => record.id === id);
     if (!item) return;
-    if (!window.confirm(`Remove filament ${item.colorName}?`)) return;
-    setFilament((prev) => prev.filter((record) => record.id !== id));
+    if (!window.confirm(`Archive ${item.foundrySpoolCode}? Its history will remain available.`)) return;
+    const result = materialTransaction(item, "Archived", item.gramsAvailable, "Physical spool archived");
+    setFilament((previous) => previous.map((record) => record.id === id ? { ...result.spool, status: "Archived" } : record));
+    setMaterialTransactions((previous) => [result.transaction, ...previous]);
+  }
+
+  function restoreArchivedFilament(id: string) {
+    const current = filament.find((item) => item.id === id && item.status === "Archived");
+    if (!current) return;
+    const result = materialTransaction(current, "Restored", current.gramsAvailable, "Archived spool restored");
+    setFilament((previous) => previous.map((item) => item.id === id ? { ...result.spool, status: current.gramsAvailable <= 0 ? "Empty" : "In Stock" } : item));
+    setMaterialTransactions((previous) => [result.transaction, ...previous]);
+  }
+
+  function consumeMaterialForOrder(orderId: string, allocations: Array<{ spoolId: string; grams: number }>, reason = "Recorded production consumption") {
+    const order = orders.find((item) => item.id === orderId);
+    if (!order || !allocations.length) return false;
+    const nextSpools = [...filament];
+    const entries: MaterialTransaction[] = [];
+    for (const allocation of allocations) {
+      const index = nextSpools.findIndex((spool) => spool.id === allocation.spoolId);
+      const spool = nextSpools[index];
+      if (!spool || spool.quantityConfidence === "Unknown" || allocation.grams <= 0 || allocation.grams > spool.gramsAvailable) return false;
+      const result = materialTransaction(spool, "Consumption", spool.gramsAvailable - allocation.grams, reason, { orderId, confidence: spool.quantityConfidence });
+      nextSpools[index] = result.spool;
+      entries.push(result.transaction);
+    }
+    setFilament(nextSpools);
+    setMaterialTransactions((previous) => [...entries, ...previous]);
+    setMaterialReservations((previous) => previous.map((reservation) => reservation.orderId === orderId && reservation.status === "Active" ? { ...reservation, status: "Consumed", resolvedAt: new Date().toISOString() } : reservation));
+    setOrders((previous) => previous.map((item) => item.id === orderId ? { ...item, materialConsumed: true } : item));
+    return true;
+  }
+
+  function createMaterialReservation(profileId: string, grams: number, purpose: string, orderId?: string, spoolId?: string) {
+    if (!filamentProfiles.some((profile) => profile.id === profileId) || !Number.isFinite(grams) || grams <= 0) return null;
+    const reservation: MaterialReservation = { id: uid("RES"), profileId, spoolId, orderId, grams, status: "Active", purpose: purpose.trim() || "Queued work", createdAt: new Date().toISOString() };
+    setMaterialReservations((previous) => [reservation, ...previous]);
+    if (spoolId) {
+      const spool = filament.find((item) => item.id === spoolId);
+      if (spool) setMaterialTransactions((previous) => [materialTransaction(spool, "Reservation", spool.gramsAvailable, reservation.purpose, { reservationId: reservation.id, orderId }).transaction, ...previous]);
+    }
+    return reservation;
+  }
+
+  function releaseMaterialReservation(id: string) {
+    const reservation = materialReservations.find((item) => item.id === id && item.status === "Active");
+    if (!reservation) return;
+    setMaterialReservations((previous) => previous.map((item) => item.id === id ? { ...item, status: "Released", resolvedAt: new Date().toISOString() } : item));
+    if (reservation.spoolId) {
+      const spool = filament.find((item) => item.id === reservation.spoolId);
+      if (spool) setMaterialTransactions((previous) => [materialTransaction(spool, "Reservation Release", spool.gramsAvailable, `Released: ${reservation.purpose}`, { reservationId: id, orderId: reservation.orderId }).transaction, ...previous]);
+    }
+  }
+
+  function recordFilamentDrying(spoolId: string, temperatureC: number, durationHours: number, outcome: FilamentDryingRecord["outcome"], notes = "") {
+    const spool = filament.find((item) => item.id === spoolId);
+    if (!spool || temperatureC <= 0 || durationHours <= 0) return null;
+    const record: FilamentDryingRecord = { id: uid("DRY"), spoolId, temperatureC, durationHours, outcome, occurredAt: new Date().toISOString(), notes };
+    setFilamentDryingRecords((previous) => [record, ...previous]);
+    setFilament((previous) => previous.map((item) => item.id === spoolId ? { ...item, dryingStatus: outcome === "Dry" ? "Dried" : outcome === "Needs More Drying" ? "Needs Drying" : "Unknown", dryingHistory: `${record.occurredAt}: ${temperatureC}°C for ${durationHours}h — ${outcome}${notes ? ` — ${notes}` : ""}\n${item.dryingHistory}`.trim(), updatedAt: record.occurredAt } : item));
+    setMaterialTransactions((previous) => [materialTransaction(spool, "Drying", spool.gramsAvailable, `${temperatureC}°C for ${durationHours}h — ${outcome}`, { notes }).transaction, ...previous]);
+    return record;
+  }
+
+  function reverseMaterialTransaction(id: string, reason = "Correction reversal") {
+    const original = materialTransactions.find((item) => item.id === id);
+    if (!original || original.reversedByTransactionId || original.type === "Opening Balance" || original.type === "Reversal" || original.deltaGrams === 0) return false;
+    const spool = filament.find((item) => item.id === original.spoolId);
+    if (!spool) return false;
+    const result = materialTransaction(spool, "Reversal", spool.gramsAvailable - original.deltaGrams, reason, { reversesTransactionId: original.id, confidence: original.quantityConfidence });
+    setFilament((previous) => previous.map((item) => item.id === spool.id ? result.spool : item));
+    setMaterialTransactions((previous) => [result.transaction, ...previous.map((item) => item.id === original.id ? { ...item, reversedByTransactionId: result.transaction.id } : item)]);
+    if (original.type === "Consumption" && original.orderId) {
+      const hasOtherActiveConsumption = materialTransactions.some((item) => item.id !== original.id && item.orderId === original.orderId && item.type === "Consumption" && !item.reversedByTransactionId);
+      if (!hasOtherActiveConsumption) setOrders((previous) => previous.map((order) => order.id === original.orderId ? { ...order, materialConsumed: false } : order));
+    }
+    return true;
+  }
+
+  async function printFilamentLabels(ids?: string[]) {
+    const selected = filament.filter((spool) => !ids || ids.includes(spool.id));
+    if (!selected.length) return;
+    const { default: QRCode } = await import("qrcode");
+    const labels = await Promise.all(selected.map(async (spool) => {
+      const profile = filamentProfiles.find((item) => item.id === spool.profileId);
+      return {
+        spool,
+        profile,
+        qr: await QRCode.toDataURL(spool.foundrySpoolCode, { margin: 1, width: 180 }),
+      };
+    }));
+    const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[character]!));
+    const html = `<!doctype html><html><head><title>Forgekeeper spool labels</title><style>
+      @page{size:auto;margin:8mm}body{font-family:Arial,sans-serif;margin:0;display:grid;grid-template-columns:repeat(3,1fr);gap:8mm}
+      .label{border:1px solid #111;border-radius:8px;padding:10px;break-inside:avoid;text-align:center}.code{font-size:16px;font-weight:700}.name{font-size:12px;margin:4px 0}.meta{font-size:10px;color:#333}img{width:38mm;height:38mm}
+    </style></head><body>${labels.map(({ spool, profile, qr }) => `<section class="label"><div class="code">${escapeHtml(spool.foundrySpoolCode)}</div><div class="name">${escapeHtml(profile?.brand ?? spool.brand)} ${escapeHtml(profile?.productLine ?? "")}<br>${escapeHtml(profile?.material ?? spool.material)} · ${escapeHtml(profile?.colorName ?? spool.colorName)}</div><img src="${qr}" alt="${escapeHtml(spool.foundrySpoolCode)} QR"><div class="meta">${escapeHtml(spool.quantityConfidence)} · ${spool.quantityConfidence === "Unknown" ? "remainder unknown" : `${Math.round(spool.gramsAvailable)}g`}</div></section>`).join("")}</body></html>`;
+    return downloadText(`forgekeeper-spool-labels-${Date.now()}.html`, html, "text/html;charset=utf-8;");
   }
 
   function addPrinter() {
@@ -1156,21 +1534,13 @@ export function useForgekeeperState() {
   function movePlannedFilamentToInventory(id: string) {
     const planned = plannedFilament.find((item) => item.id === id);
     if (!planned) return;
-    setFilament((prev) => [
-      {
-        id: uid("FIL"),
-        brand: planned.brand || "Amolen",
-        material: "PLA",
-        colorName: planned.name,
-        colorFamily: planned.materialFamily,
-        gramsAvailable: 1000,
-        reorderPointGrams: 250,
-        spoolPrice: 22,
-        spoolWeightGrams: 1000,
-        notes: `${planned.batchGroup}. ${planned.finishDirection} ${planned.notes}`,
-      },
-      ...prev,
-    ]);
+    const profile = addFilamentProfile({
+      brand: planned.brand || "Amolen", productLine: planned.batchGroup, material: "PLA", colorName: planned.name,
+      colorFamily: planned.materialFamily, diameterMm: 1.75, nominalWeightGrams: 1000, reorderPointGrams: 250,
+      defaultSpoolPrice: 22, supplier: "", supplierSku: "", notes: `${planned.finishDirection} ${planned.notes}`,
+    });
+    const created = createPhysicalSpools(profile, [{ condition: "Sealed", quantityConfidence: "Nominal", gramsAvailable: 1000 }], filament);
+    setFilament((previous) => [...created, ...previous]);
     setPlannedFilament((prev) => prev.map((item) => (item.id === id ? { ...item, status: "Active" } : item)));
   }
 
@@ -1247,42 +1617,72 @@ export function useForgekeeperState() {
       marginPercent: breakdown.marginPercent.toFixed(1),
     };
   })); }
-  function exportFilamentCsv() { downloadCsv("filament.csv", filament); }
+  function exportFilamentCsv() { downloadCsv("filament-physical-spools.csv", filament.map((spool) => {
+    const profile = filamentProfiles.find((item) => item.id === spool.profileId);
+    return { ...spool, productLine: profile?.productLine ?? "", diameterMm: profile?.diameterMm ?? 1.75, nominalWeightGrams: profile?.nominalWeightGrams ?? spool.spoolWeightGrams };
+  })); }
+  function exportMaterialLedgerCsv() { return downloadCsv("material-ledger.csv", materialTransactions); }
+  function exportMaterialReservationsCsv() { return downloadCsv("material-reservations.csv", materialReservations); }
+  function exportMaterialPurchaseListCsv() { return downloadCsv("material-purchase-list.csv", materialPurchaseList.map((item) => ({
+    profileId: item.profile.id,
+    brand: item.profile.brand,
+    productLine: item.profile.productLine,
+    material: item.profile.material,
+    colorName: item.profile.colorName,
+    supplier: item.profile.supplier,
+    supplierSku: item.profile.supplierSku,
+    physicalGrams: item.physicalGrams,
+    reservedGrams: item.reservedGrams,
+    availableGrams: item.availableGrams,
+    reorderPointGrams: item.profile.reorderPointGrams,
+    shortageGrams: item.shortageGrams,
+    suggestedSpools: item.suggestedSpools,
+  }))); }
   function exportPrintersCsv() { downloadCsv("printers.csv", printers); }
   function exportMaintenanceCsv() { downloadCsv("maintenance.csv", maintenance); }
   function appendAudit(type: Parameters<typeof createAuditEvent>[0], action: string, outcome: Parameters<typeof createAuditEvent>[2], summary: string, subjectId?: string) {
     setRecovery((previous) => ({ ...previous, auditEvents: [createAuditEvent(type, action, outcome, summary, subjectId), ...previous.auditEvents].slice(0, 300) }));
   }
 
+  function replaceWorkspaceData(next: AppData) {
+    setProducts(next.products);
+    setStls(next.stls);
+    setConcepts(next.concepts);
+    setProductionReferences(next.productionReferences);
+    setModelVerifications(next.modelVerifications);
+    setPrintTrials(next.printTrials);
+    setVariants(next.variants);
+    setCollections(next.collections);
+    setReleases(next.releases);
+    setOrders(next.orders);
+    setFilamentProfiles(next.filamentProfiles);
+    setFilament(next.filament);
+    setMaterialTransactions(next.materialTransactions);
+    setMaterialReservations(next.materialReservations);
+    setFilamentDryingRecords(next.filamentDryingRecords);
+    setMaterialImportHistory(next.materialImportHistory);
+    setPrinters(next.printers);
+    setMaintenance(next.maintenance);
+    setGenerationJobs(next.generationJobs);
+    setControlCenter(next.controlCenter);
+    setCanonRecords(next.canonRecords);
+    setLibraryAssets(next.libraryAssets);
+    setRecovery(next.recovery);
+    setSettings(next.settings);
+    setPrototypes(next.prototypes);
+    setPlannedFilament(next.plannedFilament);
+    setProductPlanning(next.productPlanning);
+    setRealmMaterials(next.realmMaterials);
+    setSelectedProductId(next.products[0]?.id ?? "");
+  }
+
   function applyRestoredData(parsed: Partial<AppData>, restoreSummary: string) {
-    setProducts(parsed.products ?? []);
-    setStls(parsed.stls ?? []);
-    const importedConcepts = hydrateConcepts(parsed.concepts ?? []);
-    setConcepts(importedConcepts);
-    setProductionReferences(hydrateProductionReferences(importedConcepts, parsed.productionReferences));
-    setModelVerifications(hydrateModelVerifications(parsed.modelVerifications));
-    setPrintTrials(hydratePrintTrials(parsed.printTrials));
-    setVariants(parsed.variants ?? []);
-    setCollections(parsed.collections ?? []);
-    setReleases(parsed.releases ?? []);
-    setOrders(parsed.orders ?? []);
-    setFilament(parsed.filament ?? []);
-    setPrinters(parsed.printers ?? []);
-    setMaintenance(parsed.maintenance ?? []);
-    setGenerationJobs(parsed.generationJobs ?? []);
-    setControlCenter(parsed.controlCenter ?? defaultControlCenter);
-    setCanonRecords(hydrateCanonRecords(parsed.canonRecords));
-    setLibraryAssets(mergeLibraryAssets(parsed.libraryAssets));
-    setSettings({ ...defaultExternalTools, ...defaultSettings, ...(parsed.settings ?? {}) });
-    setPrototypes(parsed.prototypes ?? seedPrototypes);
-    setPlannedFilament(parsed.plannedFilament ?? seedPlannedFilament);
-    setProductPlanning(parsed.productPlanning ?? seedProductPlanning);
-    setRealmMaterials(parsed.realmMaterials ?? seedRealmMaterials);
-    setSelectedProductId(parsed.products?.[0]?.id ?? "");
+    const hydrated = hydrateDataFrom(parsed);
+    replaceWorkspaceData(hydrated);
     setRecovery({
-      auditEvents: [createAuditEvent("Restore", "Restore workspace", "Success", restoreSummary), ...(parsed.recovery?.auditEvents ?? [])].slice(0, 300),
-      lastIntegrityScan: parsed.recovery?.lastIntegrityScan,
-      credentialHealth: parsed.recovery?.credentialHealth,
+      auditEvents: [createAuditEvent("Restore", "Restore workspace", "Success", restoreSummary), ...hydrated.recovery.auditEvents].slice(0, 300),
+      lastIntegrityScan: hydrated.recovery.lastIntegrityScan,
+      credentialHealth: hydrated.recovery.credentialHealth,
     });
   }
 
@@ -1301,11 +1701,14 @@ export function useForgekeeperState() {
   async function exportBackupJson() {
     try {
       const envelope = await createBackupEnvelope(appData, "Portable export");
-      downloadJson(`forgekeeper-backup-${Date.now()}.json`, envelope);
+      const result = await downloadJson(`forgekeeper-backup-${Date.now()}.json`, envelope);
       appendAudit("Backup", "Export verified backup", "Success", `Portable schema ${envelope.schemaVersion} backup created with SHA-256 ${envelope.checksum.slice(0, 12)}…`);
+      if (result.outputPath) window.alert(`Verified backup saved to:\n${result.outputPath}`);
+      return result;
     } catch (error) {
       appendAudit("Backup", "Export verified backup", "Failed", String(error));
       window.alert("Forgekeeper could not create the verified backup.");
+      return null;
     }
   }
 
@@ -1435,13 +1838,13 @@ export function useForgekeeperState() {
       window.alert("Reset blocked because the recovery checkpoint could not be created.");
       return;
     }
-    clearStoredData();
+    await clearNativeStoredData();
     window.location.reload();
   }
 
   return {
     view, setView,
-    products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filament, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, recovery, recoveryCheckpoints, settings,
+    products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filamentProfiles, filament, materialTransactions, materialReservations, filamentDryingRecords, materialImportHistory, materialSummaries, materialPurchaseList, materialIntegrityFindings, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, recovery, recoveryCheckpoints, settings, storageReady, storageStatus, storageError,
     prototypes, setPrototypes, plannedFilament, setPlannedFilament, productPlanning, setProductPlanning, realmMaterials, setRealmMaterials,
     selectedProductId, setSelectedProductId, productTab, setProductTab,
     newProductName, setNewProductName, newStlName, setNewStlName, newConceptTitle, setNewConceptTitle,
@@ -1459,14 +1862,14 @@ export function useForgekeeperState() {
     addCollection, updateCollection, removeCollection, assignProductToCollection, setCollectionHero,
     addRelease, updateRelease, removeRelease, addProductToRelease, removeProductFromRelease,
     addOrder, updateOrder, removeOrder, consumeFilamentForOrder,
-    addFilament, updateFilament, adjustFilament, removeFilament,
+    addFilament, addFilamentProfile, updateFilamentProfile, removeFilamentProfile, receiveFilamentBatch, importFilamentCensusCsv, updateFilament, adjustFilament, removeFilament, restoreArchivedFilament, consumeMaterialForOrder, createMaterialReservation, releaseMaterialReservation, recordFilamentDrying, reverseMaterialTransaction, printFilamentLabels,
     addPrinter, updatePrinter, removePrinter,
     addMaintenance, updateMaintenance, removeMaintenance,
     recordGenerationJob, updateGenerationJob, linkGeneratedStl,
     updateActiveObjective, addParkedIdea, promoteParkedIdea,
     updateSettings, updatePrototype, updatePlannedFilament, removePlannedFilament, movePlannedFilamentToInventory, getDefaultSlicerForPrinter, getPreferredSlicerForStl, suggestStlLibraryFolder, suggestConceptLibraryFolder, linkStlPath, setStlSuggestedFolder, openStlAsset, openExternalTool,
     exportProductsCsv, exportStlsCsv, exportConceptsCsv, exportVariantsCsv, exportCollectionsCsv, exportReleasesCsv, exportOrdersCsv,
-    exportFilamentCsv, exportPrintersCsv, exportMaintenanceCsv, exportBackupJson, importBackupFile, resetWorkspace,
+    exportFilamentCsv, exportMaterialLedgerCsv, exportMaterialReservationsCsv, exportMaterialPurchaseListCsv, exportPrintersCsv, exportMaintenanceCsv, exportBackupJson, importBackupFile, resetWorkspace,
     createManualCheckpoint, restoreRecoveryCheckpoint, deleteRecoveryCheckpoint, runIntegrityScan, checkCredentialHealth, reconcileProviderJobs,
   };
 }

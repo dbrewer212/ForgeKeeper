@@ -1,0 +1,70 @@
+name: Build current Windows installer
+run-name: ForgeKeeper Windows installer · ${{ github.sha }}
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - agent/connect-meshy-printpal
+    paths:
+      - ".github/workflows/windows-installer.yml"
+      - "src/**"
+      - "src-tauri/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.*"
+      - "tsconfig*.json"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    name: Windows desktop and installer
+    runs-on: windows-latest
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Use stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check native application
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Build Windows installers
+        run: npm run desktop:build
+
+      - name: Smoke test packaged application launch
+        shell: powershell
+        run: |
+          $executable = Resolve-Path "src-tauri/target/release/app.exe"
+          $process = Start-Process -FilePath $executable -PassThru
+          Start-Sleep -Seconds 10
+          if ($process.HasExited) {
+            throw "ForgeKeeper exited during its launch smoke test with code $($process.ExitCode)."
+          }
+          Stop-Process -Id $process.Id -Force
+
+      - name: Upload current installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: ForgeKeeper-Windows-current
+          path: src-tauri/target/release/bundle/**
+          if-no-files-found: error
+          retention-days: 30

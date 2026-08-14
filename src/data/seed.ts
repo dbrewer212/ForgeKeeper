@@ -1,4 +1,4 @@
-import type { AppSettings, CanonRecord, CollectionRecord, ConceptSpec, ControlCenterRecord, FilamentRecord, LibraryAssetRecord, OrderRecord, PrinterRecord, Product, ProductVariant, ReleaseRecord, STLRecord } from "../types/domain";
+import type { AppSettings, CanonRecord, CollectionRecord, ConceptSpec, ControlCenterRecord, FilamentProfile, FilamentRecord, LibraryAssetRecord, OrderRecord, PrinterRecord, Product, ProductVariant, ReleaseRecord, STLRecord } from "../types/domain";
 
 export const defaultSettings: AppSettings = {
   laborRate: 18,
@@ -323,18 +323,24 @@ export const seedReleases: ReleaseRecord[] = [
   { id: "R1", name: "Wave 01 Deskworks", wave: "Wave 01", targetDate: "2025-06-01", status: "Scheduled", productIds: ["P2"], notes: "Utility launch" },
 ];
 
-export const seedOrders: OrderRecord[] = [
+export const legacySeedOrders: OrderRecord[] = [
   { id: "ORD-1001", productId: "P1", filamentId: "F1", materialGrams: 110, customer: "Rune Workshop", contact: "", quantity: 2, dueDate: "May 26, 2026", status: "Printing", priority: "High", paid: true, tracking: "", printerId: "PR1", estimatedPrintHours: 6.5, laborHours: 1, laborRate: 18, machineWatts: 280, electricityRate: 0.203, packagingCost: 1.25, otherCost: 0.5, quotedPrice: 64, notes: "Batch for featured display.", materialConsumed: false },
   { id: "ORD-1002", productId: "P2", filamentId: "F2", materialGrams: 22, customer: "Shelf & Steel", contact: "", quantity: 4, dueDate: "May 28, 2026", status: "Queued", priority: "Normal", paid: false, tracking: "", printerId: undefined, estimatedPrintHours: 1.4, laborHours: 0.5, laborRate: 18, machineWatts: 250, electricityRate: 0.203, packagingCost: 1.25, otherCost: 0.5, quotedPrice: 48, notes: "Utility reorder.", materialConsumed: false },
 ];
 
-export const seedFilament: FilamentRecord[] = [
+export const legacySeedFilament: Array<Pick<FilamentRecord, "id" | "brand" | "material" | "colorName" | "colorFamily" | "gramsAvailable" | "reorderPointGrams" | "spoolPrice" | "spoolWeightGrams" | "notes">> = [
   { id: "F1", brand: "Polymaker", material: "PLA+", colorName: "Obsidian Black", colorFamily: "Black", gramsAvailable: 860, reorderPointGrams: 250, spoolPrice: 24.99, spoolWeightGrams: 1000, notes: "Main base color" },
   { id: "F2", brand: "Overture", material: "PLA", colorName: "Gunmetal Gray", colorFamily: "Gray", gramsAvailable: 520, reorderPointGrams: 200, spoolPrice: 22.99, spoolWeightGrams: 1000, notes: "Tech accent color" },
   { id: "F3", brand: "Elegoo", material: "PLA", colorName: "Bone White", colorFamily: "White", gramsAvailable: 340, reorderPointGrams: 150, spoolPrice: 18.99, spoolWeightGrams: 1000, notes: "Paint-ready base" },
 ];
 
+// Real operational inventory starts empty. Legacy stand-ins are migration fingerprints only.
+export const seedOrders: OrderRecord[] = [];
+export const seedFilamentProfiles: FilamentProfile[] = [];
+export const seedFilament: FilamentRecord[] = [];
+
 export const seedPrinters: PrinterRecord[] = [
   { id: "PR1", name: "Neptune 4 Max", model: "Elegoo Neptune 4 Max", status: "Printing", buildVolume: "420 x 420 x 480", watts: 280, activeJob: "Controller Stand", notes: "Large format" },
+  { id: "PR-KOBRA-S1-MAX-COMBO", name: "Kobra S1 Max Combo", model: "Anycubic Kobra S1 Max Combo", status: "Available", buildVolume: "350 x 350 x 350", watts: 350, activeJob: "", notes: "Enclosed CoreXY · ACE 2 Pro · Anycubic Slicer Next" },
   { id: "PR2", name: "Kobra 3 Combo", model: "Anycubic Kobra 3 Combo", status: "Available", buildVolume: "250 x 250 x 260", watts: 220, activeJob: "", notes: "Fast support printer" },
 ];
