@@ -1,9 +1,12 @@
+import { foundryStations } from "../../core/stations";
+
 export function Sidebar({ state, onBastion }: { state: any; onBastion: () => void }) {
-  const navItem = (key: string, label: string) => (
+  const navItem = (key: string, label: string, description?: string) => (
     <button
       onClick={() => state.setView(key)}
+      title={description}
       className={`w-full text-left px-3 py-2 rounded-lg mb-2 ${
-        state.view === key
+        state.view === key || (key === "designs" && state.view === "catalog") || (key === "production" && state.view === "orders")
           ? "bg-amber-600 text-white"
           : "bg-gray-800 text-gray-300 hover:bg-gray-700"
       }`}
@@ -26,17 +29,14 @@ export function Sidebar({ state, onBastion }: { state: any; onBastion: () => voi
         Bastion
       </button>
 
-      {navItem("dashboard", "Dashboard")}
-      {navItem("catalog", "Catalog")}
-      {navItem("orders", "Orders")}
-      {navItem("filament", "Filament")}
-      {navItem("printers", "Printers")}
-      {navItem("planning", "Planning")}
-      {navItem("reports", "Reports")}
-      {navItem("settings", "Settings")}
+      {foundryStations.map((station) => (
+        <div key={station.id}>
+          {navItem(station.view, station.label, station.description)}
+        </div>
+      ))}
 
       <div className="my-4 border-t border-gray-800" />
-      {navItem("commissioning", "Commissioning")}
+      {navItem("commissioning", "Commissioning", "Temporary subsystem commissioning and verification console.")}
     </aside>
   );
 }
