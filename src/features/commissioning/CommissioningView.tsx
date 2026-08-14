@@ -11,6 +11,15 @@ type ToolResponse = {
   };
 };
 
+type BindingRequest = {
+  serviceId: string;
+  endpoint: string;
+  healthPath: string;
+  executable?: string;
+  externallyManaged?: boolean;
+  owner?: string;
+};
+
 function toolValue<T>(response: ToolResponse): T {
   if (response.result?.error) throw new Error(response.result.error);
   if (response.result?.result === undefined) throw new Error("Foundry tool returned no result.");
@@ -27,10 +36,15 @@ export function CommissioningView() {
   const [liveProbes, setLiveProbes] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+
   const [ollamaExecutable, setOllamaExecutable] = useState("");
   const [ollamaEndpoint, setOllamaEndpoint] = useState("http://127.0.0.1:11434");
   const [ollamaHealthPath, setOllamaHealthPath] = useState("/api/version");
   const [ollamaMessage, setOllamaMessage] = useState<string>();
+
+  const [openClawEndpoint, setOpenClawEndpoint] = useState("http://127.0.0.1:18789");
+  const [openClawHealthPath, setOpenClawHealthPath] = useState("/healthz");
+  const [openClawMessage, setOpenClawMessage] = useState<string>();
 
   async function refreshReadiness() {
     setBusy(true);
@@ -38,7 +52,7 @@ export function CommissioningView() {
     try {
       const runtime = getFoundryMeshRuntime();
       await runtime.initialize();
-      hydrateOllamaFields(runtime);
+      hydrateFields(runtime);
       const response = await runtime.tools.invoke({
         toolName: "mesh.commissioning.readiness",
         requesterWorkerId: "foundry-core",
@@ -75,42 +89,46 @@ export function CommissioningView() {
     }
   }
 
-  async function bindOllama() {
+  async function bindService(request: BindingRequest, onSuccess: (message: string) => void) {
     setBusy(true);
     setError(undefined);
-    setOllamaMessage(undefined);
+    onSuccess("");
     try {
       const runtime = getFoundryMeshRuntime();
       await runtime.initialize();
-      const service = runtime.services.get("ollama-service");
-      if (!service) throw new Error("Ollama service descriptor is missing.");
-      if (!ollamaExecutable.trim()) throw new Error("Enter the local Ollama executable path before binding.");
-      if (!ollamaEndpoint.trim()) throw new Error("Enter the Ollama localhost endpoint before binding.");
+      const service = runtime.services.get(request.serviceId);
+      if (!service) throw new Error(`Service descriptor ${request.serviceId} is missing.`);
+      if (!request.endpoint.trim()) throw new Error("Enter a localhost endpoint before binding.");
+      if (!request.externallyManaged && !request.executable?.trim()) {
+        throw new Error("Enter the local executable path before binding.");
+      }
 
       const rawControl = service.metadata?.localControl;
       const existingControl = rawControl && typeof rawControl === "object" ? rawControl as Record<string, unknown> : {};
-      const endpoint = ollamaEndpoint.trim().replace(/\/$/, "");
-      const healthPath = ollamaHealthPath.trim() || "/api/version";
+      const endpoint = request.endpoint.trim().replace(/\/$/, "");
+      const healthPath = request.healthPath.trim() || "/healthz";
       const probeUrl = `${endpoint}/${healthPath.replace(/^\//, "")}`;
 
-      runtime.services.update("ollama-service", {
+      runtime.services.update(request.serviceId, {
         endpoint,
         healthPath,
         metadata: {
           ...service.metadata,
           localControl: {
             ...existingControl,
-            executable: ollamaExecutable.trim(),
+            executable: request.externallyManaged ? undefined : request.executable?.trim(),
             probeUrl,
-            timeoutMs: 1500,
+            timeoutMs: 2000,
+            externallyManaged: request.externallyManaged === true,
+            owner: request.owner,
           },
         },
       });
       await runtime.save();
-      const issues = runtime.serviceLifecycle.validationIssues("ollama-service");
-      if (issues.length > 0) throw new Error(issues.join(" "));
 
-      setOllamaMessage("Ollama machine-local configuration is bound and structurally valid.");
+      const issues = runtime.serviceLifecycle.validationIssues(request.serviceId);
+      if (issues.length > 0) throw new Error(issues.join(" "));
+      onSuccess("Machine-local configuration is bound and structurally valid.");
       await refreshReadiness();
     } catch (cause) {
       setError(errorText(cause));
@@ -119,18 +137,18 @@ export function CommissioningView() {
     }
   }
 
-  async function probeOllama() {
+  async function probeService(serviceId: string, label: string, onSuccess: (message: string) => void) {
     setBusy(true);
     setError(undefined);
-    setOllamaMessage(undefined);
+    onSuccess("");
     try {
       const runtime = getFoundryMeshRuntime();
       await runtime.initialize();
-      const issues = runtime.serviceLifecycle.validationIssues("ollama-service");
+      const issues = runtime.serviceLifecycle.validationIssues(serviceId);
       if (issues.length > 0) throw new Error(issues.join(" "));
-      const probe = await runtime.serviceLifecycle.inspectProbe("ollama-service");
-      if (!probe.online) throw new Error(probe.detail ?? "Ollama did not answer its localhost health probe.");
-      setOllamaMessage(`Ollama live probe passed. ${probe.detail ?? ""}`.trim());
+      const probe = await runtime.serviceLifecycle.inspectProbe(serviceId);
+      if (!probe.online) throw new Error(probe.detail ?? `${label} did not answer its localhost health probe.`);
+      onSuccess(`${label} live probe passed. ${probe.detail ?? ""}`.trim());
     } catch (cause) {
       setError(errorText(cause));
     } finally {
@@ -138,57 +156,62 @@ export function CommissioningView() {
     }
   }
 
-  async function commissionOllama() {
+  async function commissionService(
+    serviceId: string,
+    workerId: string,
+    label: string,
+    onSuccess: (message: string) => void,
+  ) {
     setBusy(true);
     setError(undefined);
-    setOllamaMessage(undefined);
+    onSuccess("");
     const runtime = getFoundryMeshRuntime();
     try {
       await runtime.initialize();
-      const issues = runtime.serviceLifecycle.validationIssues("ollama-service");
+      const issues = runtime.serviceLifecycle.validationIssues(serviceId);
       if (issues.length > 0) throw new Error(issues.join(" "));
 
-      const probe = await runtime.serviceLifecycle.inspectProbe("ollama-service");
-      if (!probe.online) throw new Error(probe.detail ?? "Ollama did not answer its localhost health probe.");
+      const probe = await runtime.serviceLifecycle.inspectProbe(serviceId);
+      if (!probe.online) throw new Error(probe.detail ?? `${label} did not answer its localhost health probe.`);
 
       await runtime.commissioning.transition(
-        "ollama",
+        workerId,
         "commissioning",
-        "Human-authorized Ollama local inference commissioning.",
+        `Human-authorized ${label} commissioning.`,
       );
-      runtime.services.update("ollama-service", {
+      runtime.services.update(serviceId, {
         commissioningState: "commissioning",
         enabled: true,
       });
       await runtime.save();
 
-      await runtime.serviceLifecycle.start("ollama-service");
+      await runtime.serviceLifecycle.start(serviceId);
       await runtime.commissioning.transition(
-        "ollama",
+        workerId,
         "active",
-        "Ollama passed local health probe and service startup verification.",
+        `${label} passed local health and service verification.`,
       );
-      runtime.services.update("ollama-service", {
+      runtime.services.update(serviceId, {
         commissioningState: "active",
         runtimeState: "online",
         enabled: true,
       });
       await runtime.save();
 
-      setOllamaMessage("OLLAMA COMMISSIONED — worker active, service online, localhost probe passed.");
+      onSuccess(`${label.toUpperCase()} COMMISSIONED — worker active, service online, localhost probe passed.`);
       await refreshReadiness();
     } catch (cause) {
-      const worker = runtime.workers.get("ollama");
+      const worker = runtime.workers.get(workerId);
       if (worker?.identity.commissioningState === "commissioning") {
         try {
-          await runtime.commissioning.transition("ollama", "failed", "Ollama commissioning failed.");
+          await runtime.commissioning.transition(workerId, "failed", `${label} commissioning failed.`);
         } catch {
           // Preserve the original commissioning error.
         }
       }
-      const service = runtime.services.get("ollama-service");
+      const service = runtime.services.get(serviceId);
       if (service?.commissioningState === "commissioning") {
-        runtime.services.update("ollama-service", {
+        runtime.services.update(serviceId, {
           commissioningState: "failed",
           enabled: false,
         });
@@ -200,15 +223,22 @@ export function CommissioningView() {
     }
   }
 
-  function hydrateOllamaFields(runtime: ReturnType<typeof getFoundryMeshRuntime>) {
-    const service = runtime.services.get("ollama-service");
-    if (!service) return;
-    if (service.endpoint) setOllamaEndpoint(service.endpoint);
-    if (service.healthPath) setOllamaHealthPath(service.healthPath);
-    const control = service.metadata?.localControl;
-    if (control && typeof control === "object") {
-      const executable = (control as Record<string, unknown>).executable;
-      if (typeof executable === "string" && executable.trim()) setOllamaExecutable(executable);
+  function hydrateFields(runtime: ReturnType<typeof getFoundryMeshRuntime>) {
+    const ollama = runtime.services.get("ollama-service");
+    if (ollama) {
+      if (ollama.endpoint) setOllamaEndpoint(ollama.endpoint);
+      if (ollama.healthPath) setOllamaHealthPath(ollama.healthPath);
+      const control = ollama.metadata?.localControl;
+      if (control && typeof control === "object") {
+        const executable = (control as Record<string, unknown>).executable;
+        if (typeof executable === "string" && executable.trim()) setOllamaExecutable(executable);
+      }
+    }
+
+    const openClaw = runtime.services.get("openclaw-service");
+    if (openClaw) {
+      if (openClaw.endpoint) setOpenClawEndpoint(openClaw.endpoint);
+      if (openClaw.healthPath) setOpenClawHealthPath(openClaw.healthPath);
     }
   }
 
@@ -224,7 +254,7 @@ export function CommissioningView() {
             <div className="text-xs uppercase tracking-[0.22em] text-amber-500">Temporary commissioning scaffold</div>
             <h1 className="mt-1 text-2xl font-semibold text-amber-300">Foundry Commissioning Console</h1>
             <p className="mt-2 max-w-3xl text-sm text-gray-400">
-              Verification stays non-destructive. Explicit service commissioning controls below require a successful local probe before activation.
+              Verification stays non-destructive. Explicit service commissioning controls require a successful local probe before activation.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -248,32 +278,52 @@ export function CommissioningView() {
           <div>
             <div className="text-xs uppercase tracking-[0.2em] text-emerald-500">First external subsystem</div>
             <h2 className="mt-1 text-xl font-semibold text-emerald-300">Ollama Local Inference</h2>
-            <p className="mt-1 text-sm text-gray-400">Machine-local binding is persisted in the Mesh snapshot on this workstation, not hard-coded into the repository.</p>
+            <p className="mt-1 text-sm text-gray-400">Foundry-managed local process with machine-local executable binding.</p>
           </div>
           <div className="text-xs text-gray-500">Expected endpoint: localhost:11434</div>
         </div>
-
         <div className="mt-4 grid gap-3 lg:grid-cols-2">
-          <label className="text-xs text-gray-400 lg:col-span-2">
-            Executable
+          <label className="text-xs text-gray-400 lg:col-span-2">Executable
             <input value={ollamaExecutable} onChange={(event) => setOllamaExecutable(event.target.value)} placeholder="C:\\...\\ollama.exe" className="mt-1 w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none focus:border-emerald-700" />
           </label>
-          <label className="text-xs text-gray-400">
-            Endpoint
+          <label className="text-xs text-gray-400">Endpoint
             <input value={ollamaEndpoint} onChange={(event) => setOllamaEndpoint(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none focus:border-emerald-700" />
           </label>
-          <label className="text-xs text-gray-400">
-            Health path
+          <label className="text-xs text-gray-400">Health path
             <input value={ollamaHealthPath} onChange={(event) => setOllamaHealthPath(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none focus:border-emerald-700" />
           </label>
         </div>
-
         <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" disabled={busy} onClick={() => void bindOllama()} className="rounded-lg bg-gray-800 px-4 py-2 text-sm hover:bg-gray-700 disabled:opacity-50">Bind Ollama</button>
-          <button type="button" disabled={busy} onClick={() => void probeOllama()} className="rounded-lg bg-sky-900 px-4 py-2 text-sm text-sky-100 hover:bg-sky-800 disabled:opacity-50">Probe Ollama</button>
-          <button type="button" disabled={busy} onClick={() => void commissionOllama()} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50">Commission Ollama</button>
+          <button type="button" disabled={busy} onClick={() => void bindService({ serviceId: "ollama-service", endpoint: ollamaEndpoint, healthPath: ollamaHealthPath, executable: ollamaExecutable }, setOllamaMessage)} className="rounded-lg bg-gray-800 px-4 py-2 text-sm hover:bg-gray-700 disabled:opacity-50">Bind Ollama</button>
+          <button type="button" disabled={busy} onClick={() => void probeService("ollama-service", "Ollama", setOllamaMessage)} className="rounded-lg bg-sky-900 px-4 py-2 text-sm text-sky-100 hover:bg-sky-800 disabled:opacity-50">Probe Ollama</button>
+          <button type="button" disabled={busy} onClick={() => void commissionService("ollama-service", "ollama", "Ollama", setOllamaMessage)} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50">Commission Ollama</button>
         </div>
         {ollamaMessage && <div className="mt-4 rounded-lg border border-emerald-900 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-300">{ollamaMessage}</div>}
+      </div>
+
+      <div className="rounded-xl border border-orange-900/60 bg-gray-950 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-[0.2em] text-orange-500">Second external subsystem</div>
+            <h2 className="mt-1 text-xl font-semibold text-orange-300">OpenClaw Automation Runtime</h2>
+            <p className="mt-1 text-sm text-gray-400">Externally managed by the OpenClaw Scheduled Task; Foundry owns health, state, governance, and commissioning.</p>
+          </div>
+          <div className="text-xs text-gray-500">Expected endpoint: localhost:18789</div>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          <label className="text-xs text-gray-400">Endpoint
+            <input value={openClawEndpoint} onChange={(event) => setOpenClawEndpoint(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none focus:border-orange-700" />
+          </label>
+          <label className="text-xs text-gray-400">Health path
+            <input value={openClawHealthPath} onChange={(event) => setOpenClawHealthPath(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none focus:border-orange-700" />
+          </label>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" disabled={busy} onClick={() => void bindService({ serviceId: "openclaw-service", endpoint: openClawEndpoint, healthPath: openClawHealthPath, externallyManaged: true, owner: "OpenClaw Scheduled Task" }, setOpenClawMessage)} className="rounded-lg bg-gray-800 px-4 py-2 text-sm hover:bg-gray-700 disabled:opacity-50">Bind OpenClaw</button>
+          <button type="button" disabled={busy} onClick={() => void probeService("openclaw-service", "OpenClaw", setOpenClawMessage)} className="rounded-lg bg-sky-900 px-4 py-2 text-sm text-sky-100 hover:bg-sky-800 disabled:opacity-50">Probe OpenClaw</button>
+          <button type="button" disabled={busy} onClick={() => void commissionService("openclaw-service", "openclaw", "OpenClaw", setOpenClawMessage)} className="rounded-lg bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">Commission OpenClaw</button>
+        </div>
+        {openClawMessage && <div className="mt-4 rounded-lg border border-orange-900 bg-orange-950/30 px-4 py-3 text-sm text-orange-300">{openClawMessage}</div>}
       </div>
 
       {verification && (
