@@ -43,6 +43,18 @@ export class ServiceLifecycleManager {
     return adapter.validate?.(service) ?? [];
   }
 
+  async inspectProbe(serviceId: string): Promise<{ online: boolean; detail?: string }> {
+    const service = this.requireService(serviceId);
+    const adapter = this.requireAdapter(serviceId);
+    if (!adapter.probe) {
+      return {
+        online: service.runtimeState === "online",
+        detail: "No health probe is registered for this service.",
+      };
+    }
+    return adapter.probe(service);
+  }
+
   async start(serviceId: string, sourceWorkerId = "foundry-core"): Promise<ServiceTransitionResult> {
     if (this.runtime.isSafeMode()) {
       throw new Error(`Cannot start service ${serviceId} while the Foundry is in Safe Mode.`);
@@ -132,12 +144,7 @@ export class ServiceLifecycleManager {
 
   async probe(serviceId: string, sourceWorkerId = "foundry-core"): Promise<{ service: ServiceDescriptor; online: boolean; detail?: string }> {
     const service = this.requireService(serviceId);
-    const adapter = this.requireAdapter(serviceId);
-    if (!adapter.probe) {
-      return { service, online: service.runtimeState === "online", detail: "No health probe is registered for this service." };
-    }
-
-    const result = await adapter.probe(service);
+    const result = await this.inspectProbe(serviceId);
     const expectedState: ServiceRuntimeState = result.online ? "online" : service.runtimeState === "offline" ? "offline" : "degraded";
     const next = await this.setRuntimeState(serviceId, expectedState, sourceWorkerId, {
       metadata: { ...service.metadata, lastProbeAt: new Date().toISOString(), lastProbeDetail: result.detail },

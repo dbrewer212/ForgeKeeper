@@ -22,6 +22,7 @@ export * from "./domainState";
 export * from "./domainTools";
 export * from "./commissioning";
 export * from "./commissioningDiagnostics";
+export * from "./commissioningVerification";
 export * from "./diagnosticTools";
 export * from "./serviceRegistry";
 export * from "./serviceLifecycle";
