@@ -21,6 +21,8 @@ export interface LocalServiceControlConfig {
   workingDirectory?: string;
   probeUrl?: string;
   timeoutMs?: number;
+  externallyManaged?: boolean;
+  owner?: string;
 }
 
 export class TauriManagedProcessAdapter implements ManagedServiceAdapter {
@@ -29,15 +31,20 @@ export class TauriManagedProcessAdapter implements ManagedServiceAdapter {
     const config = readControlConfig(service);
 
     if (!isTauriRuntime()) {
-      issues.push("Tauri runtime is not available; local process control can only be commissioned in the desktop Foundry runtime.");
-    }
-    if (!config.executable?.trim()) {
-      issues.push("Managed service executable is not configured in metadata.localControl.executable.");
+      issues.push("Tauri runtime is not available; local service control can only be commissioned in the desktop Foundry runtime.");
     }
 
     const probeUrl = resolveProbeUrl(service, config);
     if (probeUrl && !isAllowedLoopbackUrl(probeUrl)) {
       issues.push("Managed service probe URL must use http://localhost or http://127.0.0.1.");
+    }
+
+    if (config.externallyManaged) {
+      if (!probeUrl) {
+        issues.push("Externally managed service requires a loopback probe URL.");
+      }
+    } else if (!config.executable?.trim()) {
+      issues.push("Managed service executable is not configured in metadata.localControl.executable.");
     }
 
     return issues;
@@ -51,6 +58,11 @@ export class TauriManagedProcessAdapter implements ManagedServiceAdapter {
     if (probeUrl) {
       const existing = await probeUrlOnline(probeUrl, config.timeoutMs).catch(() => false);
       if (existing) return;
+    }
+
+    if (config.externallyManaged) {
+      const owner = config.owner?.trim() || "external service manager";
+      throw new Error(`Externally managed service ${service.id} is not online. Start it through ${owner} before commissioning.`);
     }
 
     await invoke<ManagedProcessStatus>("managed_service_start", {
@@ -69,6 +81,11 @@ export class TauriManagedProcessAdapter implements ManagedServiceAdapter {
   }
 
   async stop(service: ServiceDescriptor): Promise<void> {
+    const config = readControlConfig(service);
+    if (config.externallyManaged) {
+      const owner = config.owner?.trim() || "external service manager";
+      throw new Error(`Service ${service.id} is externally managed by ${owner}; direct process stop is intentionally not owned by this adapter.`);
+    }
     if (!isTauriRuntime()) {
       throw new Error(`Cannot stop managed service ${service.id} outside the Tauri desktop runtime.`);
     }
@@ -76,6 +93,11 @@ export class TauriManagedProcessAdapter implements ManagedServiceAdapter {
   }
 
   async restart(service: ServiceDescriptor): Promise<void> {
+    const config = readControlConfig(service);
+    if (config.externallyManaged) {
+      const owner = config.owner?.trim() || "external service manager";
+      throw new Error(`Service ${service.id} is externally managed by ${owner}; restart must be requested through its owning service manager.`);
+    }
     await this.stop(service);
     await this.start(service);
   }
@@ -93,13 +115,20 @@ export class TauriManagedProcessAdapter implements ManagedServiceAdapter {
           url: probeUrl,
           timeoutMs: normalizeTimeout(config.timeoutMs),
         });
+        const ownerDetail = config.externallyManaged
+          ? ` Externally managed by ${config.owner?.trim() || "service manager"}.`
+          : "";
         return {
           online: response.status >= 200 && response.status < 500,
-          detail: `Loopback probe returned HTTP ${response.status}.`,
+          detail: `Loopback probe returned HTTP ${response.status}.${ownerDetail}`,
         };
       } catch (error) {
         return { online: false, detail: error instanceof Error ? error.message : String(error) };
       }
+    }
+
+    if (config.externallyManaged) {
+      return { online: false, detail: "Externally managed service has no configured loopback probe." };
     }
 
     try {
@@ -172,6 +201,8 @@ function readControlConfig(service: ServiceDescriptor): LocalServiceControlConfi
     workingDirectory: typeof candidate.workingDirectory === "string" ? candidate.workingDirectory : undefined,
     probeUrl: typeof candidate.probeUrl === "string" ? candidate.probeUrl : undefined,
     timeoutMs: typeof candidate.timeoutMs === "number" ? candidate.timeoutMs : undefined,
+    externallyManaged: candidate.externallyManaged === true,
+    owner: typeof candidate.owner === "string" ? candidate.owner : undefined,
   };
 }
 
