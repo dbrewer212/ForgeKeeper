@@ -17,6 +17,14 @@ export type DomainMutationContext = {
 
 export type FoundrySessionState = "active" | "paused" | "blocked" | "completed" | "abandoned";
 
+export type ResumeContext = {
+  lastCompleted?: string;
+  currentCondition?: string;
+  blocker?: string;
+  nextAction?: string;
+  remember?: string[];
+};
+
 export type ParkedThoughtCategory =
   | "interesting-later"
   | "useful-dependency"
@@ -46,11 +54,13 @@ export type FoundrySession = {
   currentObjective?: string;
   currentStage?: string;
   currentAction?: string;
+  nextAction?: string;
   blockedBy?: string;
   parkedThoughtIds: string[];
   lastCheckpointId?: string;
   participatingWorkerIds: WorkerId[];
   resourceContext?: Record<string, unknown>;
+  resumeContext?: ResumeContext;
 };
 
 export type ActiveWorkSnapshot = {
@@ -60,9 +70,11 @@ export type ActiveWorkSnapshot = {
   objective?: string;
   stage?: string;
   currentAction?: string;
+  nextAction?: string;
   blocker?: string;
   lastCheckpointId?: string;
   parkedThoughtCount: number;
+  resumeContext?: ResumeContext;
 };
 
 export type ProjectSummary = {
@@ -176,4 +188,10 @@ export const HumanAuthority: AuthorityActor = {
   type: "human",
   id: "foundry-owner",
   label: "Foundry Owner",
+};
+
+export const FoundryCoreAuthority: AuthorityActor = {
+  type: "system",
+  id: "foundry-core",
+  label: "Foundry Core",
 };

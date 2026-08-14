@@ -24,6 +24,7 @@ export interface ServiceDescriptor {
   endpoint?: string;
   dependencies: string[];
   healthPath?: string;
+  adapterRequired?: boolean;
   metadata?: Record<string, unknown>;
 }
 
@@ -66,11 +67,13 @@ export const defaultFoundryServices: ServiceDescriptor[] = [
     id: "foundry-domain",
     name: "Foundry Domain Services",
     kind: "domain",
-    description: "Canonical project, production, asset, inventory, canon, decision, and session service boundary.",
-    commissioningState: "configured",
-    runtimeState: "offline",
-    enabled: false,
+    description: "Canonical deterministic project, production, asset, inventory, canon, decision, and session state.",
+    commissioningState: "active",
+    runtimeState: "online",
+    enabled: true,
     dependencies: [],
+    adapterRequired: false,
+    metadata: { executionModel: "foundry-core-internal" },
   },
   {
     id: "ollama-service",

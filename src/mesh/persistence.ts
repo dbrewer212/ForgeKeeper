@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ApprovalRecord } from "./approvalStore";
+import { createEmptyFoundryDomainState, normalizeDomainState, type FoundryDomainState } from "./domainState";
 import type { ServiceDescriptor } from "./serviceRegistry";
 import type {
   Checkpoint,
@@ -19,6 +20,7 @@ export interface MeshSnapshot {
   checkpoints: Checkpoint[];
   approvals: ApprovalRecord[];
   services: ServiceDescriptor[];
+  domain: FoundryDomainState;
   health: SystemHealth;
 }
 
@@ -108,6 +110,7 @@ function normalizeSnapshot(snapshot: Partial<MeshSnapshot>): MeshSnapshot {
     checkpoints: snapshot.checkpoints ?? [],
     approvals: snapshot.approvals ?? [],
     services: snapshot.services ?? [],
+    domain: snapshot.domain ? normalizeDomainState(snapshot.domain) : createEmptyFoundryDomainState(),
     health:
       snapshot.health ?? {
         state: "nominal",

@@ -12,6 +12,7 @@ export const MeshEvents = {
   workerCommissioningStateChanged: "worker.commissioning.state-changed",
   serviceRegistered: "service.registered",
   serviceStateChanged: "service.state.changed",
+  domainRecordChanged: "domain.record.changed",
   resourceStateChanged: "resource.state.changed",
   resourceLeaseGranted: "resource.lease.granted",
   resourceLeaseDenied: "resource.lease.denied",

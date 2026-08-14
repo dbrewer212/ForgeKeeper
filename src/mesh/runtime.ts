@@ -8,6 +8,7 @@ import { registerCoreMeshTools } from "./coreTools";
 import { defaultPermissionRules } from "./defaultPolicies";
 import { registerDiagnosticTools } from "./diagnosticTools";
 import { FoundryDomainRegistry } from "./domainRegistry";
+import { FoundryDomainStateStore } from "./domainState";
 import { DurableEventBus } from "./durableEventBus";
 import { InMemoryEventBus } from "./eventBus";
 import { DefaultHealthAggregator } from "./healthAggregator";
@@ -41,12 +42,18 @@ export class FoundryMeshRuntime {
   readonly commissioning: CommissioningController;
   readonly serviceLifecycle: ServiceLifecycleManager;
   readonly diagnostics: CommissioningDiagnostics;
+  readonly domainState: FoundryDomainStateStore;
 
   private safeModeReason?: string;
   private initialized = false;
 
   constructor(readonly persistence: MeshPersistence = createDefaultMeshPersistence()) {
     this.events = new DurableEventBus(new InMemoryEventBus(), persistence);
+    this.domainState = new FoundryDomainStateStore({
+      publish: (event) => this.events.publish(event),
+      persist: () => this.save(),
+    });
+    this.domain.register(this.domainState.services);
     this.coordinator = new MeshActionCoordinator(this);
     this.operations = new MeshOperations(this);
     this.tools = new FoundryToolGateway(this);
@@ -99,6 +106,7 @@ export class FoundryMeshRuntime {
       checkpoints: this.checkpoints.list(),
       approvals: this.approvals.list(),
       services: this.services.list(),
+      domain: this.domainState.snapshot(),
       health: this.getSystemHealth(),
     };
   }
@@ -119,6 +127,8 @@ export class FoundryMeshRuntime {
     for (const service of snapshot.services) {
       this.services.register(service);
     }
+
+    this.domainState.restore(snapshot.domain);
 
     for (const existing of this.permissions.listRules()) {
       this.permissions.removeRule(existing.id);
@@ -157,7 +167,18 @@ export class FoundryMeshRuntime {
 
   private ensureDefaultServices(): void {
     for (const service of defaultFoundryServices) {
-      if (!this.services.get(service.id)) this.services.register(service);
+      const existing = this.services.get(service.id);
+      if (!existing) {
+        this.services.register(service);
+        continue;
+      }
+
+      if (service.id === "foundry-domain") {
+        this.services.update(service.id, {
+          ...service,
+          metadata: { ...existing.metadata, ...service.metadata },
+        });
+      }
     }
   }
 }

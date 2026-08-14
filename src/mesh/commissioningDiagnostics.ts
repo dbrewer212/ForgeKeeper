@@ -22,6 +22,7 @@ export interface ServiceReadiness {
   workerId?: string;
   workerRegistered: boolean;
   workerCommissioningState?: CommissioningState;
+  adapterRequired: boolean;
   adapterRegistered: boolean;
   dependencies: DependencyReadiness[];
   structuralBlockers: string[];
@@ -75,7 +76,8 @@ export class CommissioningDiagnostics {
 
   evaluateService(service: ServiceDescriptor): ServiceReadiness {
     const worker = service.workerId ? this.runtime.workers.get(service.workerId) : undefined;
-    const adapterRegistered = this.runtime.serviceLifecycle.hasAdapter(service.id);
+    const adapterRequired = service.adapterRequired !== false;
+    const adapterRegistered = !adapterRequired || this.runtime.serviceLifecycle.hasAdapter(service.id);
     const dependencies = service.dependencies.map((serviceId) => this.evaluateDependency(serviceId));
 
     const structuralBlockers: string[] = [];
@@ -92,7 +94,7 @@ export class CommissioningDiagnostics {
     }
 
     const commissioningRequirements: string[] = [];
-    if (!adapterRegistered) commissioningRequirements.push("Runtime adapter has not been registered yet.");
+    if (adapterRequired && !adapterRegistered) commissioningRequirements.push("Runtime adapter has not been registered yet.");
     if (service.commissioningState === "unconfigured") commissioningRequirements.push("Service configuration has not been completed.");
     if (service.commissioningState === "configured") commissioningRequirements.push("Service still requires validation before commissioning.");
     if (service.commissioningState === "disabled") commissioningRequirements.push("Service is intentionally disabled.");
@@ -100,7 +102,7 @@ export class CommissioningDiagnostics {
 
     const activationBlockers = [...structuralBlockers];
     if (this.runtime.isSafeMode()) activationBlockers.push("Foundry Safe Mode blocks service activation.");
-    if (!adapterRegistered) activationBlockers.push("No runtime adapter is registered.");
+    if (adapterRequired && !adapterRegistered) activationBlockers.push("No runtime adapter is registered.");
     if (!service.enabled) activationBlockers.push("Service execution is disabled.");
     if (!executableCommissioningStates.has(service.commissioningState)) {
       activationBlockers.push(`Commissioning state ${service.commissioningState} does not permit execution.`);
@@ -126,6 +128,7 @@ export class CommissioningDiagnostics {
       workerId: service.workerId,
       workerRegistered: service.workerId ? Boolean(worker) : true,
       workerCommissioningState: worker?.identity.commissioningState,
+      adapterRequired,
       adapterRegistered,
       dependencies,
       structuralBlockers,
