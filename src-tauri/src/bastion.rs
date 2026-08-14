@@ -79,11 +79,19 @@ pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarge
             .title("Bastion — Fenrir Forgeworks")
             .decorations(false)
             .resizable(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
             .visible(false)
             .build()
             .map_err(|error| format!("Failed to create the Bastion touch surface: {error}"))?
     };
 
+    window
+        .set_always_on_top(true)
+        .map_err(|error| format!("Failed to keep Bastion above the Y70 display layer: {error}"))?;
+    window
+        .set_skip_taskbar(true)
+        .map_err(|error| format!("Failed to keep Bastion out of the taskbar: {error}"))?;
     window
         .set_position(PhysicalPosition::new(target.x, target.y))
         .map_err(|error| format!("Failed to move Bastion to the touch display: {error}"))?;
