@@ -3,18 +3,18 @@ import type { CommissioningReadinessReport } from "../../mesh/commissioningDiagn
 import type { CommissioningVerificationReport } from "../../mesh/commissioningVerification";
 import { getFoundryMeshRuntime } from "../../mesh";
 
-type ToolResponse<T> = {
+type ToolResponse = {
   result?: {
-    result?: T;
+    result?: unknown;
     error?: string;
     state?: string;
   };
 };
 
-function toolValue<T>(response: ToolResponse<T>): T {
+function toolValue<T>(response: ToolResponse): T {
   if (response.result?.error) throw new Error(response.result.error);
   if (response.result?.result === undefined) throw new Error("Foundry tool returned no result.");
-  return response.result.result;
+  return response.result.result as T;
 }
 
 export function CommissioningView() {
