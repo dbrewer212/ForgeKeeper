@@ -19,6 +19,8 @@ export * from "./coreTools";
 export * from "./domainServices";
 export * from "./domainRegistry";
 export * from "./commissioning";
+export * from "./commissioningDiagnostics";
+export * from "./diagnosticTools";
 export * from "./serviceRegistry";
 export * from "./serviceLifecycle";
 export * from "./serviceTools";

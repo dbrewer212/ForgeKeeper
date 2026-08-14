@@ -3,8 +3,10 @@ import { ActionGateway } from "./actionGateway";
 import { InMemoryApprovalStore } from "./approvalStore";
 import { InMemoryCheckpointStore } from "./checkpointStore";
 import { CommissioningController } from "./commissioning";
+import { CommissioningDiagnostics } from "./commissioningDiagnostics";
 import { registerCoreMeshTools } from "./coreTools";
 import { defaultPermissionRules } from "./defaultPolicies";
+import { registerDiagnosticTools } from "./diagnosticTools";
 import { FoundryDomainRegistry } from "./domainRegistry";
 import { DurableEventBus } from "./durableEventBus";
 import { InMemoryEventBus } from "./eventBus";
@@ -38,6 +40,7 @@ export class FoundryMeshRuntime {
   readonly tools: FoundryToolGateway;
   readonly commissioning: CommissioningController;
   readonly serviceLifecycle: ServiceLifecycleManager;
+  readonly diagnostics: CommissioningDiagnostics;
 
   private safeModeReason?: string;
   private initialized = false;
@@ -49,8 +52,10 @@ export class FoundryMeshRuntime {
     this.tools = new FoundryToolGateway(this);
     this.commissioning = new CommissioningController(this);
     this.serviceLifecycle = new ServiceLifecycleManager(this);
+    this.diagnostics = new CommissioningDiagnostics(this);
     registerCoreMeshTools(this);
     registerServiceTools(this);
+    registerDiagnosticTools(this);
   }
 
   async initialize(): Promise<void> {
