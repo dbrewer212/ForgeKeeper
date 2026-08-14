@@ -18,7 +18,8 @@ export function Sidebar({ state }: { state: any }) {
         Forgekeeper
       </div>
 
-      {navItem("dashboard", "Dashboard")}
+      {navItem("dashboard", "Control Center")}
+      {navItem("canon", "Canon Registry")}
       {navItem("catalog", "Catalog")}
       {navItem("orders", "Orders")}
       {navItem("filament", "Filament")}
@@ -28,6 +29,7 @@ export function Sidebar({ state }: { state: any }) {
       {navItem("planning", "Planning")}
 
       {navItem("reports", "Reports")}
+      {navItem("recovery", "Recovery & Audit")}
       {navItem("settings", "Settings")}
     </aside>
   );

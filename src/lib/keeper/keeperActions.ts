@@ -19,7 +19,7 @@ export type KeeperAction = {
   targetId?: string;
 };
 
-function priorityFromAlert(type: KeeperAlert["type"]): KeeperAction["priority"] {
+function priorityFromAlert(type: KeeperAlert["severity"]): KeeperAction["priority"] {
   if (type === "critical") return "Critical";
   if (type === "warning") return "High";
   if (type === "opportunity") return "Normal";
@@ -28,7 +28,7 @@ function priorityFromAlert(type: KeeperAlert["type"]): KeeperAction["priority"] 
 
 export function getKeeperActions(alerts: KeeperAlert[]): KeeperAction[] {
   return alerts.map((alert) => {
-    const priority = priorityFromAlert(alert.type);
+    const priority = priorityFromAlert(alert.severity);
 
     if (alert.id.startsWith("price-")) {
       return {

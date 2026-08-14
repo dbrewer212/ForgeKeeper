@@ -1,0 +1,10 @@
+# Local credentials and environment overrides
+API.txt
+**/API.txt
+.env
+.env.*
+!.env.example
+
+# Local build/cache output created on other platforms
+target/
+src-tauri/target/

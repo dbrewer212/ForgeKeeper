@@ -3,6 +3,7 @@ export type SlicerKey = "orca" | "anycubic";
 
 export type ExternalToolSettings = {
   forgekeeperLibraryPath: string;
+  apiCredentialFilePath: string;
   orcaSlicerPath: string;
   anycubicSlicerPath: string;
   blenderPath: string;
@@ -12,6 +13,7 @@ export type ExternalToolSettings = {
 
 export const defaultExternalTools: ExternalToolSettings = {
   forgekeeperLibraryPath: "C:\\ForgekeeperLibrary",
+  apiCredentialFilePath: "",
   orcaSlicerPath: "C:\\Program Files\\OrcaSlicer\\OrcaSlicer.exe",
   anycubicSlicerPath: "C:\\Program Files\\AnycubicSlicerNext\\AnycubicSlicerNext.exe",
   blenderPath: "C:\\Users\\dbrew\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Blender",
