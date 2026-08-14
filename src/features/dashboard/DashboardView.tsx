@@ -4,13 +4,18 @@ import { KeeperAlertPanel } from "../../components/keeper/KeeperAlertPanel";
 import { KeeperActionPanel } from "../../components/keeper/KeeperActionPanel";
 import { money } from "../../lib/format";
 import { inventoryState, pillClass } from "../../lib/inventory";
+import { getKeeperAlerts } from "../../lib/keeper/keeperAlerts";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
+import { ControlCenter } from "./ControlCenter";
 
 export function DashboardView({ state }: { state: ForgekeeperState }) {
   const production = state.productionMetrics;
+  const keeperAlerts = getKeeperAlerts(state);
 
   return (
     <div className="space-y-6">
+      <ControlCenter state={state} />
+
       <Card title="Quick Actions" right={<span className="text-xs text-slate-500">Fast Entry</span>}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <QuickAction title="New Order" helper="Jump to order intake" onClick={() => state.triggerQuickAction("newOrder")} />
@@ -22,7 +27,7 @@ export function DashboardView({ state }: { state: ForgekeeperState }) {
 
       <div className="grid gap-6 xl:grid-cols-2">
         <KeeperAlertPanel state={state} title="Keeper System Alerts" />
-        <KeeperActionPanel state={state} title="Keeper Suggested Actions" />
+        <KeeperActionPanel alerts={keeperAlerts} onNavigate={(view) => state.setView(view as ForgekeeperState["view"])} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">

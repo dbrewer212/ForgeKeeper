@@ -10,7 +10,7 @@ import { ProductionView } from "./features/production/ProductionView";
 import { FilamentView } from "./features/filament/FilamentView";
 import { PrintersView } from "./features/printers/PrintersView";
 import { ReportsView } from "./features/reports/ReportsView";
-import { SettingsView } from "./features/settings/SettingsView";
+import { AdministrationView } from "./features/administration/AdministrationView";
 import { PlanningView } from "./features/planning/PlanningView";
 import { CommissioningView } from "./features/commissioning/CommissioningView";
 import { BastionView } from "./features/bastion/BastionView";
@@ -48,7 +48,7 @@ export default function App() {
       case "reports":
         return <ReportsView state={state} />;
       case "settings":
-        return <SettingsView state={state} />;
+        return <AdministrationView state={state} />;
       case "planning":
         return <PlanningView state={state} />;
       case "commissioning":

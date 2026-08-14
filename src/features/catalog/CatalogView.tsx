@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { AssetLaunchpad } from "../../components/assets/AssetLaunchpad";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -6,9 +6,15 @@ import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Textarea } from "../../components/ui/Textarea";
 import { money } from "../../lib/format";
+import { expectedGenerationCredits, generationSpend } from "../../lib/generationBudget";
+import { productionReferenceReady } from "../../lib/productionReferences";
+import { downloadGenerationAsset, getGenerationStatus, submitMeshyImageGeneration, submitPrintPalImageGeneration, type ProviderKey } from "../../lib/generationProviders";
 import { inventoryState, pillClass } from "../../lib/inventory";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 import type { OrderStatus, Product, ProductLine, ProductStatus, ProductTab, ProductTier, ProductVariant, RealmVariant } from "../../types/domain";
+import { ProductionReferenceBuilder } from "./ProductionReferenceBuilder";
+import { ModelVerificationStation } from "./ModelVerificationStation";
+import { PrintTrialStation } from "./PrintTrialStation";
 
 const productTabs: ProductTab[] = ["overview", "stls", "concepts", "variants", "orders"];
 const realmOptions: RealmVariant[] = ["Midgard", "Alfheim", "Svartalfheim", "Vanaheim", "Asgard", "Jotunheim", "Muspelheim", "Niflheim", "Helheim"];
@@ -496,11 +502,20 @@ function ConceptPanel({ state }: { state: ForgekeeperState }) {
                 <Field label="Concept Image Path">
                   <Input value={concept.imagePath || ""} onChange={(e) => state.updateConcept(concept.id, { imagePath: e.target.value })} placeholder="C:\ForgekeeperLibrary\Concepts\Product\concept-art\front.png" />
                 </Field>
+                <Field label="Generator-Safe Reference Path">
+                  <Input value={concept.generationReferencePath || ""} readOnly placeholder="Use the Production Reference Builder below" />
+                </Field>
                 <Field label="Measurement Image Path">
                   <Input value={concept.measurementImagePath || ""} onChange={(e) => state.updateConcept(concept.id, { measurementImagePath: e.target.value })} placeholder="C:\ForgekeeperLibrary\Concepts\Product\measurements\dims.png" />
                 </Field>
                 <Field label="Reference Folder">
                   <Input value={concept.referenceFolderPath || ""} onChange={(e) => state.updateConcept(concept.id, { referenceFolderPath: e.target.value })} placeholder="C:\ForgekeeperLibrary\Concepts\Product\reference" />
+                </Field>
+                <Field label="Canon Registry Record" className="lg:col-span-2">
+                  <Select value={concept.canonRecordId || ""} onChange={(e) => state.updateConcept(concept.id, { canonRecordId: e.target.value || undefined })}>
+                    <option value="">No character canon record required</option>
+                    {state.canonRecords.map((record) => <option key={record.id} value={record.id}>{record.name} · {record.canonStatus}</option>)}
+                  </Select>
                 </Field>
                 <Field label="Measurements">
                   <Textarea value={concept.measurements} onChange={(e) => state.updateConcept(concept.id, { measurements: e.target.value })} placeholder="Width, height, depth, tolerances, insert sizes..." className="min-h-[100px] w-full" />
@@ -519,12 +534,280 @@ function ConceptPanel({ state }: { state: ForgekeeperState }) {
                 <Field label="Internal Notes" className="lg:col-span-2">
                   <Textarea value={concept.notes} onChange={(e) => state.updateConcept(concept.id, { notes: e.target.value })} placeholder="Finish notes, design changes, print recommendations, paint ideas..." className="min-h-[100px] w-full" />
                 </Field>
+                <div className="lg:col-span-2">
+                  <ProductionReferenceBuilder state={state} concept={concept} />
+                </div>
+                <div className="lg:col-span-2">
+                  <ConceptGenerationPanel state={state} concept={concept} />
+                </div>
+                <div className="lg:col-span-2">
+                  <ModelVerificationStation state={state} concept={concept} />
+                </div>
+                <div className="lg:col-span-2">
+                  <PrintTrialStation state={state} concept={concept} />
+                </div>
               </div>
             </div>
           ))
         )}
       </div>
     </Card>
+  );
+}
+
+function ConceptGenerationPanel({ state, concept }: { state: ForgekeeperState; concept: ForgekeeperState["concepts"][number] }) {
+  const [provider, setProvider] = useState<ProviderKey>("printpal");
+  const [quality, setQuality] = useState("superplus");
+  const [generationPurpose, setGenerationPurpose] = useState("Create one print-model revision from this approved concept.");
+  const [providerReason, setProviderReason] = useState("");
+  const [retryReason, setRetryReason] = useState("");
+  const [creditCeiling, setCreditCeiling] = useState("");
+  const [checks, setChecks] = useState({
+    approvedConcept: false,
+    isolatedReference: false,
+    providerReviewed: false,
+    exactSubmission: false,
+  });
+  const [working, setWorking] = useState(false);
+  const [message, setMessage] = useState("");
+  const productionReference = state.productionReferences.find((reference) => reference.id === concept.generationReferenceId && reference.conceptId === concept.id);
+  const referenceReady = productionReferenceReady(productionReference);
+  const imagePath = referenceReady ? productionReference?.outputPath ?? "" : "";
+  const apiFilePath = state.settings.apiCredentialFilePath || "";
+  const jobs = state.generationJobs.filter((job) => job.conceptId === concept.id);
+  const spend = generationSpend(state.generationJobs, concept.productId);
+  const expectedCredits = expectedGenerationCredits(provider, quality, false);
+  const parsedCeiling = Number(creditCeiling);
+  const projectedCommitted = spend.committed + expectedCredits;
+  const allChecksPassed = Object.values(checks).every(Boolean);
+  const retryIsDocumented = jobs.length === 0 || retryReason.trim().length > 0;
+  const withinBudget = Number.isFinite(parsedCeiling) && parsedCeiling >= projectedCommitted;
+  const canSubmit = Boolean(apiFilePath && referenceReady && imagePath && generationPurpose.trim() && providerReason.trim() && allChecksPassed && retryIsDocumented && withinBudget && !working);
+
+  function toggleCheck(key: keyof typeof checks) {
+    setChecks((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  async function submitGeneration() {
+    if (!apiFilePath) {
+      setMessage("Set the local API credential file in Settings first.");
+      return;
+    }
+    if (!productionReference || !referenceReady || !imagePath) {
+      setMessage("Select a Production Reference Builder revision that has passed all checks and is marked Ready.");
+      return;
+    }
+    if (!allChecksPassed) {
+      setMessage("Complete every production preflight check before submitting.");
+      return;
+    }
+    if (!generationPurpose.trim() || !providerReason.trim()) {
+      setMessage("Record the model purpose and why this provider is the best route.");
+      return;
+    }
+    if (!retryIsDocumented) {
+      setMessage("Diagnose the previous attempt before authorizing another paid generation.");
+      return;
+    }
+    if (!withinBudget) {
+      setMessage(`The product credit ceiling must be at least ${projectedCommitted} credits for this one attempt.`);
+      return;
+    }
+
+    const providerName = provider === "printpal" ? "PrintPal" : "Meshy";
+    const approvalSummary = [
+      `ONE PAID GENERATION`,
+      `Concept: ${concept.title}`,
+      `Provider: ${providerName}`,
+      `Source: ${imagePath}`,
+      `Production reference: ${productionReference.id} · ${productionReference.view} · verified ${productionReference.verifiedAt ?? "unknown"}`,
+      `Mode: ${provider === "printpal" ? `Image-to-3D · ${quality}` : "Image-to-3D · Meshy-6/latest · untextured"}`,
+      `Output: STL`,
+      `This attempt: ${expectedCredits} credits`,
+      `Product committed before this attempt: ${spend.committed} credits`,
+      `Projected product commitment: ${projectedCommitted} / ${parsedCeiling} authorized credits`,
+      `No automatic retry is authorized.`,
+    ].join("\n");
+    if (!window.confirm(`${approvalSummary}\n\nSubmit this exact job?`)) return;
+
+    setWorking(true);
+    setMessage("");
+    try {
+      const submission = provider === "printpal"
+        ? await submitPrintPalImageGeneration(apiFilePath, imagePath, { quality, format: "stl", authorizedCredits: expectedCredits })
+        : await submitMeshyImageGeneration(apiFilePath, imagePath, { shouldTexture: false, targetPolycount: 100000, authorizedCredits: expectedCredits });
+      state.recordGenerationJob({
+        provider,
+        externalJobId: submission.jobId,
+        productId: concept.productId,
+        conceptId: concept.id,
+        sourceImagePath: imagePath,
+        productionReferenceId: productionReference.id,
+        productionReferenceVerifiedAt: productionReference.verifiedAt,
+        sourceLibraryAssetId: productionReference.sourceLibraryAssetId,
+        status: submission.status,
+        creditsUsed: submission.creditsUsed ?? undefined,
+        creditsRemaining: submission.creditsRemaining ?? undefined,
+        expectedCredits,
+        authorizedCreditCeiling: parsedCeiling,
+        attemptNumber: spend.attempts + 1,
+        generationPurpose: generationPurpose.trim(),
+        providerSelectionReason: providerReason.trim(),
+        retryReason: retryReason.trim() || undefined,
+        approvalSummary,
+        reviewStatus: "pending",
+        outputUrls: submission.downloadUrl ? { download: submission.downloadUrl } : {},
+      });
+      setChecks({ approvedConcept: false, isolatedReference: false, providerReviewed: false, exactSubmission: false });
+      setCreditCeiling("");
+      setRetryReason("");
+      setMessage(`${providerName} job ${submission.jobId} submitted. No retry is authorized by this approval.`);
+    } catch (error) {
+      setMessage(String(error));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function refreshJob(localId: string, externalJobId: string, jobProvider: ProviderKey) {
+    setWorking(true);
+    setMessage("");
+    try {
+      const status = await getGenerationStatus(apiFilePath, jobProvider, externalJobId);
+      const patch = {
+        status: status.status,
+        progress: status.progress ?? undefined,
+        outputUrls: status.outputUrls,
+        error: status.error ?? undefined,
+        ...(status.creditsUsed != null ? { creditsUsed: status.creditsUsed } : {}),
+      };
+      state.updateGenerationJob(localId, patch);
+      setMessage(`${jobProvider === "printpal" ? "PrintPal" : "Meshy"} job refreshed: ${status.status}.`);
+    } catch (error) {
+      setMessage(String(error));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function downloadStl(localId: string, externalJobId: string, jobProvider: ProviderKey) {
+    const productName = state.selectedProduct?.name || "GeneratedModel";
+    const safeName = `${productName}-${concept.title}`.replace(/[^a-z0-9_-]+/gi, "-").replace(/^-|-$/g, "");
+    const defaultPath = `${state.suggestStlLibraryFolder(concept.productId, "v001")}\\${safeName || "generated-model"}.stl`;
+    const outputPath = window.prompt("Save the completed STL to:", defaultPath);
+    if (!outputPath) return;
+    setWorking(true);
+    setMessage("");
+    try {
+      const result = await downloadGenerationAsset(apiFilePath, jobProvider, externalJobId, "stl", outputPath);
+      state.linkGeneratedStl(localId, result.outputPath);
+      setMessage(`STL saved and linked to ${concept.title}. It is recorded as generated—not print approved.`);
+    } catch (error) {
+      setMessage(String(error));
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-amber-500/15 bg-amber-500/5 p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="font-semibold text-slate-100">Model Production & Budget Gate</div>
+          <div className="mt-1 text-xs text-slate-400">One approval authorizes one exact paid job. Retries stop here for diagnosis and renewed approval.</div>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="rounded-full border border-white/10 bg-[#0d131c] px-3 py-2 text-slate-300">Attempts: {spend.attempts}</span>
+          <span className="rounded-full border border-white/10 bg-[#0d131c] px-3 py-2 text-amber-300">Committed: {spend.committed} credits</span>
+          <span className="rounded-full border border-white/10 bg-[#0d131c] px-3 py-2 text-slate-300">Confirmed actual: {spend.actual} credits</span>
+        </div>
+      </div>
+
+      <div className="mb-4 grid gap-3 lg:grid-cols-2">
+        <div className="space-y-3 rounded-xl border border-white/10 bg-[#0d131c] p-3">
+          <div className="text-xs uppercase tracking-wide text-slate-500">Exact submission</div>
+          <ProductImagePanel product={state.selectedProduct} imageSrc={imagePath} label="Exact Provider Input" fit="contain" />
+          <div className="break-all text-sm text-slate-300"><span className="text-slate-500">Generator-safe source:</span> {imagePath || "No verified production reference selected"}</div>
+          <div className={`text-xs ${referenceReady ? "text-emerald-300" : "text-amber-300"}`}>{referenceReady ? `Builder gate passed · ${productionReference?.view} · ${productionReference?.id}` : "Builder gate blocked · complete the reference record above"}</div>
+          <div className="text-xs text-amber-300">The canonical concept-art path is intentionally unavailable to the provider submission command.</div>
+          <div className="flex flex-wrap gap-2">
+          <Select value={provider} onChange={(event) => setProvider(event.target.value as ProviderKey)}>
+            <option value="printpal">PrintPal</option>
+            <option value="meshy">Meshy</option>
+          </Select>
+          {provider === "printpal" ? (
+            <Select value={quality} onChange={(event) => setQuality(event.target.value)}>
+              <option value="default">Default · 4 credits</option>
+              <option value="high">High · 6 credits</option>
+              <option value="ultra">Ultra · 8 credits</option>
+              <option value="super">Super · 20 credits</option>
+              <option value="superplus">Super+ · 30 credits</option>
+            </Select>
+          ) : null}
+          </div>
+          <Textarea value={providerReason} onChange={(event) => setProviderReason(event.target.value)} placeholder="Why this provider is the best generation route for this model" className="min-h-[72px] w-full" />
+          <Textarea value={generationPurpose} onChange={(event) => setGenerationPurpose(event.target.value)} placeholder="One intended model, pose, scale, and use" className="min-h-[72px] w-full" />
+          {jobs.length ? <Textarea value={retryReason} onChange={(event) => setRetryReason(event.target.value)} placeholder="Required: diagnosis or reason for another paid attempt" className="min-h-[72px] w-full" /> : null}
+        </div>
+
+        <div className="space-y-3 rounded-xl border border-white/10 bg-[#0d131c] p-3">
+          <div className="text-xs uppercase tracking-wide text-slate-500">Preflight verification</div>
+          <GateCheck checked={checks.approvedConcept} onChange={() => toggleCheck("approvedConcept")} label="This is the newest approved concept and intended pose." />
+          <GateCheck checked={checks.isolatedReference} onChange={() => toggleCheck("isolatedReference")} label="The selected Production Reference Builder revision is Ready and its exact path is shown here." />
+          <GateCheck checked={checks.providerReviewed} onChange={() => toggleCheck("providerReviewed")} label="Meshy and PrintPal were compared for this specific model; the reason is recorded." />
+          <GateCheck checked={checks.exactSubmission} onChange={() => toggleCheck("exactSubmission")} label="The exact source, settings, STL output, and credit cost below are verified." />
+        </div>
+      </div>
+
+      <div className="mb-4 grid gap-3 rounded-xl border border-amber-500/20 bg-[#0d131c] p-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-slate-500">This attempt</div>
+          <div className="mt-1 text-lg font-semibold text-amber-300">{expectedCredits} credits</div>
+        </div>
+        <label className="block space-y-1">
+          <div className="text-xs uppercase tracking-wide text-slate-500">Authorized product ceiling</div>
+          <Input type="number" min={projectedCommitted} step="1" value={creditCeiling} onChange={(event) => setCreditCeiling(event.target.value)} placeholder={`Minimum ${projectedCommitted}`} className="w-full" />
+          <div className={`text-xs ${withinBudget ? "text-emerald-300" : "text-slate-500"}`}>Projected: {projectedCommitted}{creditCeiling ? ` / ${creditCeiling}` : ""} credits</div>
+        </label>
+        <Button onClick={submitGeneration} disabled={!canSubmit}>{working ? "Working..." : "Authorize One Generation"}</Button>
+      </div>
+
+      {message ? <div className="mb-3 rounded-xl border border-white/10 bg-[#0d131c] p-3 text-sm text-slate-300">{message}</div> : null}
+
+      {jobs.length ? (
+        <div className="space-y-2">
+          {jobs.map((job) => (
+            <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#0d131c] p-3 text-sm">
+              <div>
+                <div className="font-medium text-slate-200">{job.provider === "printpal" ? "PrintPal" : "Meshy"} · {job.status}</div>
+                <div className="mt-1 text-xs text-slate-500">Attempt {job.attemptNumber ?? "—"} · {job.externalJobId}</div>
+                <div className="mt-1 text-xs text-slate-500">Expected {job.expectedCredits ?? "unknown"} · Actual {job.creditsUsed ?? "pending"} credits · Review {job.reviewStatus ?? "pending"}</div>
+                {job.retryReason ? <div className="mt-1 text-xs text-amber-300">Retry reason: {job.retryReason}</div> : null}
+                {job.error ? <div className="mt-1 text-xs text-red-300">Diagnosis: {job.error}</div> : null}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="ghost" onClick={() => refreshJob(job.id, job.externalJobId, job.provider)} disabled={working}>Refresh</Button>
+                {job.status.toLowerCase() === "completed" || job.status.toLowerCase() === "succeeded" ? (
+                  <>
+                    <Button variant="ghost" onClick={() => { state.addModelVerification(job.id); setMessage("Verification record ready below. Visual acceptance now requires the standardized inspection and Character DNA checks."); }} disabled={working}>Verify Model</Button>
+                    <Button onClick={() => downloadStl(job.id, job.externalJobId, job.provider)} disabled={working}>Download & Link STL</Button>
+                  </>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function GateCheck({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 text-sm text-slate-300">
+      <input type="checkbox" checked={checked} onChange={onChange} className="mt-1 h-4 w-4 accent-amber-500" />
+      <span>{label}</span>
+    </label>
   );
 }
 
@@ -736,12 +1019,12 @@ function ProductThumb({ src, alt, className = "" }: { src?: string; alt: string;
   );
 }
 
-function ProductImagePanel({ product, imageSrc, label = "Product Image" }: { product?: Product; imageSrc?: string; label?: string }) {
+function ProductImagePanel({ product, imageSrc, label = "Product Image", fit = "cover" }: { product?: Product; imageSrc?: string; label?: string; fit?: "cover" | "contain" }) {
   return (
     <div className="space-y-3">
       <div className="aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-black/30">
         {imageSrc ? (
-          <img src={imageSrc} alt={product?.name || label} className="h-full w-full object-cover" />
+          <img src={imageSrc} alt={product?.name || label} className={`h-full w-full ${fit === "contain" ? "object-contain" : "object-cover"}`} />
         ) : (
           <div className="flex h-full items-center justify-center text-xs uppercase tracking-[0.18em] text-slate-600">No Image</div>
         )}
