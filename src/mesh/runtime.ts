@@ -13,6 +13,7 @@ import { registerDomainTools } from "./domainTools";
 import { DurableEventBus } from "./durableEventBus";
 import { InMemoryEventBus } from "./eventBus";
 import { DefaultHealthAggregator } from "./healthAggregator";
+import { registerStagedServiceAdapters } from "./localServiceAdapters";
 import { MeshOperations } from "./operations";
 import { InMemoryPermissionService } from "./permissionService";
 import type { MeshPersistence, MeshSnapshot } from "./persistence";
@@ -75,6 +76,7 @@ export class FoundryMeshRuntime {
 
     this.ensureDefaultWorkers();
     this.ensureDefaultServices();
+    registerStagedServiceAdapters(this);
     this.initialized = true;
   }
 

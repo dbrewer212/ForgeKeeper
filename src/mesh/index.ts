@@ -26,5 +26,6 @@ export * from "./diagnosticTools";
 export * from "./serviceRegistry";
 export * from "./serviceLifecycle";
 export * from "./serviceTools";
+export * from "./localServiceAdapters";
 export * from "./persistence";
 export * from "./runtime";

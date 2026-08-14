@@ -24,6 +24,7 @@ export interface ServiceReadiness {
   workerCommissioningState?: CommissioningState;
   adapterRequired: boolean;
   adapterRegistered: boolean;
+  adapterIssues: string[];
   dependencies: DependencyReadiness[];
   structuralBlockers: string[];
   commissioningRequirements: string[];
@@ -78,6 +79,9 @@ export class CommissioningDiagnostics {
     const worker = service.workerId ? this.runtime.workers.get(service.workerId) : undefined;
     const adapterRequired = service.adapterRequired !== false;
     const adapterRegistered = !adapterRequired || this.runtime.serviceLifecycle.hasAdapter(service.id);
+    const adapterIssues = adapterRequired && adapterRegistered
+      ? this.runtime.serviceLifecycle.validationIssues(service.id)
+      : [];
     const dependencies = service.dependencies.map((serviceId) => this.evaluateDependency(serviceId));
 
     const structuralBlockers: string[] = [];
@@ -95,6 +99,7 @@ export class CommissioningDiagnostics {
 
     const commissioningRequirements: string[] = [];
     if (adapterRequired && !adapterRegistered) commissioningRequirements.push("Runtime adapter has not been registered yet.");
+    commissioningRequirements.push(...adapterIssues);
     if (service.commissioningState === "unconfigured") commissioningRequirements.push("Service configuration has not been completed.");
     if (service.commissioningState === "configured") commissioningRequirements.push("Service still requires validation before commissioning.");
     if (service.commissioningState === "disabled") commissioningRequirements.push("Service is intentionally disabled.");
@@ -103,6 +108,7 @@ export class CommissioningDiagnostics {
     const activationBlockers = [...structuralBlockers];
     if (this.runtime.isSafeMode()) activationBlockers.push("Foundry Safe Mode blocks service activation.");
     if (adapterRequired && !adapterRegistered) activationBlockers.push("No runtime adapter is registered.");
+    activationBlockers.push(...adapterIssues);
     if (!service.enabled) activationBlockers.push("Service execution is disabled.");
     if (!executableCommissioningStates.has(service.commissioningState)) {
       activationBlockers.push(`Commissioning state ${service.commissioningState} does not permit execution.`);
@@ -115,6 +121,7 @@ export class CommissioningDiagnostics {
     const readyForCommissioning =
       structurallyReady &&
       adapterRegistered &&
+      adapterIssues.length === 0 &&
       (preCommissioningStates.has(service.commissioningState) || executableCommissioningStates.has(service.commissioningState));
     const executableNow = activationBlockers.length === 0;
 
@@ -130,6 +137,7 @@ export class CommissioningDiagnostics {
       workerCommissioningState: worker?.identity.commissioningState,
       adapterRequired,
       adapterRegistered,
+      adapterIssues,
       dependencies,
       structuralBlockers,
       commissioningRequirements,

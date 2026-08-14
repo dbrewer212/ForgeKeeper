@@ -4,6 +4,7 @@ import type { FoundryMeshRuntime } from "./runtime";
 import type { ServiceDescriptor, ServiceRuntimeState } from "./serviceRegistry";
 
 export interface ManagedServiceAdapter {
+  validate?(service: ServiceDescriptor): string[];
   start(service: ServiceDescriptor): Promise<void>;
   stop(service: ServiceDescriptor): Promise<void>;
   restart?(service: ServiceDescriptor): Promise<void>;
@@ -35,6 +36,13 @@ export class ServiceLifecycleManager {
     return this.adapters.has(serviceId);
   }
 
+  validationIssues(serviceId: string): string[] {
+    const service = this.requireService(serviceId);
+    const adapter = this.adapters.get(serviceId);
+    if (!adapter) return [`Service ${serviceId} has no runtime adapter registered.`];
+    return adapter.validate?.(service) ?? [];
+  }
+
   async start(serviceId: string, sourceWorkerId = "foundry-core"): Promise<ServiceTransitionResult> {
     if (this.runtime.isSafeMode()) {
       throw new Error(`Cannot start service ${serviceId} while the Foundry is in Safe Mode.`);
@@ -42,6 +50,7 @@ export class ServiceLifecycleManager {
 
     const service = this.requireService(serviceId);
     this.requireCommissionedForExecution(service);
+    const adapter = this.requireAdapterReady(service);
     if (!this.runtime.services.dependenciesSatisfied(serviceId)) {
       const missing = service.dependencies.filter((dependencyId) => {
         const dependency = this.runtime.services.get(dependencyId);
@@ -50,7 +59,6 @@ export class ServiceLifecycleManager {
       throw new Error(`Cannot start service ${serviceId}; dependencies are not active and online: ${missing.join(", ")}.`);
     }
 
-    const adapter = this.requireAdapter(serviceId);
     const previousRuntimeState = service.runtimeState;
     await this.setRuntimeState(serviceId, "starting", sourceWorkerId);
 
@@ -95,11 +103,11 @@ export class ServiceLifecycleManager {
 
     const service = this.requireService(serviceId);
     this.requireCommissionedForExecution(service);
+    const adapter = this.requireAdapterReady(service);
     if (!this.runtime.services.dependenciesSatisfied(serviceId)) {
       throw new Error(`Cannot restart service ${serviceId}; one or more dependencies are not active and online.`);
     }
 
-    const adapter = this.requireAdapter(serviceId);
     const previousRuntimeState = service.runtimeState;
     await this.setRuntimeState(serviceId, "stopping", sourceWorkerId);
 
@@ -147,6 +155,15 @@ export class ServiceLifecycleManager {
     const adapter = this.adapters.get(serviceId);
     if (!adapter) {
       throw new Error(`Service ${serviceId} is staged but has no runtime adapter registered; it cannot execute yet.`);
+    }
+    return adapter;
+  }
+
+  private requireAdapterReady(service: ServiceDescriptor): ManagedServiceAdapter {
+    const adapter = this.requireAdapter(service.id);
+    const issues = adapter.validate?.(service) ?? [];
+    if (issues.length > 0) {
+      throw new Error(`Service ${service.id} adapter is not ready: ${issues.join(" ")}`);
     }
     return adapter;
   }

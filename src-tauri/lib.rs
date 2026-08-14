@@ -1,3 +1,8 @@
+mod managed_services;
+
+use managed_services::{
+    managed_service_start, managed_service_status, managed_service_stop, ManagedProcesses,
+};
 use serde::Serialize;
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -262,10 +267,14 @@ fn open_with_windows_shell(target: &str, asset_path: Option<&str>) -> Result<(),
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(ManagedProcesses::default())
         .invoke_handler(tauri::generate_handler![
             open_path,
             launch_external_tool,
             local_http_get,
+            managed_service_start,
+            managed_service_stop,
+            managed_service_status,
             mesh_load_snapshot,
             mesh_save_snapshot,
             mesh_append_event,
