@@ -1,4 +1,4 @@
-export function Sidebar({ state }: { state: any }) {
+export function Sidebar({ state, onBastion }: { state: any; onBastion: () => void }) {
   const navItem = (key: string, label: string) => (
     <button
       onClick={() => state.setView(key)}
@@ -17,6 +17,14 @@ export function Sidebar({ state }: { state: any }) {
       <div className="mb-6 text-xl font-bold text-amber-400">
         Forgekeeper
       </div>
+
+      <button
+        type="button"
+        onClick={onBastion}
+        className="mb-4 min-h-[48px] w-full rounded-lg border border-amber-800 bg-amber-950/40 px-3 py-2 text-left font-semibold text-amber-200 hover:bg-amber-900/40"
+      >
+        Bastion
+      </button>
 
       {navItem("dashboard", "Dashboard")}
       {navItem("catalog", "Catalog")}

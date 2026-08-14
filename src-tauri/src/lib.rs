@@ -1,5 +1,9 @@
+mod bastion;
 mod managed_services;
 
+use bastion::{
+    bastion_launch_mode, bastion_set_startup, bastion_startup_status,
+};
 use managed_services::{
     managed_service_start, managed_service_status, managed_service_stop, ManagedProcesses,
 };
@@ -339,6 +343,9 @@ pub fn run() {
             launch_external_tool,
             local_http_get,
             watcher_system_snapshot,
+            bastion_launch_mode,
+            bastion_startup_status,
+            bastion_set_startup,
             managed_service_start,
             managed_service_stop,
             managed_service_status,

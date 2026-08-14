@@ -7,11 +7,16 @@
   color-scheme: dark;
 }
 
+html {
+  background: #070b11;
+}
+
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
   background: #070b11;
+  overscroll-behavior: none;
 }
 
 button,
@@ -19,4 +24,21 @@ input,
 textarea,
 select {
   font: inherit;
+}
+
+button,
+select {
+  touch-action: manipulation;
+}
+
+@media (pointer: coarse) {
+  button,
+  select,
+  input {
+    min-height: 48px;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
 }
