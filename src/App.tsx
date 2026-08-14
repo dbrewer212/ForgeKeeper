@@ -32,7 +32,7 @@ export default function App() {
   }
 
   const renderView = () => {
-    switch (state.view) {
+    switch (state.view as string) {
       case "dashboard":
         return <DashboardView state={state} />;
       case "catalog":

@@ -180,7 +180,7 @@ fn mesh_read_events(app: tauri::AppHandle, limit: Option<usize>) -> Result<Vec<S
     let mut lines = reader
         .lines()
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("Failed to read Foundry mesh event journal: {error}"))?;
+        .map_err(|error| format!("Failed to read Foundry mesh event: {error}"))?;
 
     let limit = limit.unwrap_or(250).min(10_000);
     if lines.len() > limit {
@@ -339,6 +339,7 @@ fn open_with_windows_shell(target: &str, asset_path: Option<&str>) -> Result<(),
 pub fn run() {
     tauri::Builder::default()
         .manage(ManagedProcesses::default())
+        .plugin(tauri_plugin_sql::Builder::default().build())
         .setup(|app| {
             if bastion_launch_mode() {
                 open_bastion_window(app.handle())
