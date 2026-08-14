@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useForgekeeperState } from "./state/useForgekeeperState";
@@ -18,6 +19,13 @@ export default function App() {
   const state = useForgekeeperState();
   const currentWindow = getCurrentWebviewWindow();
   const isBastionWindow = currentWindow.label === "bastion";
+
+  useEffect(() => {
+    if (isBastionWindow) return;
+    void invoke("bastion_open_window").catch((cause) => {
+      console.error("Bastion auto-open failed:", cause);
+    });
+  }, [isBastionWindow]);
 
   if (isBastionWindow) {
     return <BastionView state={state} onExit={() => void invoke("bastion_close_window")} />;
