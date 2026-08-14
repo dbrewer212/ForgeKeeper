@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useForgekeeperState } from "./state/useForgekeeperState";
 
 import { Sidebar } from "./components/layout/Sidebar";
@@ -16,18 +16,11 @@ import { BastionView } from "./features/bastion/BastionView";
 
 export default function App() {
   const state = useForgekeeperState();
-  const [bastionMode, setBastionMode] = useState(false);
+  const currentWindow = getCurrentWebviewWindow();
+  const isBastionWindow = currentWindow.label === "bastion";
 
-  useEffect(() => {
-    void invoke<boolean>("bastion_launch_mode")
-      .then((launchBastion) => {
-        if (launchBastion) setBastionMode(true);
-      })
-      .catch(() => undefined);
-  }, []);
-
-  if (bastionMode) {
-    return <BastionView state={state} onExit={() => setBastionMode(false)} />;
+  if (isBastionWindow) {
+    return <BastionView state={state} onExit={() => void invoke("bastion_close_window")} />;
   }
 
   const renderView = () => {
@@ -55,9 +48,17 @@ export default function App() {
     }
   };
 
+  async function openBastion() {
+    try {
+      await invoke("bastion_open_window");
+    } catch (cause) {
+      window.alert(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
   return (
     <div className="flex h-screen">
-      <Sidebar state={state} onBastion={() => setBastionMode(true)} />
+      <Sidebar state={state} onBastion={() => void openBastion()} />
       <main className="flex-1 overflow-auto p-4">
         {renderView()}
       </main>

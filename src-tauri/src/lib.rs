@@ -2,7 +2,8 @@ mod bastion;
 mod managed_services;
 
 use bastion::{
-    bastion_launch_mode, bastion_set_startup, bastion_startup_status,
+    bastion_close_window, bastion_launch_mode, bastion_open_window, bastion_set_startup,
+    bastion_startup_status, open_bastion_window,
 };
 use managed_services::{
     managed_service_start, managed_service_status, managed_service_stop, ManagedProcesses,
@@ -338,12 +339,21 @@ fn open_with_windows_shell(target: &str, asset_path: Option<&str>) -> Result<(),
 pub fn run() {
     tauri::Builder::default()
         .manage(ManagedProcesses::default())
+        .setup(|app| {
+            if bastion_launch_mode() {
+                open_bastion_window(app.handle())
+                    .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             open_path,
             launch_external_tool,
             local_http_get,
             watcher_system_snapshot,
             bastion_launch_mode,
+            bastion_open_window,
+            bastion_close_window,
             bastion_startup_status,
             bastion_set_startup,
             managed_service_start,
