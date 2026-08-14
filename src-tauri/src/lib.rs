@@ -1,5 +1,6 @@
 mod bastion;
 mod managed_services;
+mod providers;
 
 use bastion::{
     bastion_close_window, bastion_launch_mode, bastion_open_window, bastion_set_startup,
@@ -7,6 +8,10 @@ use bastion::{
 };
 use managed_services::{
     managed_service_start, managed_service_status, managed_service_stop, ManagedProcesses,
+};
+use providers::{
+    download_generation_asset, get_generation_status, submit_meshy_image_generation,
+    submit_printpal_image_generation, test_provider_connections,
 };
 use serde::Serialize;
 use std::fs::{self, OpenOptions};
@@ -352,6 +357,11 @@ pub fn run() {
             launch_external_tool,
             local_http_get,
             watcher_system_snapshot,
+            test_provider_connections,
+            submit_meshy_image_generation,
+            submit_printpal_image_generation,
+            get_generation_status,
+            download_generation_asset,
             bastion_launch_mode,
             bastion_open_window,
             bastion_close_window,
