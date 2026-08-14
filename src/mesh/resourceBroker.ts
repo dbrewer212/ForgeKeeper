@@ -26,16 +26,24 @@ export interface ResourceBroker {
   admit(request: ResourceRequest, queueOnFailure?: boolean): ResourceAdmission;
   release(leaseId: string): void;
   listActiveLeases(resourceId?: string): ResourceLease[];
+  listWorkerLeases(workerId: string): ResourceLease[];
   listPendingRequests(resourceId?: string): ResourceQueueEntry[];
   cancelPendingRequest(requestId: string): boolean;
+  cancelPendingForWorker(workerId: string): ResourceQueueEntry[];
+  cancelAllPending(): ResourceQueueEntry[];
   drainPending(resourceId?: string): ResourceAdmission[];
   purgeExpired(now?: Date): ResourceLease[];
+  setAdmissionEnabled(enabled: boolean, reason?: string): void;
+  isAdmissionEnabled(): boolean;
+  getAdmissionPauseReason(): string | undefined;
 }
 
 export class InMemoryResourceBroker implements ResourceBroker {
   private readonly states = new Map<string, ResourceState>();
   private readonly leases = new Map<string, ResourceLease>();
   private readonly pending = new Map<string, ResourceQueueEntry>();
+  private admissionEnabled = true;
+  private admissionPauseReason?: string;
 
   updateState(state: ResourceState): void {
     this.states.set(state.id, structuredClone(state));
@@ -66,6 +74,15 @@ export class InMemoryResourceBroker implements ResourceBroker {
         queued: false,
         lease: structuredClone(existingLease),
         reason: "Request already owns an active lease.",
+      };
+    }
+
+    if (!this.admissionEnabled) {
+      return {
+        request: structuredClone(request),
+        granted: false,
+        queued: false,
+        reason: this.admissionPauseReason ?? "Resource admission is paused.",
       };
     }
 
@@ -119,6 +136,13 @@ export class InMemoryResourceBroker implements ResourceBroker {
     return leases.map((lease) => structuredClone(lease));
   }
 
+  listWorkerLeases(workerId: string): ResourceLease[] {
+    this.purgeExpired();
+    return [...this.leases.values()]
+      .filter((lease) => lease.workerId === workerId)
+      .map((lease) => structuredClone(lease));
+  }
+
   listPendingRequests(resourceId?: string): ResourceQueueEntry[] {
     const entries = [...this.pending.values()]
       .filter((entry) => !resourceId || entry.request.resourceId === resourceId)
@@ -130,7 +154,25 @@ export class InMemoryResourceBroker implements ResourceBroker {
     return this.pending.delete(requestId);
   }
 
+  cancelPendingForWorker(workerId: string): ResourceQueueEntry[] {
+    const canceled: ResourceQueueEntry[] = [];
+    for (const [requestId, entry] of this.pending.entries()) {
+      if (entry.request.requesterWorkerId !== workerId) continue;
+      canceled.push(structuredClone(entry));
+      this.pending.delete(requestId);
+    }
+    return canceled.sort(compareQueueEntries);
+  }
+
+  cancelAllPending(): ResourceQueueEntry[] {
+    const canceled = this.listPendingRequests();
+    this.pending.clear();
+    return canceled;
+  }
+
   drainPending(resourceId?: string): ResourceAdmission[] {
+    if (!this.admissionEnabled) return [];
+
     this.purgeExpired();
     const candidates = this.listPendingRequests(resourceId);
     const results: ResourceAdmission[] = [];
@@ -158,9 +200,22 @@ export class InMemoryResourceBroker implements ResourceBroker {
     return expired;
   }
 
+  setAdmissionEnabled(enabled: boolean, reason?: string): void {
+    this.admissionEnabled = enabled;
+    this.admissionPauseReason = enabled ? undefined : reason?.trim() || "Resource admission is paused.";
+  }
+
+  isAdmissionEnabled(): boolean {
+    return this.admissionEnabled;
+  }
+
+  getAdmissionPauseReason(): string | undefined {
+    return this.admissionPauseReason;
+  }
+
   private reject(request: ResourceRequest, reason: string, queueOnFailure: boolean): ResourceAdmission {
     let queued = false;
-    if (queueOnFailure && this.states.has(request.resourceId)) {
+    if (queueOnFailure && this.admissionEnabled && this.states.has(request.resourceId)) {
       const existing = this.pending.get(request.id);
       this.pending.set(request.id, {
         request: structuredClone(request),

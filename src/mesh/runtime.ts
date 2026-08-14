@@ -17,7 +17,7 @@ import { MeshOperations } from "./operations";
 import { InMemoryPermissionService } from "./permissionService";
 import type { MeshPersistence, MeshSnapshot } from "./persistence";
 import { createDefaultMeshPersistence } from "./persistence";
-import { InMemoryResourceBroker } from "./resourceBroker";
+import { InMemoryResourceBroker, type ResourceQueueEntry } from "./resourceBroker";
 import { ServiceLifecycleManager } from "./serviceLifecycle";
 import { defaultFoundryServices, ServiceRegistry } from "./serviceRegistry";
 import { registerServiceTools } from "./serviceTools";
@@ -86,12 +86,15 @@ export class FoundryMeshRuntime {
     return Boolean(this.safeModeReason);
   }
 
-  enterSafeMode(reason: string): void {
+  enterSafeMode(reason: string): ResourceQueueEntry[] {
     this.safeModeReason = reason.trim() || "Safe Mode entered by human authority.";
+    this.resources.setAdmissionEnabled(false, `Safe Mode: ${this.safeModeReason}`);
+    return this.resources.cancelAllPending();
   }
 
   exitSafeMode(): void {
     this.safeModeReason = undefined;
+    this.resources.setAdmissionEnabled(true);
   }
 
   async save(): Promise<void> {
@@ -145,6 +148,10 @@ export class FoundryMeshRuntime {
 
     if (snapshot.health.state === "safe-mode") {
       this.safeModeReason = snapshot.health.safeModeReason ?? "Safe Mode restored from persistent state.";
+      this.resources.setAdmissionEnabled(false, `Safe Mode: ${this.safeModeReason}`);
+      this.resources.cancelAllPending();
+    } else {
+      this.resources.setAdmissionEnabled(true);
     }
   }
 

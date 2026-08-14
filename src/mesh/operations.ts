@@ -1,5 +1,6 @@
 import { MeshEvents } from "./events";
 import { createFoundryEvent } from "./eventBus";
+import type { ResourceAdmission } from "./resourceBroker";
 import type { FoundryMeshRuntime } from "./runtime";
 import type {
   Checkpoint,
@@ -30,12 +31,23 @@ export class MeshOperations {
     const previous = this.runtime.workers.get(status.workerId)?.status;
     this.runtime.workers.updateStatus(status);
 
+    const transitionEvent = eventForWorkerTransition(previous, status);
+    const containment =
+      transitionEvent === MeshEvents.workerFailed
+        ? {
+            canceledPendingRequests: this.runtime.resources.cancelPendingForWorker(status.workerId),
+            heldLeases: this.runtime.resources.listWorkerLeases(status.workerId),
+            leasePolicy:
+              "Active leases remain reserved after worker failure until explicit release or expiry, preventing accidental double allocation.",
+          }
+        : undefined;
+
     await this.runtime.events.publish(
       createFoundryEvent({
-        type: eventForWorkerTransition(previous, status),
+        type: transitionEvent,
         sourceWorkerId: status.workerId,
         subjectId: status.workerId,
-        payload: { previous, current: status },
+        payload: { previous, current: status, containment },
       }),
     );
     await this.runtime.save();
@@ -56,17 +68,10 @@ export class MeshOperations {
   }
 
   async requestResource(request: ResourceRequest): Promise<ResourceLease | null> {
-    const lease = this.runtime.resources.request(request);
-    await this.runtime.events.publish(
-      createFoundryEvent({
-        type: lease ? MeshEvents.resourceLeaseGranted : MeshEvents.resourceLeaseDenied,
-        sourceWorkerId: request.requesterWorkerId,
-        subjectId: request.resourceId,
-        payload: { request, lease },
-      }),
-    );
+    const admission = this.runtime.resources.admit(request, true);
+    await this.publishResourceAdmission(admission);
     await this.runtime.save();
-    return lease;
+    return admission.lease ?? null;
   }
 
   async releaseResource(leaseId: string, sourceWorkerId = "foundry-core"): Promise<void> {
@@ -80,6 +85,14 @@ export class MeshOperations {
         payload: { leaseId, lease },
       }),
     );
+
+    if (lease && this.runtime.resources.isAdmissionEnabled()) {
+      const newlyGranted = this.runtime.resources.drainPending(lease.resourceId);
+      for (const admission of newlyGranted) {
+        await this.publishResourceAdmission(admission);
+      }
+    }
+
     await this.runtime.save();
   }
 
@@ -97,12 +110,17 @@ export class MeshOperations {
   }
 
   async enterSafeMode(reason: string, sourceWorkerId = "foundry-core"): Promise<void> {
-    this.runtime.enterSafeMode(reason);
+    const canceledPendingRequests = this.runtime.enterSafeMode(reason);
     await this.runtime.events.publish(
       createFoundryEvent({
         type: MeshEvents.systemSafeModeEntered,
         sourceWorkerId,
-        payload: { reason: this.runtime.getSystemHealth().safeModeReason },
+        payload: {
+          reason: this.runtime.getSystemHealth().safeModeReason,
+          canceledPendingRequests,
+          activeLeasesHeld: this.runtime.resources.listActiveLeases(),
+          resourceAdmissionEnabled: this.runtime.resources.isAdmissionEnabled(),
+        },
       }),
     );
     await this.runtime.save();
@@ -115,10 +133,25 @@ export class MeshOperations {
       createFoundryEvent({
         type: MeshEvents.systemSafeModeExited,
         sourceWorkerId,
-        payload: { previousReason },
+        payload: {
+          previousReason,
+          resourceAdmissionEnabled: this.runtime.resources.isAdmissionEnabled(),
+          note: "Canceled Safe Mode resource requests are not replayed automatically.",
+        },
       }),
     );
     await this.runtime.save();
+  }
+
+  private async publishResourceAdmission(admission: ResourceAdmission): Promise<void> {
+    await this.runtime.events.publish(
+      createFoundryEvent({
+        type: admission.granted ? MeshEvents.resourceLeaseGranted : MeshEvents.resourceLeaseDenied,
+        sourceWorkerId: admission.request.requesterWorkerId,
+        subjectId: admission.request.resourceId,
+        payload: admission,
+      }),
+    );
   }
 }
 
