@@ -43,6 +43,49 @@ export interface LocalServiceControlConfig {
   owner?: string;
 }
 
+export class ProductionStewardNativeAdapter implements ManagedServiceAdapter {
+  constructor(private readonly runtime: FoundryMeshRuntime) {}
+
+  validate(): string[] {
+    const domain = this.runtime.services.get("foundry-domain");
+    if (!this.runtime.domain.isRegistered()) return ["Foundry domain services are not registered."];
+    if (!domain || domain.commissioningState !== "active" || domain.runtimeState !== "online") {
+      return ["Production Steward requires active Foundry Domain Services."];
+    }
+    return [];
+  }
+
+  async start(service: ServiceDescriptor): Promise<void> {
+    const result = await this.probe(service);
+    if (!result.online) throw new Error(result.detail ?? "Production Steward readiness probe failed.");
+  }
+
+  async stop(): Promise<void> {
+    // Native deterministic worker; lifecycle controls whether Steward behavior may execute.
+  }
+
+  async restart(service: ServiceDescriptor): Promise<void> {
+    await this.start(service);
+  }
+
+  async probe(): Promise<{ online: boolean; detail?: string }> {
+    const issues = this.validate();
+    if (issues.length > 0) return { online: false, detail: issues.join(" ") };
+    try {
+      const brief = await this.runtime.productionSteward.inspect();
+      const action = brief.smallestMeaningfulAction
+        ? ` next=${brief.smallestMeaningfulAction}`
+        : " no active next action";
+      return {
+        online: true,
+        detail: `Steward executive layer ready: mode=${brief.mode}; parked=${brief.parkedThoughtCount};${action}.`,
+      };
+    } catch (error) {
+      return { online: false, detail: error instanceof Error ? error.message : String(error) };
+    }
+  }
+}
+
 export class WatcherNativeAdapter implements ManagedServiceAdapter {
   validate(): string[] {
     return isTauriRuntime()
@@ -100,9 +143,7 @@ export class TauriManagedProcessAdapter implements ManagedServiceAdapter {
     }
 
     if (config.externallyManaged) {
-      if (!probeUrl) {
-        issues.push("Externally managed service requires a loopback probe URL.");
-      }
+      if (!probeUrl) issues.push("Externally managed service requires a loopback probe URL.");
     } else if (!config.executable?.trim()) {
       issues.push("Managed service executable is not configured in metadata.localControl.executable.");
     }
@@ -134,9 +175,7 @@ export class TauriManagedProcessAdapter implements ManagedServiceAdapter {
 
     if (probeUrl) {
       const online = await probeUrlOnline(probeUrl, config.timeoutMs);
-      if (!online) {
-        throw new Error(`Managed service ${service.id} started a process but did not pass its loopback health probe.`);
-      }
+      if (!online) throw new Error(`Managed service ${service.id} started a process but did not pass its loopback health probe.`);
     }
   }
 
@@ -146,9 +185,7 @@ export class TauriManagedProcessAdapter implements ManagedServiceAdapter {
       const owner = config.owner?.trim() || "external service manager";
       throw new Error(`Service ${service.id} is externally managed by ${owner}; direct process stop is intentionally not owned by this adapter.`);
     }
-    if (!isTauriRuntime()) {
-      throw new Error(`Cannot stop managed service ${service.id} outside the Tauri desktop runtime.`);
-    }
+    if (!isTauriRuntime()) throw new Error(`Cannot stop managed service ${service.id} outside the Tauri desktop runtime.`);
     await invoke<ManagedProcessStatus>("managed_service_stop", { serviceId: service.id });
   }
 
@@ -163,9 +200,7 @@ export class TauriManagedProcessAdapter implements ManagedServiceAdapter {
   }
 
   async probe(service: ServiceDescriptor): Promise<{ online: boolean; detail?: string }> {
-    if (!isTauriRuntime()) {
-      return { online: false, detail: "Tauri desktop runtime is unavailable." };
-    }
+    if (!isTauriRuntime()) return { online: false, detail: "Tauri desktop runtime is unavailable." };
 
     const config = readControlConfig(service);
     const probeUrl = resolveProbeUrl(service, config);
@@ -187,9 +222,7 @@ export class TauriManagedProcessAdapter implements ManagedServiceAdapter {
       }
     }
 
-    if (config.externallyManaged) {
-      return { online: false, detail: "Externally managed service has no configured loopback probe." };
-    }
+    if (config.externallyManaged) return { online: false, detail: "Externally managed service has no configured loopback probe." };
 
     try {
       const status = await invoke<ManagedProcessStatus>("managed_service_status", { serviceId: service.id });
@@ -212,19 +245,9 @@ export class TauriManagedProcessAdapter implements ManagedServiceAdapter {
 
 export class UnboundServiceAdapter implements ManagedServiceAdapter {
   constructor(private readonly reason = "Runtime implementation has not been bound to this staged service yet.") {}
-
-  validate(): string[] {
-    return [this.reason];
-  }
-
-  async start(service: ServiceDescriptor): Promise<void> {
-    throw new Error(`Service ${service.id} cannot start: ${this.reason}`);
-  }
-
-  async stop(service: ServiceDescriptor): Promise<void> {
-    throw new Error(`Service ${service.id} cannot stop through the Mesh: ${this.reason}`);
-  }
-
+  validate(): string[] { return [this.reason]; }
+  async start(service: ServiceDescriptor): Promise<void> { throw new Error(`Service ${service.id} cannot start: ${this.reason}`); }
+  async stop(service: ServiceDescriptor): Promise<void> { throw new Error(`Service ${service.id} cannot stop through the Mesh: ${this.reason}`); }
   async probe(service: ServiceDescriptor): Promise<{ online: boolean; detail?: string }> {
     return { online: false, detail: `Service ${service.id}: ${this.reason}` };
   }
@@ -236,6 +259,11 @@ export function registerStagedServiceAdapters(runtime: FoundryMeshRuntime): void
 
     if (service.id === "watcher-service") {
       runtime.serviceLifecycle.registerAdapter(service.id, new WatcherNativeAdapter());
+      continue;
+    }
+
+    if (service.id === "production-steward-service") {
+      runtime.serviceLifecycle.registerAdapter(service.id, new ProductionStewardNativeAdapter(runtime));
       continue;
     }
 
