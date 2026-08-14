@@ -18,6 +18,7 @@ import { MeshOperations } from "./operations";
 import { InMemoryPermissionService } from "./permissionService";
 import type { MeshPersistence, MeshSnapshot } from "./persistence";
 import { createDefaultMeshPersistence } from "./persistence";
+import { ProductionSteward } from "./productionSteward";
 import { InMemoryResourceBroker, type ResourceQueueEntry } from "./resourceBroker";
 import { ServiceLifecycleManager } from "./serviceLifecycle";
 import { defaultFoundryServices, ServiceRegistry } from "./serviceRegistry";
@@ -45,6 +46,7 @@ export class FoundryMeshRuntime {
   readonly serviceLifecycle: ServiceLifecycleManager;
   readonly diagnostics: CommissioningDiagnostics;
   readonly domainState: FoundryDomainStateStore;
+  readonly productionSteward: ProductionSteward;
 
   private safeModeReason?: string;
   private initialized = false;
@@ -56,6 +58,7 @@ export class FoundryMeshRuntime {
       persist: () => this.save(),
     });
     this.domain.register(this.domainState.services);
+    this.productionSteward = new ProductionSteward(this);
     this.coordinator = new MeshActionCoordinator(this);
     this.operations = new MeshOperations(this);
     this.tools = new FoundryToolGateway(this);
