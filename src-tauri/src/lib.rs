@@ -48,6 +48,72 @@ async fn local_http_get(url: String, timeout_ms: Option<u64>) -> Result<LocalHtt
         .map_err(|error| format!("Local service probe task failed: {error}"))?
 }
 
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn watcher_system_snapshot() -> Result<serde_json::Value, String> {
+    let script = r#"
+$ErrorActionPreference = 'Stop'
+$cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+$os = Get-CimInstance Win32_OperatingSystem
+$disks = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object {
+  [pscustomobject]@{
+    name = [string]$_.DeviceID
+    totalBytes = [uint64]($_.Size)
+    freeBytes = [uint64]($_.FreeSpace)
+  }
+})
+$gpu = Get-CimInstance Win32_VideoController | Where-Object { $_.Name -notmatch 'Microsoft Basic' } | Select-Object -First 1
+$totalMemoryBytes = [uint64]$os.TotalVisibleMemorySize * 1024
+$availableMemoryBytes = [uint64]$os.FreePhysicalMemory * 1024
+$gpuObject = $null
+if ($null -ne $gpu) {
+  $gpuObject = [pscustomobject]@{
+    name = [string]$gpu.Name
+    adapterRamBytes = if ($null -ne $gpu.AdapterRAM) { [uint64]$gpu.AdapterRAM } else { $null }
+    utilizationPercent = $null
+    temperatureC = $null
+    provider = 'windows-cim'
+    detail = 'Adapter identity available. AMD utilization and temperature provider not yet bound.'
+  }
+}
+[pscustomobject]@{
+  sampledAt = (Get-Date).ToUniversalTime().ToString('o')
+  cpuUsagePercent = if ($null -ne $cpu.LoadPercentage) { [double]$cpu.LoadPercentage } else { $null }
+  totalMemoryBytes = $totalMemoryBytes
+  availableMemoryBytes = $availableMemoryBytes
+  usedMemoryBytes = $totalMemoryBytes - $availableMemoryBytes
+  processCount = @(Get-Process).Count
+  disks = $disks
+  gpu = $gpuObject
+} | ConvertTo-Json -Depth 6 -Compress
+"#;
+
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .output()
+        .map_err(|error| format!("Failed to launch Windows telemetry provider: {error}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(if stderr.is_empty() {
+            "Windows telemetry provider returned a failure status.".to_string()
+        } else {
+            format!("Windows telemetry provider failed: {stderr}")
+        });
+    }
+
+    let stdout = String::from_utf8(output.stdout)
+        .map_err(|error| format!("Windows telemetry provider returned invalid UTF-8: {error}"))?;
+    serde_json::from_str(stdout.trim())
+        .map_err(|error| format!("Windows telemetry provider returned invalid JSON: {error}"))
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn watcher_system_snapshot() -> Result<serde_json::Value, String> {
+    Err("Watcher native host telemetry is currently implemented for Windows Foundry workstations.".to_string())
+}
+
 #[tauri::command]
 fn mesh_load_snapshot(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let path = mesh_file_path(&app, SNAPSHOT_FILE)?;
@@ -272,6 +338,7 @@ pub fn run() {
             open_path,
             launch_external_tool,
             local_http_get,
+            watcher_system_snapshot,
             managed_service_start,
             managed_service_stop,
             managed_service_status,
