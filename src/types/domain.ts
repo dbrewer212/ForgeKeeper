@@ -11,7 +11,7 @@ export type PrinterStatus = "Available" | "Printing" | "Maintenance" | "Offline"
 export type ProductTab = "overview" | "stls" | "concepts" | "variants" | "orders";
 export type AssetStatus = "Planned" | "Linked" | "Needs Update" | "Archived";
 export type SlicerKey = "orca" | "anycubic";
-export type ViewKey = "dashboard" | "catalog" | "collections" | "releases" | "orders" | "filament" | "printers" | "planning" | "reports" | "settings";
+export type ViewKey = "dashboard" | "catalog" | "collections" | "releases" | "orders" | "filament" | "printers" | "planning" | "reports" | "settings" | "commissioning";
 export type QuickActionKey = "newProduct" | "newOrder" | "newFilament" | "newPrinter";
 
 export type RealmVariant =

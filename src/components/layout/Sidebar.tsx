@@ -23,12 +23,12 @@ export function Sidebar({ state }: { state: any }) {
       {navItem("orders", "Orders")}
       {navItem("filament", "Filament")}
       {navItem("printers", "Printers")}
-
-      {/* ✅ NEW */}
       {navItem("planning", "Planning")}
-
       {navItem("reports", "Reports")}
       {navItem("settings", "Settings")}
+
+      <div className="my-4 border-t border-gray-800" />
+      {navItem("commissioning", "Commissioning")}
     </aside>
   );
 }
