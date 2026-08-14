@@ -19,6 +19,7 @@ export * from "./coreTools";
 export * from "./domainServices";
 export * from "./domainRegistry";
 export * from "./domainState";
+export * from "./domainTools";
 export * from "./commissioning";
 export * from "./commissioningDiagnostics";
 export * from "./diagnosticTools";
