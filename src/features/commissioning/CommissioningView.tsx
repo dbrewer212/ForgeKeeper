@@ -46,6 +46,10 @@ export function CommissioningView() {
   const [openClawHealthPath, setOpenClawHealthPath] = useState("/healthz");
   const [openClawMessage, setOpenClawMessage] = useState<string>();
 
+  const [odysseusEndpoint, setOdysseusEndpoint] = useState("http://127.0.0.1:7000");
+  const [odysseusHealthPath, setOdysseusHealthPath] = useState("/");
+  const [odysseusMessage, setOdysseusMessage] = useState<string>();
+
   async function refreshReadiness() {
     setBusy(true);
     setError(undefined);
@@ -106,8 +110,10 @@ export function CommissioningView() {
       const rawControl = service.metadata?.localControl;
       const existingControl = rawControl && typeof rawControl === "object" ? rawControl as Record<string, unknown> : {};
       const endpoint = request.endpoint.trim().replace(/\/$/, "");
-      const healthPath = request.healthPath.trim() || "/healthz";
-      const probeUrl = `${endpoint}/${healthPath.replace(/^\//, "")}`;
+      const healthPath = request.healthPath.trim() || "/";
+      const probeUrl = healthPath === "/"
+        ? `${endpoint}/`
+        : `${endpoint}/${healthPath.replace(/^\//, "")}`;
 
       runtime.services.update(request.serviceId, {
         endpoint,
@@ -240,6 +246,12 @@ export function CommissioningView() {
       if (openClaw.endpoint) setOpenClawEndpoint(openClaw.endpoint);
       if (openClaw.healthPath) setOpenClawHealthPath(openClaw.healthPath);
     }
+
+    const odysseus = runtime.services.get("odysseus-service");
+    if (odysseus) {
+      if (odysseus.endpoint) setOdysseusEndpoint(odysseus.endpoint);
+      if (odysseus.healthPath) setOdysseusHealthPath(odysseus.healthPath);
+    }
   }
 
   useEffect(() => {
@@ -324,6 +336,31 @@ export function CommissioningView() {
           <button type="button" disabled={busy} onClick={() => void commissionService("openclaw-service", "openclaw", "OpenClaw", setOpenClawMessage)} className="rounded-lg bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">Commission OpenClaw</button>
         </div>
         {openClawMessage && <div className="mt-4 rounded-lg border border-orange-900 bg-orange-950/30 px-4 py-3 text-sm text-orange-300">{openClawMessage}</div>}
+      </div>
+
+      <div className="rounded-xl border border-sky-900/60 bg-gray-950 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-[0.2em] text-sky-500">Third external subsystem</div>
+            <h2 className="mt-1 text-xl font-semibold text-sky-300">Odysseus Workspace</h2>
+            <p className="mt-1 text-sm text-gray-400">Native Windows workspace process remains externally owned; Foundry owns health, state, governance, and commissioning.</p>
+          </div>
+          <div className="text-xs text-gray-500">Expected endpoint: localhost:7000</div>
+        </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          <label className="text-xs text-gray-400">Endpoint
+            <input value={odysseusEndpoint} onChange={(event) => setOdysseusEndpoint(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none focus:border-sky-700" />
+          </label>
+          <label className="text-xs text-gray-400">Health path
+            <input value={odysseusHealthPath} onChange={(event) => setOdysseusHealthPath(event.target.value)} className="mt-1 w-full rounded-lg border border-gray-800 bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none focus:border-sky-700" />
+          </label>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button type="button" disabled={busy} onClick={() => void bindService({ serviceId: "odysseus-service", endpoint: odysseusEndpoint, healthPath: odysseusHealthPath, externallyManaged: true, owner: "Odysseus native Windows launcher" }, setOdysseusMessage)} className="rounded-lg bg-gray-800 px-4 py-2 text-sm hover:bg-gray-700 disabled:opacity-50">Bind Odysseus</button>
+          <button type="button" disabled={busy} onClick={() => void probeService("odysseus-service", "Odysseus", setOdysseusMessage)} className="rounded-lg bg-sky-900 px-4 py-2 text-sm text-sky-100 hover:bg-sky-800 disabled:opacity-50">Probe Odysseus</button>
+          <button type="button" disabled={busy} onClick={() => void commissionService("odysseus-service", "odysseus", "Odysseus", setOdysseusMessage)} className="rounded-lg bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50">Commission Odysseus</button>
+        </div>
+        {odysseusMessage && <div className="mt-4 rounded-lg border border-sky-900 bg-sky-950/30 px-4 py-3 text-sm text-sky-300">{odysseusMessage}</div>}
       </div>
 
       {verification && (
