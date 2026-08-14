@@ -361,7 +361,7 @@ export class FoundryDomainStateStore {
     previous: unknown,
     current: unknown,
     context: DomainMutationContext,
-    eventType = MeshEvents.domainRecordChanged,
+    eventType: string = MeshEvents.domainRecordChanged,
   ): Promise<void> {
     await this.hooks.publish(
       createFoundryEvent({
