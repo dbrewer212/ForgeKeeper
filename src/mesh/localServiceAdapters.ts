@@ -55,8 +55,8 @@ export class ProductionStewardNativeAdapter implements ManagedServiceAdapter {
     return [];
   }
 
-  async start(service: ServiceDescriptor): Promise<void> {
-    const result = await this.probe(service);
+  async start(_service: ServiceDescriptor): Promise<void> {
+    const result = await this.probe();
     if (!result.online) throw new Error(result.detail ?? "Production Steward readiness probe failed.");
   }
 
@@ -93,8 +93,8 @@ export class WatcherNativeAdapter implements ManagedServiceAdapter {
       : ["Watcher host telemetry requires the Tauri desktop Foundry runtime."];
   }
 
-  async start(service: ServiceDescriptor): Promise<void> {
-    const result = await this.probe(service);
+  async start(_service: ServiceDescriptor): Promise<void> {
+    const result = await this.probe();
     if (!result.online) throw new Error(result.detail ?? "Watcher host telemetry probe failed.");
   }
 
