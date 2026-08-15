@@ -68,7 +68,7 @@ async function loadWorkbench(state: ForgekeeperState, force: boolean): Promise<v
 }
 
 export function invalidateWorkbenchRuntime() {
-  sharedSnapshot = { ...sharedSnapshot, ready: false };
+  publish({ ...sharedSnapshot, ready: false });
 }
 
 export function useWorkbenchVault(state: ForgekeeperState): WorkbenchVaultRuntime {
