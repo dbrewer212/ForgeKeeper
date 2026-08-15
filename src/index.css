@@ -62,6 +62,25 @@ body::before {
   scrollbar-width: thin;
 }
 
+/* Compatibility bridge for pre-theme hard-coded panel colors. These selectors
+   intentionally warm surviving active surfaces while they are gradually moved
+   onto shared Foundry tokens/components. */
+.bg-\[\#0d131c\] {
+  background-color: rgba(21, 18, 15, 0.96) !important;
+}
+
+.bg-\[\#111722\] {
+  background-color: rgba(25, 22, 19, 0.94) !important;
+}
+
+.bg-\[\#0b1119\] {
+  background-color: rgba(13, 11, 9, 0.96) !important;
+}
+
+.bg-\[\#080c13\] {
+  background-color: rgba(8, 7, 6, 0.98) !important;
+}
+
 button,
 input,
 textarea,
