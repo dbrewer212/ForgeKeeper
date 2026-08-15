@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useForgekeeperState } from "./state/useForgekeeperState";
+import type { AppData } from "./types/domain";
+import { ensureWorkbenchBootstrap } from "./workbench/bootstrap";
 
 import { Sidebar } from "./components/layout/Sidebar";
 import { DashboardView } from "./features/dashboard/DashboardView";
@@ -39,6 +41,13 @@ function ForgekeeperWorkspace() {
       console.error("Bastion auto-open failed:", cause);
     });
   }, []);
+
+  useEffect(() => {
+    if (!state.storageReady || state.storageStatus !== "SQLite") return;
+    void ensureWorkbenchBootstrap(state as unknown as AppData)
+      .then((result) => console.info("Workbench bootstrap", result))
+      .catch((cause) => console.error("Workbench bootstrap failed:", cause));
+  }, [state.storageReady, state.storageStatus]);
 
   const renderView = () => {
     switch (state.view as string) {
