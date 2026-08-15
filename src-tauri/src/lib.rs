@@ -2,6 +2,7 @@ mod bastion;
 mod forgepack;
 mod managed_files;
 mod managed_services;
+mod provider_staging;
 mod providers;
 mod three_mf;
 mod workbench_files;
@@ -15,6 +16,7 @@ use managed_files::workbench_store_file;
 use managed_services::{
     managed_service_start, managed_service_status, managed_service_stop, ManagedProcesses,
 };
+use provider_staging::{workbench_clear_provider_staging, workbench_stage_generation_asset};
 use providers::{
     download_generation_asset, get_generation_status, submit_meshy_image_generation,
     submit_printpal_image_generation, test_provider_connections,
@@ -386,6 +388,8 @@ pub fn run() {
             workbench_store_file,
             workbench_export_forgepack,
             workbench_import_forgepack,
+            workbench_stage_generation_asset,
+            workbench_clear_provider_staging,
             test_provider_connections,
             submit_meshy_image_generation,
             submit_printpal_image_generation,
