@@ -13,6 +13,7 @@ import type {
 import { HumanAuthority } from "../mesh/domainServices";
 import { getFoundryMeshRuntime } from "../mesh/runtime";
 import { WORKBENCH_EVENT_SCHEMA_VERSION, type WorkbenchEvent, type WorkbenchEventType } from "./events";
+import { exportWorkbenchForgepack, importWorkbenchForgepack } from "./forgepack";
 import type {
   CreateAssemblyInput,
   CreateAssetInput,
@@ -238,12 +239,37 @@ export class WorkbenchService implements WorkbenchFmi {
     return value;
   }
 
-  async exportForgepack(_assetId: WorkbenchId, _options?: Record<string, unknown>): Promise<{ outputPath: string }> {
-    throw new Error("Workbench Forgepack export is defined by FMI but is not commissioned until the managed-file storage layer is active.");
+  async exportForgepack(assetId: WorkbenchId, options?: Record<string, unknown>): Promise<{ outputPath: string }> {
+    const result = await exportWorkbenchForgepack(this.repository, assetId, typeof options?.outputName === "string" ? options.outputName : undefined);
+    const state = await this.repository.loadState();
+    const asset = state.assets.find((item) => item.assetId === assetId);
+    await this.emit("forgepack.exported", {
+      outputPath: result.outputPath,
+      fileCount: result.fileCount,
+      totalBytes: result.totalBytes,
+    }, {
+      assetId,
+      revisionId: asset?.currentRevisionId,
+      projectId: asset?.owningProjectId,
+    });
+    return { outputPath: result.outputPath };
   }
 
-  async importForgepack(_path: string): Promise<{ assetIds: WorkbenchId[] }> {
-    throw new Error("Workbench Forgepack import is defined by FMI but is not commissioned until Intake and managed-file validation are active.");
+  async importForgepack(path: string): Promise<{ assetIds: WorkbenchId[] }> {
+    const result = await importWorkbenchForgepack(this.repository, path);
+    const state = await this.repository.loadState();
+    const root = state.assets.find((item) => item.assetId === result.rootAssetId);
+    await this.emit("forgepack.imported", {
+      path,
+      assetIds: result.assetIds,
+      importedFileCount: result.importedFileCount,
+      reusedFileCount: result.reusedFileCount,
+    }, {
+      assetId: result.rootAssetId,
+      revisionId: root?.currentRevisionId,
+      projectId: root?.owningProjectId,
+    });
+    return { assetIds: result.assetIds };
   }
 }
 
