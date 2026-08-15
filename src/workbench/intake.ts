@@ -1,6 +1,7 @@
 import { inspectLocalPaths } from "../lib/recovery";
 import type { AssetProvenance, FileRole, FoundryAsset } from "./contracts";
 import { WORKBENCH_EVENT_SCHEMA_VERSION, type WorkbenchEvent } from "./events";
+import { storeManagedWorkbenchFile } from "./managedFiles";
 import { WorkbenchRepository } from "./repository";
 import { getWorkbenchService } from "./service";
 
@@ -20,6 +21,8 @@ export type IntakeResult = {
   sha256: string;
   sizeBytes: number;
   duplicateFileReused: boolean;
+  managedBlobReused: boolean;
+  managedPath: string;
   inspectionJobId: string;
 };
 
@@ -33,9 +36,9 @@ function eventId(prefix: string): string {
 }
 
 function extension(path: string): string {
-  const fileName = path.replace(/\\/g, "/").split("/").pop() ?? path;
-  const index = fileName.lastIndexOf(".");
-  return index >= 0 ? fileName.slice(index + 1).toLowerCase() : "";
+  const name = fileName(path);
+  const index = name.lastIndexOf(".");
+  return index >= 0 ? name.slice(index + 1).toLowerCase() : "";
 }
 
 function fileName(path: string): string {
@@ -103,19 +106,34 @@ export class WorkbenchIntakeService {
     if (!inspected.isFile) throw new Error(`Intake path is not a file: ${path}`);
     if (!inspected.sha256 || !/^[a-f0-9]{64}$/i.test(inspected.sha256)) throw new Error("File inspection did not return a valid SHA-256 fingerprint.");
 
-    const prior = state.files.find((item) => item.sha256.toLowerCase() === inspected.sha256!.toLowerCase());
+    const digest = inspected.sha256.toLowerCase();
+    const prior = state.files.find((item) => item.sha256.toLowerCase() === digest);
+    const managed = await storeManagedWorkbenchFile(path, digest);
+    if (managed.sha256.toLowerCase() !== digest) {
+      throw new Error("Managed-file storage returned a checksum that does not match Intake inspection.");
+    }
+
     const registered = await this.service.registerFile({
-      sha256: inspected.sha256,
+      sha256: digest,
       fileName: fileName(path),
-      storagePath: path,
+      storagePath: managed.managedPath,
       format,
       mimeType: mimeFor(format),
-      sizeBytes: inspected.sizeBytes ?? 0,
+      sizeBytes: managed.sizeBytes,
       role: request.role ?? "geometry",
       source: { ...request.provenance, importedAt: request.provenance.importedAt ?? new Date().toISOString() },
-      ownedByFoundry: request.provenance.sourceType !== "download",
+      ownedByFoundry: true,
       license: request.provenance.license,
     });
+
+    if (registered.storagePath !== managed.managedPath || !registered.ownedByFoundry) {
+      await this.repository.upsertFile({
+        ...registered,
+        storagePath: managed.managedPath,
+        sizeBytes: managed.sizeBytes,
+        ownedByFoundry: true,
+      });
+    }
 
     const parentRevisionId = asset.currentRevisionId;
     const revision = await this.service.createRevision({
@@ -145,8 +163,10 @@ export class WorkbenchIntakeService {
 
     await appendIntakeEvent(this.repository, "asset.intake.completed", asset, correlationId, {
       fileId: registered.fileId,
-      sha256: registered.sha256,
+      sha256: digest,
       duplicateFileReused: Boolean(prior),
+      managedBlobReused: managed.reusedExisting,
+      managedPath: managed.managedPath,
       inspectionJobId: inspection.jobId,
     }, revision.revisionId);
 
@@ -154,9 +174,11 @@ export class WorkbenchIntakeService {
       assetId: asset.assetId,
       revisionId: revision.revisionId,
       fileId: registered.fileId,
-      sha256: registered.sha256,
-      sizeBytes: inspected.sizeBytes ?? 0,
+      sha256: digest,
+      sizeBytes: managed.sizeBytes,
       duplicateFileReused: Boolean(prior),
+      managedBlobReused: managed.reusedExisting,
+      managedPath: managed.managedPath,
       inspectionJobId: inspection.jobId,
     };
   }
