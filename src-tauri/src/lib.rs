@@ -1,4 +1,5 @@
 mod bastion;
+mod managed_files;
 mod managed_services;
 mod providers;
 mod workbench_files;
@@ -7,6 +8,7 @@ use bastion::{
     bastion_close_window, bastion_launch_mode, bastion_open_window, bastion_set_startup,
     bastion_startup_status, open_bastion_window,
 };
+use managed_files::workbench_store_file;
 use managed_services::{
     managed_service_start, managed_service_status, managed_service_stop, ManagedProcesses,
 };
@@ -361,6 +363,7 @@ pub fn run() {
             watcher_system_snapshot,
             inspect_local_paths,
             inspect_geometry,
+            workbench_store_file,
             test_provider_connections,
             submit_meshy_image_generation,
             submit_printpal_image_generation,
