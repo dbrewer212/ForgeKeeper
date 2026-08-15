@@ -6,8 +6,9 @@ import { ModelInspectorStation } from "./ModelInspectorStation";
 import { BuildBenchStation } from "./BuildBenchStation";
 import { VariantAssemblyStation } from "./VariantAssemblyStation";
 import { ProductionGateStation } from "./ProductionGateStation";
+import { ForgepackStation } from "./ForgepackStation";
 
-type WorkbenchSurface = "vault" | "intake" | "inspector" | "build-bench" | "variants-assemblies" | "production-gate";
+type WorkbenchSurface = "vault" | "intake" | "inspector" | "build-bench" | "variants-assemblies" | "production-gate" | "forgepack";
 
 export function WorkbenchDesignLibraryView({ state }: { state: ForgekeeperState }) {
   const [surface, setSurface] = useState<WorkbenchSurface>("vault");
@@ -23,6 +24,7 @@ export function WorkbenchDesignLibraryView({ state }: { state: ForgekeeperState 
             <button type="button" onClick={() => setSurface("build-bench")} className={`min-h-[44px] rounded-xl px-4 py-2 text-sm font-semibold ${surface === "build-bench" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>Build Bench</button>
             <button type="button" onClick={() => setSurface("variants-assemblies")} className={`min-h-[44px] rounded-xl px-4 py-2 text-sm font-semibold ${surface === "variants-assemblies" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>Variants & Assemblies</button>
             <button type="button" onClick={() => setSurface("production-gate")} className={`min-h-[44px] rounded-xl px-4 py-2 text-sm font-semibold ${surface === "production-gate" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>Production Gate</button>
+            <button type="button" onClick={() => setSurface("forgepack")} className={`min-h-[44px] rounded-xl px-4 py-2 text-sm font-semibold ${surface === "forgepack" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>Forgepack</button>
           </div>
           <div className="text-xs text-slate-500">Workbench Domain · Shared Foundry identity</div>
         </div>
@@ -34,6 +36,7 @@ export function WorkbenchDesignLibraryView({ state }: { state: ForgekeeperState 
       {surface === "build-bench" ? <BuildBenchStation state={state} /> : null}
       {surface === "variants-assemblies" ? <VariantAssemblyStation state={state} /> : null}
       {surface === "production-gate" ? <ProductionGateStation state={state} /> : null}
+      {surface === "forgepack" ? <ForgepackStation state={state} /> : null}
     </div>
   );
 }
