@@ -15,21 +15,30 @@ import { PlanningView } from "./features/planning/PlanningView";
 import { CommissioningView } from "./features/commissioning/CommissioningView";
 import { BastionView } from "./features/bastion/BastionView";
 
+const bastionLauncherDefaults = { settings: {} };
+
 export default function App() {
-  const state = useForgekeeperState();
   const currentWindow = getCurrentWebviewWindow();
-  const isBastionWindow = currentWindow.label === "bastion";
+  if (currentWindow.label === "bastion") {
+    return (
+      <BastionView
+        state={bastionLauncherDefaults}
+        onExit={() => void invoke("bastion_close_window")}
+      />
+    );
+  }
+
+  return <ForgekeeperWorkspace />;
+}
+
+function ForgekeeperWorkspace() {
+  const state = useForgekeeperState();
 
   useEffect(() => {
-    if (isBastionWindow) return;
     void invoke("bastion_open_window").catch((cause) => {
       console.error("Bastion auto-open failed:", cause);
     });
-  }, [isBastionWindow]);
-
-  if (isBastionWindow) {
-    return <BastionView state={state} onExit={() => void invoke("bastion_close_window")} />;
-  }
+  }, []);
 
   const renderView = () => {
     switch (state.view as string) {
