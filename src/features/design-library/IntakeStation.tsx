@@ -42,7 +42,7 @@ export function IntakeStation({ state }: { state: ForgekeeperState }) {
 
   async function register() {
     if (!selectedAssetId) {
-      setError("No Workbench asset is available. Create or migrate an asset before registering geometry.");
+      setError("No Workbench asset is available. Create or migrate an asset before registering a design file.");
       return;
     }
     setBusy(true);
@@ -80,14 +80,14 @@ export function IntakeStation({ state }: { state: ForgekeeperState }) {
         <div className="text-xs uppercase tracking-[0.24em] text-amber-400">Foundry Workbench</div>
         <h1 className="mt-1 text-2xl font-semibold text-slate-100">Intake Station</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-          Controlled registration of physical-design files. Intake fingerprints the actual local file, reuses identical content by SHA-256, records provenance, creates a revision, and queues inspection without granting production or canon approval.
+          Controlled registration of physical-design files. Intake fingerprints the actual local file, reuses identical content by SHA-256, records provenance, creates an exact revision, and transfers the bytes into Foundry-managed storage without granting production or canon approval.
         </p>
       </div>
 
       {runtime.error ? <Card title="Workbench Runtime"><div className="text-sm text-rose-300">{runtime.error}</div></Card> : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr),360px]">
-        <Card title="Register Geometry">
+        <Card title="Register Design File">
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Target Foundry asset">
               <Select value={selectedAssetId} onChange={(event) => setAssetId(event.target.value)}>
@@ -101,7 +101,7 @@ export function IntakeStation({ state }: { state: ForgekeeperState }) {
             </Field>
             <div className="md:col-span-2">
               <Field label="Local file path">
-                <Input value={filePath} onChange={(event) => setFilePath(event.target.value)} placeholder="C:\\Foundry\\Assets\\model.stl" />
+                <Input value={filePath} onChange={(event) => setFilePath(event.target.value)} placeholder="C:\\Foundry\\Assets\\model.3mf" />
               </Field>
             </div>
             <Field label="Source label"><Input value={sourceLabel} onChange={(event) => setSourceLabel(event.target.value)} placeholder="Optional human-readable source" /></Field>
@@ -114,15 +114,20 @@ export function IntakeStation({ state }: { state: ForgekeeperState }) {
             </div>
           </div>
 
+          <div className="mt-5 rounded-xl border border-white/10 bg-white/5 p-4 text-xs leading-5 text-slate-400">
+            <div><span className="font-semibold text-emerald-300">Manufacturing-inspectable:</span> 3MF, STL, OBJ — these queue deterministic Model Inspector analysis.</div>
+            <div className="mt-1"><span className="font-semibold text-amber-300">Managed source formats:</span> STEP/STP, GLB, GLTF — these are preserved with provenance but require a derived 3MF/STL/OBJ revision before manufacturing inspection.</div>
+          </div>
+
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-5">
-            <div className="text-xs text-slate-500">Supported: STL, 3MF, OBJ, STEP/STP, GLB, GLTF. Intake does not auto-approve manufacturing or canon.</div>
-            <Button onClick={() => void register()} disabled={busy || !runtime.ready || !selectedAssetId}>{busy ? "Inspecting & Registering…" : "Run Controlled Intake"}</Button>
+            <div className="text-xs text-slate-500">Intake never auto-approves manufacturing, production, or canon.</div>
+            <Button onClick={() => void register()} disabled={busy || !runtime.ready || !selectedAssetId}>{busy ? "Fingerprinting & Registering…" : "Run Controlled Intake"}</Button>
           </div>
 
           {error ? <div className="mt-4 rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-300">{error}</div> : null}
           {result ? (
             <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-emerald-200">
-              Intake complete. File <span className="font-mono">{result.fileId}</span> is attached to revision <span className="font-mono">{result.revisionId}</span>. {result.duplicateFileReused ? "Identical bytes were already known, so the existing FoundryFile identity was reused." : "A new SHA-256 FoundryFile identity was registered."} Inspector job <span className="font-mono">{result.inspectionJobId}</span> is queued.
+              Intake complete. File <span className="font-mono">{result.fileId}</span> is attached to revision <span className="font-mono">{result.revisionId}</span>. {result.duplicateFileReused ? "Identical bytes were already known, so the existing FoundryFile identity was reused." : "A new SHA-256 FoundryFile identity was registered."} {result.inspectionRequired && result.inspectionJobId ? <>Inspector job <span className="font-mono">{result.inspectionJobId}</span> is queued.</> : <>This revision is preserved as source material and needs a derived 3MF, STL, or OBJ manufacturing revision before deterministic inspection.</>}
             </div>
           ) : null}
         </Card>
@@ -143,7 +148,7 @@ export function IntakeStation({ state }: { state: ForgekeeperState }) {
           <Card title="Governance Boundary">
             <div className="space-y-3 text-sm leading-6 text-slate-400">
               <p>Registration proves which bytes the Foundry received and where they came from.</p>
-              <p>The resulting revision is marked <span className="text-amber-300">inspection-required</span> and manufacturing approval resets to <span className="text-amber-300">not-reviewed</span>.</p>
+              <p>Inspectable manufacturing formats reset manufacturing approval to <span className="text-amber-300">not-reviewed</span> and enter <span className="text-amber-300">inspection-required</span>. Source-only formats stay in development until an inspectable derivative exists.</p>
               <p>Canon authority remains separate. Intake cannot silently redefine a character, collection, product, or approved production master.</p>
             </div>
           </Card>
