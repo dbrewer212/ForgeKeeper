@@ -184,8 +184,55 @@ export class WorkbenchService implements WorkbenchFmi {
   }
 
   async recordPrintResult(input: RecordPrintResultInput): Promise<PrintRecord> {
+    const state = await this.repository.loadState();
+    const preparation = state.preparations.find((item) => item.preparationId === input.preparationId);
+    if (!preparation) throw new Error(`Print result references unknown preparation: ${input.preparationId}`);
+    if (preparation.assetId !== input.assetId || preparation.revisionId !== input.revisionId) {
+      throw new Error("Print result asset/revision does not match its preparation record.");
+    }
+    if (!preparation.productionJobId || preparation.productionJobId !== input.productionJobId) {
+      throw new Error("Print result production job does not match the submitted preparation.");
+    }
+    if (preparation.printerId && preparation.printerId !== input.printerId) {
+      throw new Error(`Print result printer ${input.printerId} does not match prepared printer ${preparation.printerId}.`);
+    }
+
+    const runtime = getFoundryMeshRuntime();
+    await runtime.initialize();
+    const productionItem = await runtime.domain.get().production.get(input.productionJobId);
+    if (!productionItem) throw new Error(`Print result references unknown Production Steward item: ${input.productionJobId}`);
+    if (productionItem.workbench && (
+      productionItem.workbench.assetId !== input.assetId
+      || productionItem.workbench.revisionId !== input.revisionId
+      || productionItem.workbench.preparationId !== input.preparationId
+    )) {
+      throw new Error("Print result does not match the Workbench linkage recorded on the Production Steward item.");
+    }
+
     const value: PrintRecord = { ...input, printRecordId: id("print-record"), createdAt: new Date().toISOString() };
     await this.repository.upsertPrintRecord(value);
+
+    const succeeded = value.outcome === "success";
+    const partial = value.outcome === "partial-success";
+    await runtime.domainState.upsertProductionItem({
+      ...productionItem,
+      stage: succeeded ? "completed" : partial ? "evidence-review" : "stopped",
+      status: succeeded ? "completed" : "attention-required",
+      nextAction: succeeded
+        ? undefined
+        : `Review PrintRecord ${value.printRecordId} and decide whether to revise, retry, or close the job.`,
+      blocker: succeeded
+        ? undefined
+        : partial
+          ? `Print returned partial-success; review physical evidence before further production.`
+          : `Print returned ${value.outcome}; production requires operator review.`,
+    }, {
+      requestedBy: HumanAuthority,
+      authorizedBy: HumanAuthority,
+      correlationId: value.productionJobId,
+      reason: `Returned Workbench print evidence ${value.printRecordId} with outcome ${value.outcome}.`,
+    });
+
     await this.emit("print_record.created", { printRecordId: value.printRecordId, productionJobId: value.productionJobId, outcome: value.outcome }, { assetId: value.assetId, revisionId: value.revisionId, correlationId: value.productionJobId });
     await this.emit("asset.production_evidence.changed", { printRecordId: value.printRecordId, outcome: value.outcome }, { assetId: value.assetId, revisionId: value.revisionId, correlationId: value.productionJobId });
     return value;
