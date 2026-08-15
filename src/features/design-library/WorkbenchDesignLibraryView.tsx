@@ -2,13 +2,14 @@ import { useState } from "react";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 import { AssetVaultView } from "./AssetVaultView";
 import { IntakeStation } from "./IntakeStation";
+import { ProviderGenerationStation } from "./ProviderGenerationStation";
 import { ModelInspectorStation } from "./ModelInspectorStation";
 import { BuildBenchStation } from "./BuildBenchStation";
 import { VariantAssemblyStation } from "./VariantAssemblyStation";
 import { ProductionGateStation } from "./ProductionGateStation";
 import { ForgepackStation } from "./ForgepackStation";
 
-type WorkbenchSurface = "vault" | "intake" | "inspector" | "build-bench" | "variants-assemblies" | "production-gate" | "forgepack";
+type WorkbenchSurface = "vault" | "intake" | "provider-generation" | "inspector" | "build-bench" | "variants-assemblies" | "production-gate" | "forgepack";
 
 export function WorkbenchDesignLibraryView({ state }: { state: ForgekeeperState }) {
   const [surface, setSurface] = useState<WorkbenchSurface>("vault");
@@ -20,6 +21,7 @@ export function WorkbenchDesignLibraryView({ state }: { state: ForgekeeperState 
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setSurface("vault")} className={`min-h-[44px] rounded-xl px-4 py-2 text-sm font-semibold ${surface === "vault" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>Asset Vault</button>
             <button type="button" onClick={() => setSurface("intake")} className={`min-h-[44px] rounded-xl px-4 py-2 text-sm font-semibold ${surface === "intake" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>Intake Station</button>
+            <button type="button" onClick={() => setSurface("provider-generation")} className={`min-h-[44px] rounded-xl px-4 py-2 text-sm font-semibold ${surface === "provider-generation" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>Provider Generation</button>
             <button type="button" onClick={() => setSurface("inspector")} className={`min-h-[44px] rounded-xl px-4 py-2 text-sm font-semibold ${surface === "inspector" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>Model Inspector</button>
             <button type="button" onClick={() => setSurface("build-bench")} className={`min-h-[44px] rounded-xl px-4 py-2 text-sm font-semibold ${surface === "build-bench" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>Build Bench</button>
             <button type="button" onClick={() => setSurface("variants-assemblies")} className={`min-h-[44px] rounded-xl px-4 py-2 text-sm font-semibold ${surface === "variants-assemblies" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>Variants & Assemblies</button>
@@ -32,6 +34,7 @@ export function WorkbenchDesignLibraryView({ state }: { state: ForgekeeperState 
 
       {surface === "vault" ? <AssetVaultView state={state} /> : null}
       {surface === "intake" ? <IntakeStation state={state} /> : null}
+      {surface === "provider-generation" ? <ProviderGenerationStation state={state} /> : null}
       {surface === "inspector" ? <ModelInspectorStation state={state} /> : null}
       {surface === "build-bench" ? <BuildBenchStation state={state} /> : null}
       {surface === "variants-assemblies" ? <VariantAssemblyStation state={state} /> : null}
