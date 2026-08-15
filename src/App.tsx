@@ -16,6 +16,7 @@ import { AdministrationView } from "./features/administration/AdministrationView
 import { PlanningView } from "./features/planning/PlanningView";
 import { CommissioningView } from "./features/commissioning/CommissioningView";
 import { BastionView } from "./features/bastion/BastionView";
+import { BastionProductionQueue } from "./features/bastion/BastionProductionQueue";
 
 const bastionLauncherDefaults = { settings: {} };
 
@@ -23,10 +24,13 @@ export default function App() {
   const currentWindow = getCurrentWebviewWindow();
   if (currentWindow.label === "bastion") {
     return (
-      <BastionView
-        state={bastionLauncherDefaults}
-        onExit={() => void invoke("bastion_close_window")}
-      />
+      <>
+        <BastionView
+          state={bastionLauncherDefaults}
+          onExit={() => void invoke("bastion_close_window")}
+        />
+        <BastionProductionQueue />
+      </>
     );
   }
 
