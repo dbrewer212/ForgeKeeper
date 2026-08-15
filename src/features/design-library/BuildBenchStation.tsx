@@ -24,6 +24,7 @@ export function BuildBenchStation({ state }: { state: ForgekeeperState }) {
   const selectedSpecId = specs.some((item) => item.manufacturingSpecId === specId) ? specId : (specs[0]?.manufacturingSpecId ?? "");
   const [printerId, setPrinterId] = useState("");
   const [materialProfileId, setMaterialProfileId] = useState("");
+  const [physicalSpoolIds, setPhysicalSpoolIds] = useState<string[]>([]);
   const [slicerId, setSlicerId] = useState("");
   const [slicerProfileRef, setSlicerProfileRef] = useState("");
   const [supportIntent, setSupportIntent] = useState("");
@@ -37,6 +38,10 @@ export function BuildBenchStation({ state }: { state: ForgekeeperState }) {
     .filter((item) => item.assetId === selectedAsset?.assetId && item.revisionId === revisionId)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0],
   [runtime.workbench.inspections, revisionId, selectedAsset?.assetId]);
+
+  const eligibleSpools = useMemo(() => state.filament.filter((spool) =>
+    spool.profileId === materialProfileId && spool.status !== "Archived" && spool.status !== "Empty" && spool.condition !== "Empty"
+  ), [materialProfileId, state.filament]);
 
   function addOperation(type: WorkbenchOperation["type"] = "scale") {
     const operation = newWorkbenchOperation(type, revisionId);
@@ -64,6 +69,12 @@ export function BuildBenchStation({ state }: { state: ForgekeeperState }) {
     });
   }
 
+  function toggleSpool(spoolId: string) {
+    setPhysicalSpoolIds((current) => current.includes(spoolId)
+      ? current.filter((id) => id !== spoolId)
+      : [...current, spoolId]);
+  }
+
   async function save(requestValidation: boolean) {
     if (!selectedAsset || !revisionId || !selectedSpecId) {
       setProblems(["Select an asset revision with a ManufacturingSpec before saving a preparation."]);
@@ -79,6 +90,7 @@ export function BuildBenchStation({ state }: { state: ForgekeeperState }) {
         manufacturingSpecId: selectedSpecId,
         printerId: printerId || undefined,
         materialProfileId: materialProfileId || undefined,
+        physicalSpoolIds: physicalSpoolIds.length ? physicalSpoolIds : undefined,
         slicerId: slicerId.trim() || undefined,
         slicerProfileRef: slicerProfileRef.trim() || undefined,
         supportIntent: supportIntent.trim() || undefined,
@@ -122,10 +134,31 @@ export function BuildBenchStation({ state }: { state: ForgekeeperState }) {
                 {state.printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name} · {printer.buildVolume || "volume unset"}</option>)}
               </Select>
               <label className="block text-xs text-slate-500">Material profile</label>
-              <Select value={materialProfileId} onChange={(event) => setMaterialProfileId(event.target.value)}>
+              <Select value={materialProfileId} onChange={(event) => { setMaterialProfileId(event.target.value); setPhysicalSpoolIds([]); }}>
                 <option value="">Unassigned</option>
-                {state.filamentProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.brand} {profile.material}</option>)}
+                {state.filamentProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.brand} {profile.material} · {profile.colorName}</option>)}
               </Select>
+            </div>
+          </Card>
+
+          <Card title="Physical Spool Assignment" right={<span className="text-xs text-slate-500">{physicalSpoolIds.length} selected</span>}>
+            {!materialProfileId ? <div className="text-sm text-slate-500">Choose a material profile first.</div> : null}
+            {materialProfileId && eligibleSpools.length === 0 ? <div className="text-sm text-amber-300">No usable physical spools currently match this profile.</div> : null}
+            <div className="max-h-64 space-y-2 overflow-y-auto">
+              {eligibleSpools.map((spool) => {
+                const selected = physicalSpoolIds.includes(spool.id);
+                return (
+                  <button key={spool.id} type="button" onClick={() => toggleSpool(spool.id)} className={`w-full rounded-xl border p-3 text-left ${selected ? "border-amber-500/30 bg-amber-500/10" : "border-white/10 bg-[#0b1119] hover:bg-white/5"}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium text-slate-200">{spool.foundrySpoolCode}</div>
+                        <div className="mt-1 text-xs text-slate-500">{spool.colorName} · {spool.condition} · {spool.quantityConfidence}</div>
+                      </div>
+                      <div className="text-right text-sm text-slate-300">{spool.quantityConfidence === "Unknown" ? "Unknown" : `${spool.gramsAvailable.toFixed(0)}g`}</div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </Card>
 
