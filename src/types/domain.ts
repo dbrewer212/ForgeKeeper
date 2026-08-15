@@ -27,7 +27,6 @@ export type ViewKey =
   | "reports"
   | "settings"
   | "commissioning"
-  // Compatibility aliases retained only for persisted pre-Workbench navigation state.
   | "canon"
   | "catalog"
   | "collections"
@@ -136,27 +135,35 @@ export type ProductionReferenceRecord = {
   view: ProductionReferenceView;
   subject: string;
   pose: string;
-  background: string;
+  background: "Transparent" | "Neutral Light" | "Neutral Dark";
   status: ProductionReferenceStatus;
   checks: ProductionReferenceChecks;
   notes: string;
   createdAt: string;
+  verifiedAt?: string;
 };
 
-export type VisualVerificationCheck = { id: string; label: string; result: AssessmentResult; notes: string };
-export type MeshVerificationCheck = { id: string; label: string; result: AssessmentResult; notes: string };
+export type VerificationCheck = {
+  id: string;
+  label: string;
+  result: AssessmentResult;
+  note: string;
+};
 
 export type ModelVerificationRecord = {
   id: string;
   productId: string;
-  conceptId?: string;
-  productionReferenceId?: string;
+  conceptId: string;
+  canonRecordId?: string;
+  generationJobId?: string;
+  stlId?: string;
   modelPath: string;
   modelRevision: string;
   modelSha256: string;
+  evidenceClass: EvidenceClass;
   inspectionViews: Partial<Record<InspectionView, string>>;
-  visualChecks: VisualVerificationCheck[];
-  meshChecks: MeshVerificationCheck[];
+  visualChecks: VerificationCheck[];
+  meshChecks: VerificationCheck[];
   visualDecision: VisualReviewDecision;
   forgeabilityStatus: ForgeabilityStatus;
   physicalTestStatus: PhysicalTestStatus;
@@ -165,40 +172,56 @@ export type ModelVerificationRecord = {
   unknowns: string[];
   notes: string;
   createdAt: string;
-  updatedAt: string;
+  assessedAt?: string;
 };
 
-export type PrintTrialCriterion = { id: string; label: string; result: PrintTrialCriterionResult; notes: string };
+export type PrintTrialCriterion = {
+  id: string;
+  label: string;
+  result: PrintTrialCriterionResult;
+  observation: string;
+};
 
 export type PrintTrialRecord = {
   id: string;
   productId: string;
-  modelVerificationId?: string;
+  conceptId: string;
+  modelVerificationId: string;
+  stlId?: string;
   modelPath: string;
   modelRevision: string;
   modelSha256: string;
-  printerId?: string;
+  printerId: string;
+  nozzleDiameterMm: number;
   filamentId?: string;
+  materialName: string;
   materialDryState: MaterialDryState;
   slicer: string;
   slicerVersion: string;
   profileName: string;
-  layerHeightMm?: number;
-  nozzleMm?: number;
-  infillPercent?: number;
-  supportStrategy: string;
+  profileRevision: string;
   orientation: string;
+  supports: string;
   partDivision: string;
   assemblyMethod: string;
   controlledVariables: string[];
   criteria: PrintTrialCriterion[];
-  status: PhysicalTestStatus;
+  estimatedTimeHours?: number;
+  actualTimeHours?: number;
+  estimatedMaterialGrams?: number;
+  actualMaterialGrams?: number;
+  cleanupMinutes?: number;
+  assemblyMinutes?: number;
   dimensionalResults: string;
   surfaceResult: string;
   supportRemovalResult: string;
   failureMode: string;
   evidencePaths: string[];
+  status: PhysicalTestStatus;
   outcomeVerifiedByDerek: boolean;
+  outcomeVerifiedAt?: string;
+  startedAt?: string;
+  completedAt?: string;
   notes: string;
   nextAction: string;
   createdAt: string;
@@ -208,24 +231,41 @@ export type PrintTrialRecord = {
 export type ProductVariant = {
   id: string;
   productId: string;
-  name: string;
   realm: RealmVariant;
-  sku: string;
+  name: string;
   productImagePath: string;
   conceptImagePath: string;
+  stlId?: string;
+  conceptId?: string;
   filamentId?: string;
   priceModifier: number;
+  estimatedFilamentGrams?: number;
+  estimatedPrintHours?: number;
   isActive: boolean;
   notes: string;
 };
 
-export type CollectionRecord = { id: string; name: string; description: string };
-export type ReleaseRecord = { id: string; name: string; status: ReleaseStatus; plannedDate: string; productIds: string[]; notes: string };
+export type CollectionRecord = {
+  id: string;
+  name: string;
+  line: ProductLine;
+  description: string;
+  heroProductId?: string;
+};
+
+export type ReleaseRecord = {
+  id: string;
+  name: string;
+  wave: string;
+  targetDate: string;
+  status: ReleaseStatus;
+  productIds: string[];
+  notes: string;
+};
 
 export type OrderRecord = {
   id: string;
   productId: string;
-  variantId?: string;
   filamentId?: string;
   materialGrams?: number;
   customer: string;
@@ -237,6 +277,7 @@ export type OrderRecord = {
   paid: boolean;
   tracking: string;
   printerId?: string;
+  materialConsumed?: boolean;
   estimatedPrintHours: number;
   laborHours: number;
   laborRate: number;
@@ -245,59 +286,52 @@ export type OrderRecord = {
   packagingCost: number;
   otherCost: number;
   quotedPrice: number;
-  materialConsumed?: boolean;
   notes: string;
 };
 
 export type FilamentProfile = {
   id: string;
   brand: string;
+  productLine: string;
   material: FilamentMaterial;
   colorName: string;
-  colorHex?: string;
-  spoolSizeGrams: number;
+  colorFamily: string;
   diameterMm: number;
-  densityGPerCm3?: number;
-  defaultNozzleC?: number;
-  defaultBedC?: number;
-  defaultCostPerKg?: number;
-  vendor?: string;
-  manufacturerSku?: string;
+  nominalWeightGrams: number;
+  emptySpoolWeightGrams?: number;
+  reorderPointGrams: number;
+  defaultSpoolPrice: number;
+  supplier: string;
+  supplierSku: string;
   notes: string;
   createdAt: string;
   updatedAt: string;
 };
 
+/** Physical spool. Legacy material fields remain as a compatibility snapshot for orders and costing. */
 export type FilamentRecord = {
   id: string;
-  foundrySpoolCode: string;
   profileId: string;
+  foundrySpoolCode: string;
   brand: string;
   material: FilamentMaterial;
   colorName: string;
-  colorHex?: string;
-  spoolSizeGrams: number;
+  colorFamily: string;
   gramsAvailable: number;
   quantityConfidence: FilamentQuantityConfidence;
   condition: FilamentSpoolCondition;
   status: FilamentSpoolStatus;
-  qrPayload: string;
-  tareGrams?: number;
-  grossGrams?: number;
-  measuredAt?: string;
-  receivedAt?: string;
-  openedAt?: string;
-  emptiedAt?: string;
-  location?: string;
-  lotCode?: string;
-  purchaseDate?: string;
-  purchasePrice?: number;
-  vendor?: string;
-  manufacturerSku?: string;
+  grossWeightGrams?: number;
+  estimatedPercent?: number;
+  reorderPointGrams: number;
+  spoolPrice: number;
+  spoolWeightGrams: number;
+  emptySpoolWeightGrams?: number;
+  storageLocation: string;
+  purchaseDate: string;
+  lotNumber: string;
   dryingStatus: FilamentDryingStatus;
   dryingHistory: string;
-  reorderPointGrams: number;
-  linkedOrderIds: string[];
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -310,13 +344,14 @@ export type MaterialTransaction = {
   type: MaterialTransactionType;
   deltaGrams: number;
   balanceAfterGrams: number;
-  confidence: FilamentQuantityConfidence;
+  quantityConfidence: FilamentQuantityConfidence;
   reason: string;
   orderId?: string;
   reservationId?: string;
-  reversalOfId?: string;
-  notes?: string;
+  reversesTransactionId?: string;
+  reversedByTransactionId?: string;
   occurredAt: string;
+  notes: string;
 };
 
 export type MaterialReservation = {
@@ -343,61 +378,110 @@ export type FilamentDryingRecord = {
 
 export type MaterialImportRecord = {
   id: string;
-  source: string;
-  receivedAt: string;
-  rows: number;
-  createdProfiles: number;
-  createdSpools: number;
-  skippedRows: number;
-  notes: string;
+  fingerprint: string;
+  filename: string;
+  importedAt: string;
+  profileCount: number;
+  spoolCount: number;
 };
 
 export type PrinterRecord = {
   id: string;
   name: string;
   model: string;
-  buildVolume: string;
   status: PrinterStatus;
-  activeJob: string;
-  slicer: SlicerKey;
-  slicerPath?: string;
-  slicerProfileName?: string;
-  nozzleMm?: number;
-  maxNozzleC?: number;
-  maxBedC?: number;
-  supportedMaterials?: FilamentMaterial[];
-  connection?: string;
-  capabilities?: string[];
+  buildVolume: string;
   watts: number;
+  activeJob: string;
   notes: string;
 };
 
 export type MaintenanceRecord = {
   id: string;
   printerId: string;
-  date: string;
-  description: string;
+  title: string;
+  performedOn: string;
+  notes: string;
 };
 
 export type GenerationJobRecord = {
   id: string;
-  productId: string;
-  conceptId?: string;
   provider: GenerationProvider;
+  externalJobId: string;
+  productId: string;
+  conceptId: string;
   sourceImagePath: string;
-  externalTaskId?: string;
+  productionReferenceId?: string;
+  productionReferenceVerifiedAt?: string;
+  sourceLibraryAssetId?: string;
   status: string;
-  expectedCredits: number;
+  progress?: number;
   creditsUsed?: number;
-  outputFileName?: string;
-  outputFilePath?: string;
-  reviewStatus: GenerationReviewStatus;
-  notes: string;
+  creditsRemaining?: number;
+  expectedCredits?: number;
+  authorizedCreditCeiling?: number;
+  attemptNumber?: number;
+  generationPurpose?: string;
+  providerSelectionReason?: string;
+  retryReason?: string;
+  approvalSummary?: string;
+  reviewStatus?: GenerationReviewStatus;
+  outputUrls: Record<string, string>;
   createdAt: string;
   updatedAt: string;
+  lastReconciledAt?: string;
+  reconciliationMessage?: string;
+  error?: string;
 };
 
-export type ObjectiveStatusLegacy = ObjectiveStatus;
+export type AuditEventType = "Backup" | "Restore" | "Integrity" | "Credential" | "Provider" | "Data Change" | "System";
+export type AuditEventOutcome = "Info" | "Success" | "Warning" | "Blocked" | "Failed";
+export type IntegritySeverity = "Info" | "Warning" | "Critical";
+export type IntegrityFindingStatus = "Open" | "Acknowledged" | "Resolved";
+
+export type AuditEvent = {
+  id: string;
+  occurredAt: string;
+  type: AuditEventType;
+  action: string;
+  outcome: AuditEventOutcome;
+  summary: string;
+  subjectId?: string;
+};
+
+export type IntegrityFinding = {
+  id: string;
+  severity: IntegritySeverity;
+  category: "Relationship" | "Asset" | "Checksum" | "Provider Job" | "Credential" | "Backup" | "Inventory";
+  title: string;
+  detail: string;
+  subjectId?: string;
+  status: IntegrityFindingStatus;
+};
+
+export type IntegrityScanRecord = {
+  id: string;
+  startedAt: string;
+  completedAt: string;
+  desktopFileChecksAvailable: boolean;
+  checkedPathCount: number;
+  findings: IntegrityFinding[];
+};
+
+export type CredentialHealthRecord = {
+  checkedAt: string;
+  filePath: string;
+  readable: boolean;
+  meshyConfigured: boolean;
+  printpalConfigured: boolean;
+  message: string;
+};
+
+export type RecoverySystemRecord = {
+  auditEvents: AuditEvent[];
+  lastIntegrityScan?: IntegrityScanRecord;
+  credentialHealth?: CredentialHealthRecord;
+};
 
 export type ActiveObjective = {
   id: string;
@@ -405,11 +489,10 @@ export type ActiveObjective = {
   productId?: string;
   stage: PipelineStage;
   status: ObjectiveStatus;
-  lastCompletedAction: string;
-  nextAction: string;
   blocker: string;
   approvalNeeded: string;
-  notes: string;
+  lastCompletedAction: string;
+  nextAction: string;
   updatedAt: string;
 };
 
@@ -426,58 +509,53 @@ export type ControlCenterRecord = {
   parkedIdeas: ParkedIdea[];
 };
 
-export type CanonRecord = {
-  id: string;
-  name: string;
-  canonType: "Character" | "Species" | "Product Line" | "Collection" | "System" | "World" | "Other";
-  status: "Draft" | "Locked" | "Retired";
-  summary: string;
-  identity: string;
-  traits: string[];
-  designRules: string[];
-  prohibitedChanges: string[];
-  foundryRole: string;
-  relationships: string[];
-  currentProductionDesign: string;
-  decisionEvidence: string;
-  authorityBasis: "Memory Canon" | "Library File" | "Decision Record" | "Mixed Evidence";
-  assetLinks: string[];
-  sourceRefs: string[];
-  notes: string;
-  updatedAt: string;
-};
+export type CanonStatus = "Locked" | "Established Direction" | "Developing" | "Historical";
+export type LibraryAssetStatus = "Authoritative" | "Historical" | "Development Candidate" | "Supporting";
+export type CanonAssetRole = "Primary Authority" | "Superseded Reference" | "Development Candidate" | "Supporting Reference";
 
-export type LibraryAssetType = "Concept Art" | "Production Reference" | "Model" | "Print Evidence" | "Document" | "Other";
 export type LibraryAssetRecord = {
   id: string;
+  libraryFileId: string;
+  fileId: string;
   name: string;
-  assetType: LibraryAssetType;
-  sourcePath: string;
   libraryPath: string;
   mimeType: string;
   sizeBytes: number;
-  sha256: string;
-  importedAt: string;
   modifiedAt: string;
-  sourceRecordType?: string;
-  sourceRecordId?: string;
+  sha256: string;
+  assetType: "Concept Art" | "Document" | "Model" | "Production Reference";
+  status: LibraryAssetStatus;
+  duplicateOfAssetId?: string;
   notes: string;
 };
 
-export type BackupEnvelope = {
-  version: number;
-  exportedAt: string;
-  sha256: string;
-  data: AppData;
+export type CanonAssetLink = {
+  assetId: string;
+  role: CanonAssetRole;
+  note: string;
 };
 
-export type IntegritySeverity = "Info" | "Warning" | "Error";
-export type IntegrityFinding = { id: string; severity: IntegritySeverity; area: string; summary: string; detail: string; relatedId?: string };
-export type IntegrityScan = { id: string; runAt: string; findings: IntegrityFinding[]; summary: { info: number; warnings: number; errors: number } };
-export type CredentialHealthStatus = "Not Configured" | "Configured" | "Readable" | "Unreadable";
-export type CredentialHealthRecord = { path: string; status: CredentialHealthStatus; checkedAt: string; detail: string };
-export type AuditEvent = { id: string; occurredAt: string; category: "Data Change" | "Backup" | "Recovery" | "Credential" | "Integrity" | "Provider"; action: string; outcome: "Success" | "Warning" | "Failure"; detail: string; relatedId?: string };
-export type RecoveryState = { lastIntegrityScan?: IntegrityScan; credentialHealth?: CredentialHealthRecord; auditEvents: AuditEvent[] };
+export type CanonRecord = {
+  id: string;
+  name: string;
+  kind: "Resident" | "Creature" | "Collection" | "Philosophy";
+  canonStatus: CanonStatus;
+  primaryAuthority: string;
+  supersededReferences: string[];
+  identity: string;
+  foundryRole: string;
+  relationships: string[];
+  characterDna: string[];
+  allowedVariation: string[];
+  forbiddenDrift: string[];
+  symbolism: string;
+  currentProductionDesign: string;
+  decisionEvidence: string;
+  authorityBasis: "Library Assets" | "Decision Record" | "Mixed";
+  assetLinks: CanonAssetLink[];
+  lastCanonChange: string;
+  notes: string;
+};
 
 export type AppSettings = {
   laborRate: number;
@@ -485,12 +563,17 @@ export type AppSettings = {
   machineWatts: number;
   packagingCost: number;
   otherCost: number;
-  printerConnectionMode?: string;
-  generationCreditsApprovedDefault?: number;
-  externalTools?: Partial<Record<"orca" | "anycubic" | "blender", string>>;
-  libraryPath?: string;
-  providerCredentialPath?: string;
-  providerCredentialStatus?: string;
+  materialMarkupPercent: number;
+  targetMarginPercent: number;
+  assetRootPath: string;
+  productionHoursPerDay: number;
+  forgekeeperLibraryPath?: string;
+  apiCredentialFilePath?: string;
+  orcaSlicerPath?: string;
+  anycubicSlicerPath?: string;
+  blenderPath?: string;
+  meshyUrl?: string;
+  defaultSlicer?: "orca" | "anycubic";
 };
 
 export type AppData = {
@@ -516,10 +599,40 @@ export type AppData = {
   controlCenter: ControlCenterRecord;
   canonRecords: CanonRecord[];
   libraryAssets: LibraryAssetRecord[];
-  recovery: RecoveryState;
+  recovery: RecoverySystemRecord;
   settings: AppSettings;
   prototypes: PlannedPrototype[];
   plannedFilament: PlannedFilament[];
   productPlanning: ProductPlanningRecord[];
   realmMaterials: RealmMaterialReference[];
+};
+
+
+export type PrinterLoad = {
+  printerId: string;
+  name: string;
+  hours: number;
+  jobs: number;
+  status: PrinterStatus;
+};
+
+export type FilamentDemand = {
+  filamentId: string;
+  name: string;
+  neededGrams: number;
+  availableGrams: number;
+  shortageGrams: number;
+};
+
+export type ProductionMetrics = {
+  totalQueueHours: number;
+  assignedQueueHours: number;
+  unassignedQueueHours: number;
+  estimatedCompletionHours: number;
+  estimatedCompletionDays: number;
+  filamentNeededGrams: number;
+  printerLoads: PrinterLoad[];
+  filamentDemand: FilamentDemand[];
+  bottlenecks: PrinterLoad[];
+  unassignedOrders: number;
 };
