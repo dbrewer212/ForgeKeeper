@@ -1,105 +1,165 @@
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
-import { Select } from "../../components/ui/Select";
-import { Textarea } from "../../components/ui/Textarea";
-import { money } from "../../lib/format";
-import type { ForgekeeperState } from "../../state/useForgekeeperState";
+import type { ProductionItemSummary } from "../../mesh/domainServices";
+import { HumanAuthority } from "../../mesh/domainServices";
+import { getFoundryMeshRuntime } from "../../mesh";
+import { ProductionSteward } from "../../mesh/productionSteward";
 
-type ProductionColumn = {
-  label: string;
-  statuses: Array<"Queued" | "Printing" | "Finishing" | "Packed" | "Shipped">;
-};
+function priority(item: ProductionItemSummary): number {
+  if (item.status === "attention-required" || item.blocker) return 0;
+  if (item.status === "active" || item.stage === "printing") return 1;
+  if (item.status === "queued") return 2;
+  if (item.stage === "finishing") return 3;
+  if (item.status === "completed") return 5;
+  return 4;
+}
 
-const columns: ProductionColumn[] = [
-  { label: "Queued", statuses: ["Queued"] },
-  { label: "Printing", statuses: ["Printing"] },
-  { label: "Finishing", statuses: ["Finishing"] },
-  { label: "Complete", statuses: ["Packed", "Shipped"] },
-];
+function columnFor(item: ProductionItemSummary): "attention" | "queued" | "printing" | "finishing" | "complete" {
+  if (item.status === "attention-required" || item.blocker) return "attention";
+  if (item.status === "completed" || item.stage === "complete") return "complete";
+  if (item.stage === "finishing") return "finishing";
+  if (item.status === "active" || item.stage === "printing") return "printing";
+  return "queued";
+}
 
-export function ProductionView({ state }: { state: ForgekeeperState }) {
+const columns = [
+  { id: "attention", label: "Attention" },
+  { id: "queued", label: "Queued" },
+  { id: "printing", label: "Printing" },
+  { id: "finishing", label: "Finishing" },
+  { id: "complete", label: "Complete" },
+] as const;
+
+export function ProductionView() {
+  const [items, setItems] = useState<ProductionItemSummary[]>([]);
+  const [activeId, setActiveId] = useState<string>();
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState<string>();
+  const [nextActionDrafts, setNextActionDrafts] = useState<Record<string, string>>({});
+  const [blockerDrafts, setBlockerDrafts] = useState<Record<string, string>>({});
+
+  const runtime = useMemo(() => getFoundryMeshRuntime(), []);
+  const steward = useMemo(() => new ProductionSteward(runtime), [runtime]);
+
+  async function refresh() {
+    try {
+      await runtime.initialize();
+      const [productionItems, active] = await Promise.all([
+        runtime.domain.get().production.list(),
+        runtime.domain.get().production.getActiveWork(),
+      ]);
+      setItems(productionItems);
+      setActiveId(active.productionItemId);
+      setNextActionDrafts((current) => {
+        const next = { ...current };
+        for (const item of productionItems) if (!(item.id in next)) next[item.id] = item.nextAction ?? "";
+        return next;
+      });
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 5000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const ordered = useMemo(
+    () => [...items].sort((a, b) => {
+      if (a.id === activeId) return -1;
+      if (b.id === activeId) return 1;
+      return priority(a) - priority(b) || a.name.localeCompare(b.name);
+    }),
+    [activeId, items],
+  );
+
+  async function run(itemId: string, action: () => Promise<unknown>) {
+    setBusyId(itemId);
+    setError("");
+    try {
+      await action();
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusyId(undefined);
+    }
+  }
+
+  async function saveNextAction(item: ProductionItemSummary) {
+    const value = (nextActionDrafts[item.id] ?? "").trim();
+    if (!value) {
+      setError("Next action cannot be empty.");
+      return;
+    }
+    await run(item.id, () => runtime.domain.get().production.setNextAction(item.id, value, {
+      requestedBy: HumanAuthority,
+      authorizedBy: HumanAuthority,
+      correlationId: item.id,
+      reason: "Operator updated the production next action from the desktop Production station.",
+    }));
+  }
+
+  async function markAttention(item: ProductionItemSummary) {
+    const blocker = (blockerDrafts[item.id] ?? "").trim();
+    if (!blocker) {
+      setError("Explain the blocker before marking a production item attention-required.");
+      return;
+    }
+    await run(item.id, () => steward.markAttention(item.id, blocker));
+    setBlockerDrafts((current) => ({ ...current, [item.id]: "" }));
+  }
+
   return (
     <div className="space-y-6">
-      <Card title="Add Production Job" right={<span className="text-xs text-slate-500">Internal Foundry work only</span>}>
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),260px,auto]">
-          <Input
-            autoFocus={state.quickAction === "newOrder"}
-            value={state.newOrderCustomer}
-            onChange={(event) => state.setNewOrderCustomer(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter") state.addOrder(); }}
-            placeholder="Job name"
-          />
-          <Select value={state.selectedProductId} onChange={(event) => state.setSelectedProductId(event.target.value)}>
-            <option value="">Select design</option>
-            {state.products.map((design) => <option key={design.id} value={design.id}>{design.name}</option>)}
-          </Select>
-          <Button onClick={state.addOrder}>Add Job</Button>
+      <div className="rounded-2xl border border-amber-500/15 bg-[#0d131c] p-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="text-xs uppercase tracking-[0.24em] text-amber-400">Production Steward</div>
+            <h1 className="mt-1 text-2xl font-semibold text-slate-100">Production</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">One durable production queue shared by ForgeKeeper and Bastion. Workbench releases approved preparations into Steward ownership; this station controls execution without creating a second Order truth.</p>
+          </div>
+          <Button variant="ghost" onClick={() => void refresh()}>Refresh Queue</Button>
         </div>
-      </Card>
+      </div>
 
-      <Card title="Production Board" right={<Button variant="ghost" onClick={state.exportOrdersCsv}>Export CSV</Button>}>
-        <div className="grid gap-4 xl:grid-cols-4">
+      {error ? <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-300">{error}</div> : null}
+
+      <Card title="Steward Queue" right={<span className="text-xs text-slate-500">{ordered.filter((item) => item.status !== "completed").length} actionable · {activeId ? "1 active session" : "no active production session"}</span>}>
+        <div className="grid gap-4 2xl:grid-cols-5 xl:grid-cols-3 lg:grid-cols-2">
           {columns.map((column) => {
-            const jobs = state.orders.filter((job) => column.statuses.includes(job.status));
+            const jobs = ordered.filter((item) => columnFor(item) === column.id);
             return (
-              <section key={column.label} className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
+              <section key={column.id} className="rounded-2xl border border-white/10 bg-[#0b1119] p-4">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div className="font-semibold text-slate-100">{column.label}</div>
                   <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">{jobs.length}</span>
                 </div>
                 <div className="space-y-4">
-                  {jobs.map((job) => {
-                    const design = state.products.find((item) => item.id === job.productId);
-                    const breakdown = state.getCostBreakdownForOrder(job);
-                    return (
-                      <article key={job.id} className="rounded-2xl border border-white/10 bg-[#111722] p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="font-semibold text-slate-100">{job.customer || `Production ${job.id}`}</div>
-                            <div className="mt-1 text-xs text-slate-500">{design?.name || job.productId} · Qty {job.quantity}</div>
-                          </div>
-                          <span className="rounded-full border border-amber-500/20 bg-amber-500/5 px-2.5 py-1 text-[11px] text-amber-300">{job.priority}</span>
-                        </div>
-
-                        <div className="mt-4 grid gap-2">
-                          <Field label="Job name"><Input value={job.customer} onChange={(event) => state.updateOrder(job.id, { customer: event.target.value })} /></Field>
-                          <Field label="Design"><Select value={job.productId} onChange={(event) => state.updateOrder(job.id, { productId: event.target.value })}>{state.products.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
-                          <Field label="Material spool"><Select value={job.filamentId || ""} onChange={(event) => state.updateOrder(job.id, { filamentId: event.target.value || undefined })}><option value="">No spool selected</option>{state.filament.map((item) => <option key={item.id} value={item.id}>{item.foundrySpoolCode} · {item.colorName} · {item.material}</option>)}</Select></Field>
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            <Field label="Stage"><Select value={job.status} onChange={(event) => state.updateOrder(job.id, { status: event.target.value as typeof job.status })}><option value="Queued">Queued</option><option value="Printing">Printing</option><option value="Finishing">Finishing</option><option value="Packed">Complete</option>{job.status === "Shipped" ? <option value="Shipped">Complete (legacy)</option> : null}</Select></Field>
-                            <Field label="Priority"><Select value={job.priority} onChange={(event) => state.updateOrder(job.id, { priority: event.target.value as typeof job.priority })}><option>Low</option><option>Normal</option><option>High</option><option>Rush</option></Select></Field>
-                          </div>
-                          <Field label="Printer"><Select value={job.printerId || ""} onChange={(event) => state.updateOrder(job.id, { printerId: event.target.value || undefined })}><option value="">Unassigned</option>{state.printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}</Select></Field>
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            <Field label="Quantity"><Input type="number" min={1} value={job.quantity} onChange={(event) => state.updateOrder(job.id, { quantity: Number(event.target.value) })} /></Field>
-                            <Field label="Target date"><Input type="date" value={job.dueDate} onChange={(event) => state.updateOrder(job.id, { dueDate: event.target.value })} /></Field>
-                          </div>
-                          <div className="grid gap-2 sm:grid-cols-2">
-                            <Field label="Print hours / unit"><Input type="number" min={0} step="0.1" value={job.estimatedPrintHours} onChange={(event) => state.updateOrder(job.id, { estimatedPrintHours: Number(event.target.value) })} /></Field>
-                            <Field label="Labor hours"><Input type="number" min={0} step="0.1" value={job.laborHours} onChange={(event) => state.updateOrder(job.id, { laborHours: Number(event.target.value) })} /></Field>
-                          </div>
-                          <Field label="Production notes"><Textarea value={job.notes} onChange={(event) => state.updateOrder(job.id, { notes: event.target.value })} className="min-h-[70px]" /></Field>
-                        </div>
-
-                        <div className="mt-4 rounded-xl border border-amber-500/15 bg-amber-500/5 p-3 text-xs">
-                          <CostLine label="Material" value={money(breakdown.material)} />
-                          <CostLine label="Electricity" value={money(breakdown.electricity)} />
-                          <CostLine label="Labor" value={money(breakdown.labor)} />
-                          <CostLine label="Total estimated cost" value={money(breakdown.total)} />
-                        </div>
-
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          <Button variant="ghost" onClick={() => state.consumeFilamentForOrder(job.id)}>{job.materialConsumed ? "Material Recorded" : "Record Material Use"}</Button>
-                          {job.status === "Queued" ? <Button variant="ghost" onClick={() => state.updateOrder(job.id, { status: "Printing" })}>Start Printing</Button> : null}
-                          {job.status === "Printing" ? <Button variant="ghost" onClick={() => state.updateOrder(job.id, { status: "Finishing" })}>Move to Finishing</Button> : null}
-                          {job.status === "Finishing" ? <Button variant="ghost" onClick={() => state.updateOrder(job.id, { status: "Packed" })}>Mark Complete</Button> : null}
-                          <Button variant="danger" onClick={() => state.removeOrder(job.id)}>Remove</Button>
-                        </div>
-                      </article>
-                    );
-                  })}
-                  {jobs.length === 0 ? <div className="rounded-xl border border-dashed border-white/10 p-5 text-center text-xs text-slate-500">No jobs in this stage.</div> : null}
+                  {jobs.map((item) => (
+                    <ProductionCard
+                      key={item.id}
+                      item={item}
+                      active={item.id === activeId}
+                      busy={busyId === item.id}
+                      nextAction={nextActionDrafts[item.id] ?? item.nextAction ?? ""}
+                      blockerDraft={blockerDrafts[item.id] ?? ""}
+                      setNextAction={(value) => setNextActionDrafts((current) => ({ ...current, [item.id]: value }))}
+                      setBlocker={(value) => setBlockerDrafts((current) => ({ ...current, [item.id]: value }))}
+                      saveNextAction={() => void saveNextAction(item)}
+                      start={() => void run(item.id, () => steward.startProductionItem(item.id))}
+                      finishing={() => void run(item.id, () => steward.advanceProductionItem(item.id, "finishing"))}
+                      complete={() => void run(item.id, () => steward.completeProductionItem(item.id))}
+                      attention={() => void markAttention(item)}
+                      clearAttention={() => void run(item.id, () => steward.clearAttention(item.id))}
+                    />
+                  ))}
+                  {jobs.length === 0 ? <div className="rounded-xl border border-dashed border-white/10 p-5 text-center text-xs text-slate-500">No production items in this stage.</div> : null}
                 </div>
               </section>
             );
@@ -110,10 +170,79 @@ export function ProductionView({ state }: { state: ForgekeeperState }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="block"><div className="mb-1.5 text-[11px] uppercase tracking-wide text-slate-500">{label}</div>{children}</label>;
-}
+function ProductionCard({
+  item,
+  active,
+  busy,
+  nextAction,
+  blockerDraft,
+  setNextAction,
+  setBlocker,
+  saveNextAction,
+  start,
+  finishing,
+  complete,
+  attention,
+  clearAttention,
+}: {
+  item: ProductionItemSummary;
+  active: boolean;
+  busy: boolean;
+  nextAction: string;
+  blockerDraft: string;
+  setNextAction(value: string): void;
+  setBlocker(value: string): void;
+  saveNextAction(): void;
+  start(): void;
+  finishing(): void;
+  complete(): void;
+  attention(): void;
+  clearAttention(): void;
+}) {
+  return (
+    <article className={`rounded-2xl border p-4 ${active ? "border-emerald-500/35 bg-emerald-500/5" : item.blocker ? "border-rose-500/25 bg-rose-500/5" : "border-white/10 bg-[#111722]"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate font-semibold text-slate-100">{item.name}</div>
+          <div className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-500">{item.stage ?? "stage unset"} · {item.status ?? "status unset"}</div>
+        </div>
+        {active ? <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold uppercase text-emerald-300">Active</span> : null}
+      </div>
 
-function CostLine({ label, value }: { label: string; value: string }) {
-  return <div className="flex items-center justify-between gap-3 py-1"><span className="text-slate-500">{label}</span><span className="font-medium text-slate-100">{value}</span></div>;
+      {item.workbench ? (
+        <div className="mt-3 rounded-xl border border-white/8 bg-black/15 p-3 text-[10px] leading-5 text-slate-500">
+          <div className="break-all">Asset: {item.workbench.assetId}</div>
+          <div className="break-all">Revision: {item.workbench.revisionId}</div>
+          <div className="break-all">Preparation: {item.workbench.preparationId}</div>
+          <div>Printer: {item.workbench.printerId || "unassigned"}</div>
+        </div>
+      ) : <div className="mt-3 rounded-xl border border-amber-500/15 bg-amber-500/5 p-3 text-xs text-amber-200">Legacy/unlinked production item. No Workbench preparation linkage is recorded.</div>}
+
+      {item.blocker ? <div className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-xs text-rose-300">Blocked: {item.blocker}</div> : null}
+
+      <div className="mt-4 space-y-2">
+        <div className="text-[10px] uppercase tracking-[0.14em] text-slate-600">Next action</div>
+        <Input value={nextAction} onChange={(event) => setNextAction(event.target.value)} disabled={busy || item.status === "completed"} />
+        {item.status !== "completed" ? <Button variant="ghost" onClick={saveNextAction} disabled={busy}>Save Next Action</Button> : null}
+      </div>
+
+      {item.status !== "completed" ? (
+        <div className="mt-4 space-y-2 border-t border-white/8 pt-4">
+          {!item.blocker ? (
+            <>
+              <Input value={blockerDraft} onChange={(event) => setBlocker(event.target.value)} placeholder="Blocker / attention note" disabled={busy} />
+              <Button variant="ghost" onClick={attention} disabled={busy}>Mark Attention</Button>
+            </>
+          ) : <Button variant="ghost" onClick={clearAttention} disabled={busy}>Clear Blocker</Button>}
+        </div>
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-white/8 pt-4">
+        {item.status !== "completed" && !active && !item.blocker ? <Button onClick={start} disabled={busy}>{busy ? "Working…" : "Start"}</Button> : null}
+        {(active || item.stage === "printing") && !item.blocker ? <Button variant="ghost" onClick={finishing} disabled={busy}>Move to Finishing</Button> : null}
+        {item.stage === "finishing" && !item.blocker ? <Button onClick={complete} disabled={busy}>Complete</Button> : null}
+      </div>
+      <div className="mt-3 break-all text-[10px] text-slate-600">{item.id}</div>
+    </article>
+  );
 }
