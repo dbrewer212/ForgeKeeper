@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
+import { CanonRegistryView } from "../canon/CanonRegistryView";
 import { AssetVaultView } from "./AssetVaultView";
 import { IntakeStation } from "./IntakeStation";
 import { ProviderGenerationStation } from "./ProviderGenerationStation";
@@ -9,7 +10,7 @@ import { VariantAssemblyStation } from "./VariantAssemblyStation";
 import { ProductionGateStation } from "./ProductionGateStation";
 import { ForgepackStation } from "./ForgepackStation";
 
-type WorkbenchSurface = "vault" | "intake" | "provider-generation" | "inspector" | "build-bench" | "variants-assemblies" | "production-gate" | "forgepack";
+type WorkbenchSurface = "vault" | "intake" | "provider-generation" | "inspector" | "build-bench" | "variants-assemblies" | "production-gate" | "forgepack" | "canon";
 
 export function WorkbenchDesignLibraryView({ state }: { state: ForgekeeperState }) {
   const [surface, setSurface] = useState<WorkbenchSurface>("vault");
@@ -27,8 +28,9 @@ export function WorkbenchDesignLibraryView({ state }: { state: ForgekeeperState 
             <button type="button" onClick={() => setSurface("variants-assemblies")} className={`min-h-[44px] rounded-xl px-4 py-2 text-sm font-semibold ${surface === "variants-assemblies" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>Variants & Assemblies</button>
             <button type="button" onClick={() => setSurface("production-gate")} className={`min-h-[44px] rounded-xl px-4 py-2 text-sm font-semibold ${surface === "production-gate" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>Production Gate</button>
             <button type="button" onClick={() => setSurface("forgepack")} className={`min-h-[44px] rounded-xl px-4 py-2 text-sm font-semibold ${surface === "forgepack" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>Forgepack</button>
+            <button type="button" onClick={() => setSurface("canon")} className={`min-h-[44px] rounded-xl px-4 py-2 text-sm font-semibold ${surface === "canon" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}>Canon Registry</button>
           </div>
-          <div className="text-xs text-slate-500">Workbench Domain · Shared Foundry identity</div>
+          <div className="text-xs text-slate-500">Workbench Domain · Shared Foundry identity · Canon authority remains separate</div>
         </div>
       </div>
 
@@ -40,6 +42,7 @@ export function WorkbenchDesignLibraryView({ state }: { state: ForgekeeperState 
       {surface === "variants-assemblies" ? <VariantAssemblyStation state={state} /> : null}
       {surface === "production-gate" ? <ProductionGateStation state={state} /> : null}
       {surface === "forgepack" ? <ForgepackStation state={state} /> : null}
+      {surface === "canon" ? <CanonRegistryView state={state} /> : null}
     </div>
   );
 }
