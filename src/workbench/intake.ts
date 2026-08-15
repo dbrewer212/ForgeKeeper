@@ -23,10 +23,13 @@ export type IntakeResult = {
   duplicateFileReused: boolean;
   managedBlobReused: boolean;
   managedPath: string;
-  inspectionJobId: string;
+  inspectionRequired: boolean;
+  inspectionJobId?: string;
 };
 
-const SUPPORTED_EXTENSIONS = new Set(["stl", "3mf", "obj", "step", "stp", "glb", "gltf"]);
+const INSPECTABLE_EXTENSIONS = new Set(["stl", "3mf", "obj"]);
+const SOURCE_GEOMETRY_EXTENSIONS = new Set(["step", "stp", "glb", "gltf"]);
+const SUPPORTED_EXTENSIONS = new Set([...INSPECTABLE_EXTENSIONS, ...SOURCE_GEOMETRY_EXTENSIONS]);
 
 function eventId(prefix: string): string {
   const random = typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -53,6 +56,12 @@ function mimeFor(format: string): string | undefined {
   if (format === "glb") return "model/gltf-binary";
   if (format === "gltf") return "model/gltf+json";
   return undefined;
+}
+
+function effectiveRole(format: string, requested?: FileRole): FileRole {
+  if (INSPECTABLE_EXTENSIONS.has(format)) return requested ?? "geometry";
+  if (!requested || requested === "geometry") return "source";
+  return requested;
 }
 
 async function appendIntakeEvent(
@@ -85,19 +94,26 @@ export class WorkbenchIntakeService {
 
   async registerLocalFile(request: IntakeRequest): Promise<IntakeResult> {
     const path = request.filePath.trim();
-    if (!path) throw new Error("Choose or enter a local geometry file path before Intake.");
+    if (!path) throw new Error("Choose or enter a local design file path before Intake.");
 
     const format = extension(path);
     if (!SUPPORTED_EXTENSIONS.has(format)) {
-      throw new Error(`Unsupported Intake format .${format || "unknown"}. Supported geometry: STL, 3MF, OBJ, STEP/STP, GLB, GLTF.`);
+      throw new Error(`Unsupported Intake format .${format || "unknown"}. Supported files: STL, 3MF, OBJ, STEP/STP, GLB, GLTF.`);
     }
+    const inspectable = INSPECTABLE_EXTENSIONS.has(format);
+    const role = effectiveRole(format, request.role);
 
     const state = await this.repository.loadState();
     const asset = state.assets.find((item) => item.assetId === request.assetId);
     if (!asset) throw new Error(`Unknown Workbench asset: ${request.assetId}`);
 
     const correlationId = eventId("intake");
-    await appendIntakeEvent(this.repository, "asset.intake.started", asset, correlationId, { filePath: path, format });
+    await appendIntakeEvent(this.repository, "asset.intake.started", asset, correlationId, {
+      filePath: path,
+      format,
+      role,
+      inspectableManufacturingGeometry: inspectable,
+    });
 
     const inspections = await inspectLocalPaths([path]);
     const inspected = inspections?.[0];
@@ -120,17 +136,18 @@ export class WorkbenchIntakeService {
       format,
       mimeType: mimeFor(format),
       sizeBytes: managed.sizeBytes,
-      role: request.role ?? "geometry",
+      role,
       source: { ...request.provenance, importedAt: request.provenance.importedAt ?? new Date().toISOString() },
       ownedByFoundry: true,
       license: request.provenance.license,
     });
 
-    if (registered.storagePath !== managed.managedPath || !registered.ownedByFoundry) {
+    if (registered.storagePath !== managed.managedPath || !registered.ownedByFoundry || registered.role !== role) {
       await this.repository.upsertFile({
         ...registered,
         storagePath: managed.managedPath,
         sizeBytes: managed.sizeBytes,
+        role,
         ownedByFoundry: true,
       });
     }
@@ -149,25 +166,38 @@ export class WorkbenchIntakeService {
       manufacturingApproval: "not-reviewed",
     });
 
+    const nextLifecycle = inspectable
+      ? "inspection-required"
+      : asset.lifecycleStatus === "retired" || asset.lifecycleStatus === "archived"
+        ? asset.lifecycleStatus
+        : "in-development";
+
     await this.repository.upsertAsset({
       ...asset,
       currentRevisionId: revision.revisionId,
-      lifecycleStatus: "inspection-required",
+      lifecycleStatus: nextLifecycle,
       provenance: asset.provenance.sourceType === "manual" && asset.provenance.sourceLabel?.includes("Legacy ForgeKeeper")
         ? request.provenance
         : asset.provenance,
       updatedAt: new Date().toISOString(),
     });
 
-    const inspection = await this.service.requestInspection(asset.assetId, revision.revisionId);
+    const inspection = inspectable
+      ? await this.service.requestInspection(asset.assetId, revision.revisionId)
+      : undefined;
 
     await appendIntakeEvent(this.repository, "asset.intake.completed", asset, correlationId, {
       fileId: registered.fileId,
       sha256: digest,
+      role,
+      inspectableManufacturingGeometry: inspectable,
       duplicateFileReused: Boolean(prior),
       managedBlobReused: managed.reusedExisting,
       managedPath: managed.managedPath,
-      inspectionJobId: inspection.jobId,
+      inspectionJobId: inspection?.jobId,
+      nextRequiredAction: inspectable
+        ? "Complete deterministic Model Inspector review."
+        : `Create a derived STL, 3MF, or OBJ manufacturing revision before deterministic inspection. Original .${format} remains preserved as a Foundry-managed source file.`,
     }, revision.revisionId);
 
     return {
@@ -179,7 +209,8 @@ export class WorkbenchIntakeService {
       duplicateFileReused: Boolean(prior),
       managedBlobReused: managed.reusedExisting,
       managedPath: managed.managedPath,
-      inspectionJobId: inspection.jobId,
+      inspectionRequired: inspectable,
+      inspectionJobId: inspection?.jobId,
     };
   }
 }
