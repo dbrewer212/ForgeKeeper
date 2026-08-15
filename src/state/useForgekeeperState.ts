@@ -328,7 +328,7 @@ function productName(products: Product[], id: string): string {
 }
 
 export function useForgekeeperState() {
-  const initial = hydrateData();
+  const [initial] = useState(hydrateData);
 
   const [view, setView] = useState<ViewKey>("dashboard");
   const [products, setProducts] = useState<Product[]>(initial.products);
