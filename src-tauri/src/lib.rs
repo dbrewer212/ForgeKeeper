@@ -1,4 +1,5 @@
 mod bastion;
+mod forgepack;
 mod managed_files;
 mod managed_services;
 mod providers;
@@ -8,6 +9,7 @@ use bastion::{
     bastion_close_window, bastion_launch_mode, bastion_open_window, bastion_set_startup,
     bastion_startup_status, open_bastion_window,
 };
+use forgepack::{workbench_export_forgepack, workbench_import_forgepack};
 use managed_files::workbench_store_file;
 use managed_services::{
     managed_service_start, managed_service_status, managed_service_stop, ManagedProcesses,
@@ -87,7 +89,7 @@ if ($null -ne $gpu) {
     utilizationPercent = $null
     temperatureC = $null
     provider = 'windows-cim'
-    detail = 'Adapter identity available. AMD utilization and temperature provider not yet bound.'
+    detail = 'Adapter identity available. AMD utilization and temperature provider boundary remains explicit.'
   }
 }
 [pscustomobject]@{
@@ -364,6 +366,8 @@ pub fn run() {
             inspect_local_paths,
             inspect_geometry,
             workbench_store_file,
+            workbench_export_forgepack,
+            workbench_import_forgepack,
             test_provider_connections,
             submit_meshy_image_generation,
             submit_printpal_image_generation,
