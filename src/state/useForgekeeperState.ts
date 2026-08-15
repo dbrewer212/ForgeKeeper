@@ -354,7 +354,7 @@ export function useForgekeeperState() {
   const [canonRecords, setCanonRecords] = useState(initial.canonRecords);
   const [libraryAssets, setLibraryAssets] = useState(initial.libraryAssets);
   const [recovery, setRecovery] = useState(initial.recovery);
-  const [recoveryCheckpoints, setRecoveryCheckpoints] = useState<RecoveryCheckpoint[]>(loadRecoveryCheckpoints());
+  const [recoveryCheckpoints, setRecoveryCheckpoints] = useState<RecoveryCheckpoint[]>(loadRecoveryCheckpoints);
   const [settings, setSettings] = useState<AppSettings>(initial.settings);
   const [prototypes, setPrototypes] = useState<PlannedPrototype[]>(initial.prototypes);
   const [plannedFilament, setPlannedFilament] = useState<PlannedFilament[]>(initial.plannedFilament);
