@@ -26,6 +26,7 @@ export function isTauriRuntime(): boolean {
 }
 
 let databasePromise: Promise<Database> | null = null;
+let cachedStoredData: AppData | null | undefined;
 let pendingNativeData: AppData | null = null;
 let pendingWaiters: SaveWaiter[] = [];
 let saveTimer: number | null = null;
@@ -57,16 +58,20 @@ async function getDatabase() {
 
 export function loadStoredData(): AppData | null {
   if (typeof window === "undefined") return null;
+  if (cachedStoredData !== undefined) return cachedStoredData;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as AppData) : null;
+    cachedStoredData = raw ? (JSON.parse(raw) as AppData) : null;
+    return cachedStoredData;
   } catch (error) {
     console.warn("Forgekeeper storage failed to load", error);
+    cachedStoredData = null;
     return null;
   }
 }
 
 export function saveStoredData(data: AppData): void {
+  cachedStoredData = data;
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -221,6 +226,7 @@ export async function clearNativeStoredData(): Promise<void> {
 }
 
 export function clearStoredData(): void {
+  cachedStoredData = null;
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(STORAGE_KEY);
 }
