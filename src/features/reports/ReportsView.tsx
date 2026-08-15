@@ -46,7 +46,7 @@ export function ReportsView({ state }: { state: ForgekeeperState }) {
     .filter((entry) => entry.type === "Consumption")
     .reduce((sum, entry) => sum + Math.min(0, entry.deltaGrams), 0));
   const successfulPrints = workbench.workbench.printRecords.filter((record) => record.outcome === "success").length;
-  const partialPrints = workbench.workbench.printRecords.filter((record) => record.outcome === "partial").length;
+  const partialPrints = workbench.workbench.printRecords.filter((record) => record.outcome === "partial-success").length;
   const failedPrints = workbench.workbench.printRecords.filter((record) => record.outcome === "failed").length;
   const approvedSpecs = workbench.workbench.manufacturingSpecs.filter((spec) => spec.approvalState === "approved").length;
   const releasedPreparations = workbench.workbench.preparations.filter((prep) => prep.status === "submitted").length;
