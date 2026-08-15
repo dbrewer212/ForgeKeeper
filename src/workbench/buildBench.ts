@@ -9,6 +9,7 @@ export type BuildBenchDraft = {
   manufacturingSpecId: string;
   printerId?: string;
   materialProfileId?: string;
+  physicalSpoolIds?: string[];
   slicerId?: string;
   slicerProfileRef?: string;
   supportIntent?: string;
@@ -64,6 +65,30 @@ export class WorkbenchBuildBenchService {
       }
     }
 
+    const physicalSpoolIds = [...new Set(draft.physicalSpoolIds ?? [])];
+    if (physicalSpoolIds.length && !draft.materialProfileId) {
+      errors.push("Physical spools cannot be assigned without a material profile.");
+    }
+    for (const spoolId of physicalSpoolIds) {
+      const spool = state.filament.find((item) => item.id === spoolId);
+      if (!spool) {
+        errors.push(`Selected physical spool ${spoolId} is not in the Foundry material inventory.`);
+        continue;
+      }
+      if (draft.materialProfileId && spool.profileId !== draft.materialProfileId) {
+        errors.push(`${spool.foundrySpoolCode} does not match the selected material profile.`);
+      }
+      if (spool.status === "Archived" || spool.status === "Empty" || spool.condition === "Empty") {
+        errors.push(`${spool.foundrySpoolCode} is ${spool.status.toLowerCase()} and cannot be assigned to a production preparation.`);
+      }
+      if (spool.quantityConfidence === "Unknown") {
+        warnings.push(`${spool.foundrySpoolCode} has unknown remaining quantity. Measure or estimate it before relying on material sufficiency.`);
+      }
+    }
+    if (draft.materialProfileId && !physicalSpoolIds.length) {
+      warnings.push("A material profile is selected but no physical spool is reserved. Production may proceed only after an operator assigns the actual spool used.");
+    }
+
     for (const operation of draft.operationGraph) {
       if (!operation.type) errors.push(`Operation ${operation.operationId} has no operation type.`);
       if (operation.inputRevisionId && operation.inputRevisionId !== draft.revisionId) {
@@ -84,6 +109,7 @@ export class WorkbenchBuildBenchService {
       manufacturingSpecId: draft.manufacturingSpecId,
       printerId: draft.printerId || undefined,
       materialProfileId: draft.materialProfileId || undefined,
+      physicalSpoolIds: draft.physicalSpoolIds?.length ? [...new Set(draft.physicalSpoolIds)] : undefined,
       slicerId: draft.slicerId || undefined,
       slicerProfileRef: draft.slicerProfileRef || undefined,
       supportIntent: draft.supportIntent || undefined,
