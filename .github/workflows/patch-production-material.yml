@@ -21,47 +21,26 @@ jobs:
           fetch-depth: 0
 
       - name: Apply exact production material bridge patch
+        env:
+          PRODUCTION_FN_B64: ICBmdW5jdGlvbiBjb25zdW1lTWF0ZXJpYWxGb3JQcm9kdWN0aW9uKHJlZmVyZW5jZUlkOiBzdHJpbmcsIGFsbG9jYXRpb25zOiBBcnJheTx7IHNwb29sSWQ6IHN0cmluZzsgZ3JhbXM6IG51bWJlciB9PiwgcmVhc29uID0gIlJlY29yZGVkIEZvdW5kcnkgcHJvZHVjdGlvbiBjb25zdW1wdGlvbiIpIHsKICAgIGlmICghcmVmZXJlbmNlSWQudHJpbSgpIHx8ICFhbGxvY2F0aW9ucy5sZW5ndGgpIHJldHVybiBmYWxzZTsKICAgIGNvbnN0IG5leHRTcG9vbHMgPSBbLi4uZmlsYW1lbnRdOwogICAgY29uc3QgZW50cmllczogTWF0ZXJpYWxUcmFuc2FjdGlvbltdID0gW107CiAgICBmb3IgKGNvbnN0IGFsbG9jYXRpb24gb2YgYWxsb2NhdGlvbnMpIHsKICAgICAgY29uc3QgaW5kZXggPSBuZXh0U3Bvb2xzLmZpbmRJbmRleCgoc3Bvb2wpID0+IHNwb29sLmlkID09PSBhbGxvY2F0aW9uLnNwb29sSWQpOwogICAgICBjb25zdCBzcG9vbCA9IG5leHRTcG9vbHNbaW5kZXhdOwogICAgICBpZiAoIXNwb29sIHx8IHNwb29sLnF1YW50aXR5Q29uZmlkZW5jZSA9PT0gIlVua25vd24iIHx8IGFsbG9jYXRpb24uZ3JhbXMgPD0gMCB8fCBhbGxvY2F0aW9uLmdyYW1zID4gc3Bvb2wuZ3JhbXNBdmFpbGFibGUpIHJldHVybiBmYWxzZTsKICAgICAgY29uc3QgcmVzdWx0ID0gbWF0ZXJpYWxUcmFuc2FjdGlvbihzcG9vbCwgIkNvbnN1bXB0aW9uIiwgc3Bvb2wuZ3JhbXNBdmFpbGFibGUgLSBhbGxvY2F0aW9uLmdyYW1zLCByZWFzb24sIHsKICAgICAgICBjb25maWRlbmNlOiBzcG9vbC5xdWFudGl0eUNvbmZpZGVuY2UsCiAgICAgICAgbm90ZXM6IGBGb3VuZHJ5IHByb2R1Y3Rpb24gJHtyZWZlcmVuY2VJZH1gLAogICAgICB9KTsKICAgICAgbmV4dFNwb29sc1tpbmRleF0gPSByZXN1bHQuc3Bvb2w7CiAgICAgIGVudHJpZXMucHVzaChyZXN1bHQudHJhbnNhY3Rpb24pOwogICAgfQogICAgc2V0RmlsYW1lbnQobmV4dFNwb29scyk7CiAgICBzZXRNYXRlcmlhbFRyYW5zYWN0aW9ucygocHJldmlvdXMpID0+IFsuLi5lbnRyaWVzLCAuLi5wcmV2aW91c10pOwogICAgYXBwZW5kQXVkaXQoIkRhdGEgQ2hhbmdlIiwgIlJlY29yZCBwcm9kdWN0aW9uIG1hdGVyaWFsIiwgIlN1Y2Nlc3MiLCBgJHthbGxvY2F0aW9ucy5yZWR1Y2UoKHN1bSwgaXRlbSkgPT4gc3VtICsgaXRlbS5ncmFtcywgMCkudG9GaXhlZCgxKX1nIGNvbnN1bWVkIGZvciAke3JlZmVyZW5jZUlkfS5gLCByZWZlcmVuY2VJZCk7CiAgICByZXR1cm4gdHJ1ZTsKICB9Cgo=
         run: |
           python - <<'PY'
+          import base64
+          import os
           from pathlib import Path
 
           path = Path('src/state/useForgekeeperState.ts')
           text = path.read_text(encoding='utf-8')
-
-          marker = '''  function createMaterialReservation(profileId: string, grams: number, purpose: string, orderId?: string, spoolId?: string) {'''
+          marker = '  function createMaterialReservation(profileId: string, grams: number, purpose: string, orderId?: string, spoolId?: string) {'
           if text.count(marker) != 1:
               raise SystemExit(f'Expected exactly one material reservation insertion point, found {text.count(marker)}.')
-
-          production_fn = '''  function consumeMaterialForProduction(referenceId: string, allocations: Array<{ spoolId: string; grams: number }>, reason = "Recorded Foundry production consumption") {
-    if (!referenceId.trim() || !allocations.length) return false;
-    const nextSpools = [...filament];
-    const entries: MaterialTransaction[] = [];
-    for (const allocation of allocations) {
-      const index = nextSpools.findIndex((spool) => spool.id === allocation.spoolId);
-      const spool = nextSpools[index];
-      if (!spool || spool.quantityConfidence === "Unknown" || allocation.grams <= 0 || allocation.grams > spool.gramsAvailable) return false;
-      const result = materialTransaction(spool, "Consumption", spool.gramsAvailable - allocation.grams, reason, {
-        confidence: spool.quantityConfidence,
-        notes: `Foundry production ${referenceId}`,
-      });
-      nextSpools[index] = result.spool;
-      entries.push(result.transaction);
-    }
-    setFilament(nextSpools);
-    setMaterialTransactions((previous) => [...entries, ...previous]);
-    appendAudit("Data Change", "Record production material", "Success", `${allocations.reduce((sum, item) => sum + item.grams, 0).toFixed(1)}g consumed for ${referenceId}.`, referenceId);
-    return true;
-  }
-
-'''
+          production_fn = base64.b64decode(os.environ['PRODUCTION_FN_B64']).decode('utf-8')
           text = text.replace(marker, production_fn + marker, 1)
-
           old_return = 'consumeMaterialForOrder, createMaterialReservation, releaseMaterialReservation'
           new_return = 'consumeMaterialForOrder, consumeMaterialForProduction, createMaterialReservation, releaseMaterialReservation'
           if text.count(old_return) != 1:
               raise SystemExit(f'Expected exactly one state return target, found {text.count(old_return)}.')
           text = text.replace(old_return, new_return, 1)
-
           path.write_text(text, encoding='utf-8')
           PY
 
