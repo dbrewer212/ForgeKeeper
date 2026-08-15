@@ -3,6 +3,7 @@ import type {
   DomainMutationContext,
   ParkedThought,
   ParkedThoughtCategory,
+  ProductionItemSummary,
   ResumeContext,
 } from "./domainServices";
 import { HumanAuthority } from "./domainServices";
@@ -19,6 +20,16 @@ export type StewardBrief = {
   parkedThoughtCount: number;
   reentry: ResumeContext;
   completionReady: boolean;
+};
+
+export type ProductionCandidate = {
+  productionItemId: string;
+  name: string;
+  projectId?: string;
+  assetId: string;
+  revisionId: string;
+  preparationId: string;
+  printerId?: string;
 };
 
 export class ProductionSteward {
@@ -56,6 +67,33 @@ export class ProductionSteward {
       reentry,
       completionReady: Boolean(session && !blocker && !nextAction && session.state === "active"),
     };
+  }
+
+  async acceptProductionCandidate(
+    candidate: ProductionCandidate,
+    context: DomainMutationContext = { requestedBy: HumanAuthority, authorizedBy: HumanAuthority },
+  ): Promise<ProductionItemSummary> {
+    await this.runtime.initialize();
+    const existing = await this.runtime.domain.get().production.get(candidate.productionItemId);
+    if (existing) return existing;
+
+    const item: ProductionItemSummary = {
+      id: candidate.productionItemId,
+      projectId: candidate.projectId,
+      name: candidate.name,
+      stage: "ready-for-production",
+      status: "queued",
+      nextAction: candidate.printerId
+        ? `Review preparation ${candidate.preparationId} on Bastion and schedule ${candidate.printerId}.`
+        : `Assign a printer, review preparation ${candidate.preparationId} on Bastion, and schedule execution.`,
+    };
+
+    await this.runtime.domainState.upsertProductionItem(item, {
+      ...context,
+      correlationId: context.correlationId ?? candidate.productionItemId,
+      reason: context.reason ?? `Accepted Workbench preparation ${candidate.preparationId} for production.`,
+    });
+    return item;
   }
 
   async captureBranch(
