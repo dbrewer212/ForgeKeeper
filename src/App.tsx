@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useForgekeeperState } from "./state/useForgekeeperState";
@@ -80,17 +80,17 @@ function ForgekeeperWorkspace() {
     }
   };
 
-  async function openBastion() {
+  const openBastion = useCallback(async () => {
     try {
       await invoke("bastion_open_window");
     } catch (cause) {
       window.alert(cause instanceof Error ? cause.message : String(cause));
     }
-  }
+  }, []);
 
   return (
     <div className="flex h-screen">
-      <Sidebar state={state} onBastion={() => void openBastion()} />
+      <Sidebar view={state.view as string} setView={state.setView} onBastion={openBastion} />
       <main className="flex-1 overflow-auto p-4">
         {renderView()}
       </main>
