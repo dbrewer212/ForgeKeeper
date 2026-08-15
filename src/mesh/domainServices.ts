@@ -84,6 +84,13 @@ export type ProjectSummary = {
   updatedAt?: string;
 };
 
+export type ProductionWorkbenchLink = {
+  assetId: string;
+  revisionId: string;
+  preparationId: string;
+  printerId?: string;
+};
+
 export type ProductionItemSummary = {
   id: string;
   projectId?: string;
@@ -92,6 +99,7 @@ export type ProductionItemSummary = {
   status?: string;
   nextAction?: string;
   blocker?: string;
+  workbench?: ProductionWorkbenchLink;
 };
 
 export type AssetSummary = {
