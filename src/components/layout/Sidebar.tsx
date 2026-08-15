@@ -1,12 +1,19 @@
+import { memo } from "react";
 import { foundryStations } from "../../core/stations";
 
-export function Sidebar({ state, onBastion }: { state: any; onBastion: () => void }) {
+type SidebarProps = {
+  view: string;
+  setView: (view: any) => void;
+  onBastion: () => void;
+};
+
+export const Sidebar = memo(function Sidebar({ view, setView, onBastion }: SidebarProps) {
   const navItem = (key: string, label: string, description?: string) => (
     <button
-      onClick={() => state.setView(key)}
+      onClick={() => setView(key)}
       title={description}
       className={`w-full text-left px-3 py-2 rounded-lg mb-2 ${
-        state.view === key || (key === "designs" && state.view === "catalog") || (key === "production" && state.view === "orders")
+        view === key || (key === "designs" && view === "catalog") || (key === "production" && view === "orders")
           ? "bg-amber-600 text-white"
           : "bg-gray-800 text-gray-300 hover:bg-gray-700"
       }`}
@@ -39,4 +46,4 @@ export function Sidebar({ state, onBastion }: { state: any; onBastion: () => voi
       {navItem("commissioning", "Commissioning", "Temporary subsystem commissioning and verification console.")}
     </aside>
   );
-}
+});
