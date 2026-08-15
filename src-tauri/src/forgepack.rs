@@ -99,26 +99,40 @@ pub fn workbench_export_forgepack(
             .map_err(|error| format!("Could not clear incomplete Forgepack export: {error}"))?;
     }
 
-    let declared = manifest.files.iter().map(|file| (&file.file_id, file)).collect::<std::collections::HashMap<_, _>>();
+    let declared = manifest
+        .files
+        .iter()
+        .map(|file| (&file.file_id, file))
+        .collect::<std::collections::HashMap<_, _>>();
     let mut prepared = Vec::with_capacity(files.len());
     let mut total_bytes = 0_u64;
     for file in &files {
         let expected = validate_digest(&file.sha256)?;
-        let declaration = declared.get(&file.file_id)
+        let declaration = declared
+            .get(&file.file_id)
             .ok_or_else(|| format!("Manifest does not declare file {}.", file.file_id))?;
         if validate_digest(&declaration.sha256)? != expected {
-            return Err(format!("Manifest checksum does not match export record for {}.", file.file_id));
+            return Err(format!(
+                "Manifest checksum does not match export record for {}.",
+                file.file_id
+            ));
         }
         let expected_archive = safe_archive_path(&declaration.archive_path)?;
         let source = fs::canonicalize(file.storage_path.trim())
             .map_err(|error| format!("Could not resolve managed file {}: {error}", file.file_id))?;
         if !source.is_file() || !source.starts_with(&managed_root) {
-            return Err(format!("Forgepack export only permits Foundry-managed files: {}.", file.file_id));
+            return Err(format!(
+                "Forgepack export only permits Foundry-managed files: {}.",
+                file.file_id
+            ));
         }
         let metadata = fs::metadata(&source)
             .map_err(|error| format!("Could not inspect managed file {}: {error}", file.file_id))?;
         if metadata.len() > MAX_ASSET_BYTES {
-            return Err(format!("Managed file {} exceeds the 1 GiB per-file Forgepack limit.", file.file_id));
+            return Err(format!(
+                "Managed file {} exceeds the 1 GiB per-file Forgepack limit.",
+                file.file_id
+            ));
         }
         total_bytes = total_bytes.saturating_add(metadata.len());
         if total_bytes > MAX_PACKET_BYTES {
@@ -126,7 +140,10 @@ pub fn workbench_export_forgepack(
         }
         let actual = sha256_file(&source)?;
         if actual != expected {
-            return Err(format!("Managed file {} failed checksum verification before export.", file.file_id));
+            return Err(format!(
+                "Managed file {} failed checksum verification before export.",
+                file.file_id
+            ));
         }
         prepared.push((source, expected_archive, metadata.len()));
     }
@@ -138,20 +155,24 @@ pub fn workbench_export_forgepack(
         let options = FileOptions::default()
             .compression_method(CompressionMethod::Deflated)
             .unix_permissions(0o644);
-        writer.start_file("manifest.json", options)
+        writer
+            .start_file("manifest.json", options)
             .map_err(|error| format!("Could not write Forgepack manifest entry: {error}"))?;
-        writer.write_all(manifest_json.as_bytes())
+        writer
+            .write_all(manifest_json.as_bytes())
             .map_err(|error| format!("Could not write Forgepack manifest: {error}"))?;
 
         for (source, archive_path, _) in &prepared {
-            writer.start_file(archive_path, options)
+            writer
+                .start_file(archive_path, options)
                 .map_err(|error| format!("Could not create Forgepack asset entry: {error}"))?;
             let mut input = File::open(source)
                 .map_err(|error| format!("Could not open managed asset during export: {error}"))?;
             std::io::copy(&mut input, &mut writer)
                 .map_err(|error| format!("Could not write managed asset into Forgepack: {error}"))?;
         }
-        writer.finish()
+        writer
+            .finish()
             .map_err(|error| format!("Could not finalize Forgepack archive: {error}"))?;
         Ok(())
     })();
@@ -182,7 +203,10 @@ pub fn workbench_import_forgepack(
     let package = fs::canonicalize(package_path.trim())
         .map_err(|error| format!("Could not resolve Forgepack: {error}"))?;
     if !package.is_file()
-        || !package.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("forgepack"))
+        || !package
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case("forgepack"))
     {
         return Err("Select a valid .forgepack file.".to_string());
     }
@@ -192,23 +216,47 @@ pub fn workbench_import_forgepack(
     let mut archive = ZipArchive::new(source)
         .map_err(|error| format!("Forgepack is not a readable ZIP archive: {error}"))?;
     if archive.len() == 0 || archive.len() > MAX_ENTRIES {
-        return Err(format!("Forgepack must contain between 1 and {MAX_ENTRIES} entries."));
+        return Err(format!(
+            "Forgepack must contain between 1 and {MAX_ENTRIES} entries."
+        ));
     }
-    if archive.has_overlapping_files().map_err(|error| error.to_string())? {
-        return Err("Forgepack contains overlapping ZIP entries.".to_string());
-    }
-    if archive.decompressed_size().unwrap_or(u128::MAX) > MAX_PACKET_BYTES as u128 {
-        return Err("Forgepack exceeds the 2 GiB extraction limit.".to_string());
+
+    // zip 0.6 does not expose aggregate decompressed-size or overlap helpers. Enforce the
+    // same practical intake boundary by validating every central-directory entry up front,
+    // rejecting duplicate names, unsafe paths, directory/symlink entries, and an aggregate
+    // uncompressed size above the packet limit before any extraction occurs.
+    let mut seen_entry_names = HashSet::new();
+    let mut total_uncompressed_bytes = 0_u64;
+    for index in 0..archive.len() {
+        let entry = archive
+            .by_index(index)
+            .map_err(|error| format!("Could not inspect Forgepack entry: {error}"))?;
+        let name = normalize_archive_path(entry.name());
+        if !seen_entry_names.insert(name.clone()) {
+            return Err(format!("Forgepack contains duplicate ZIP entry: {name}"));
+        }
+        if entry.enclosed_name().is_none() || entry.is_dir() || zip_entry_is_symlink(&entry) {
+            return Err(format!(
+                "Forgepack contains an unsafe or unsupported ZIP entry: {}",
+                entry.name()
+            ));
+        }
+        total_uncompressed_bytes = total_uncompressed_bytes.saturating_add(entry.size());
+        if total_uncompressed_bytes > MAX_PACKET_BYTES {
+            return Err("Forgepack exceeds the 2 GiB extraction limit.".to_string());
+        }
     }
 
     let manifest_json = {
-        let mut manifest_entry = archive.by_name("manifest.json")
+        let mut manifest_entry = archive
+            .by_name("manifest.json")
             .map_err(|_| "Forgepack is missing manifest.json.".to_string())?;
         if manifest_entry.size() > MAX_MANIFEST_BYTES {
             return Err("Forgepack manifest exceeds the 4 MiB limit.".to_string());
         }
         let mut value = String::new();
-        manifest_entry.read_to_string(&mut value)
+        manifest_entry
+            .read_to_string(&mut value)
             .map_err(|error| format!("Could not read Forgepack manifest: {error}"))?;
         value
     };
@@ -225,11 +273,9 @@ pub fn workbench_import_forgepack(
         }
     }
     for index in 0..archive.len() {
-        let entry = archive.by_index(index)
+        let entry = archive
+            .by_index(index)
             .map_err(|error| format!("Could not inspect Forgepack entry: {error}"))?;
-        if entry.enclosed_name().is_none() || entry.is_symlink() || entry.is_dir() {
-            return Err(format!("Forgepack contains an unsafe or unsupported ZIP entry: {}", entry.name()));
-        }
         let name = normalize_archive_path(entry.name());
         if name != "manifest.json" && !declared_paths.contains(&name) {
             return Err(format!("Forgepack contains undeclared file: {name}"));
@@ -248,10 +294,13 @@ pub fn workbench_import_forgepack(
     for file in &manifest.files {
         let digest = validate_digest(&file.sha256)?;
         let archive_path = safe_archive_path(&file.archive_path)?;
-        let mut entry = archive.by_name(&archive_path)
+        let mut entry = archive
+            .by_name(&archive_path)
             .map_err(|_| format!("Forgepack is missing declared file {archive_path}."))?;
         if entry.size() > MAX_ASSET_BYTES {
-            return Err(format!("Forgepack file {archive_path} exceeds the 1 GiB per-file limit."));
+            return Err(format!(
+                "Forgepack file {archive_path} exceeds the 1 GiB per-file limit."
+            ));
         }
 
         let original_name = Path::new(&archive_path)
@@ -274,7 +323,10 @@ pub fn workbench_import_forgepack(
 
         let reused_existing = if destination.exists() {
             if !destination.is_file() || sha256_file(&destination)? != digest {
-                return Err(format!("Managed-file checksum conflict for imported file {}.", file.file_id));
+                return Err(format!(
+                    "Managed-file checksum conflict for imported file {}.",
+                    file.file_id
+                ));
             }
             true
         } else {
@@ -293,7 +345,10 @@ pub fn workbench_import_forgepack(
             };
             if actual != digest {
                 let _ = fs::remove_file(&temporary);
-                return Err(format!("Checksum verification failed for Forgepack file {}.", file.file_id));
+                return Err(format!(
+                    "Checksum verification failed for Forgepack file {}.",
+                    file.file_id
+                ));
             }
             fs::rename(&temporary, &destination)
                 .map_err(|error| format!("Could not commit imported managed file: {error}"))?;
@@ -338,7 +393,16 @@ fn safe_archive_path(value: &str) -> Result<String, String> {
         return Err(format!("Unsafe Forgepack asset path: {value}"));
     }
     let path = Path::new(&normalized);
-    if path.is_absolute() || path.components().any(|component| matches!(component, std::path::Component::ParentDir | std::path::Component::RootDir | std::path::Component::Prefix(_))) {
+    if path.is_absolute()
+        || path.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
+    {
         return Err(format!("Forgepack asset path escapes the archive: {value}"));
     }
     Ok(normalized)
@@ -351,7 +415,13 @@ fn normalize_archive_path(value: &str) -> String {
 fn safe_segment(value: &str, label: &str) -> Result<String, String> {
     let sanitized: String = value
         .chars()
-        .map(|character| if character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.') { character } else { '_' })
+        .map(|character| {
+            if character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.') {
+                character
+            } else {
+                '_'
+            }
+        })
         .collect();
     let sanitized = sanitized.trim_matches('.').trim_matches('_').to_string();
     if sanitized.is_empty() || sanitized.len() > 120 {
@@ -361,7 +431,12 @@ fn safe_segment(value: &str, label: &str) -> Result<String, String> {
 }
 
 fn sanitize_extension(value: &str) -> String {
-    value.chars().filter(|character| character.is_ascii_alphanumeric()).take(16).collect::<String>().to_ascii_lowercase()
+    value
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .take(16)
+        .collect::<String>()
+        .to_ascii_lowercase()
 }
 
 fn validate_digest(value: &str) -> Result<String, String> {
@@ -372,35 +447,60 @@ fn validate_digest(value: &str) -> Result<String, String> {
     Ok(digest)
 }
 
+fn zip_entry_is_symlink(entry: &zip::read::ZipFile<'_>) -> bool {
+    entry
+        .unix_mode()
+        .is_some_and(|mode| (mode & 0o170000) == 0o120000)
+}
+
 fn canonical_or_create(path: PathBuf) -> Result<PathBuf, String> {
-    fs::create_dir_all(&path).map_err(|error| format!("Could not create Foundry directory: {error}"))?;
-    fs::canonicalize(path).map_err(|error| format!("Could not canonicalize Foundry directory: {error}"))
+    fs::create_dir_all(&path)
+        .map_err(|error| format!("Could not create Foundry directory: {error}"))?;
+    fs::canonicalize(path)
+        .map_err(|error| format!("Could not canonicalize Foundry directory: {error}"))
 }
 
 fn sha256_file(path: &Path) -> Result<String, String> {
-    let mut file = File::open(path).map_err(|error| format!("Could not open file for checksum verification: {error}"))?;
+    let mut file = File::open(path)
+        .map_err(|error| format!("Could not open file for checksum verification: {error}"))?;
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 1024 * 1024];
     loop {
-        let count = file.read(&mut buffer).map_err(|error| format!("Could not read file for checksum verification: {error}"))?;
-        if count == 0 { break; }
+        let count = file
+            .read(&mut buffer)
+            .map_err(|error| format!("Could not read file for checksum verification: {error}"))?;
+        if count == 0 {
+            break;
+        }
         hasher.update(&buffer[..count]);
     }
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-fn extract_entry_with_hash<R: Read>(input: &mut R, destination: &Path) -> Result<(String, u64), String> {
-    let mut output = File::create(destination).map_err(|error| format!("Could not create Forgepack extraction staging file: {error}"))?;
+fn extract_entry_with_hash<R: Read>(
+    input: &mut R,
+    destination: &Path,
+) -> Result<(String, u64), String> {
+    let mut output = File::create(destination)
+        .map_err(|error| format!("Could not create Forgepack extraction staging file: {error}"))?;
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 1024 * 1024];
     let mut total = 0_u64;
     loop {
-        let count = input.read(&mut buffer).map_err(|error| format!("Could not read Forgepack asset: {error}"))?;
-        if count == 0 { break; }
+        let count = input
+            .read(&mut buffer)
+            .map_err(|error| format!("Could not read Forgepack asset: {error}"))?;
+        if count == 0 {
+            break;
+        }
         hasher.update(&buffer[..count]);
-        output.write_all(&buffer[..count]).map_err(|error| format!("Could not write Forgepack asset: {error}"))?;
+        output
+            .write_all(&buffer[..count])
+            .map_err(|error| format!("Could not write Forgepack asset: {error}"))?;
         total = total.saturating_add(count as u64);
     }
-    output.flush().map_err(|error| format!("Could not finish Forgepack extraction: {error}"))?;
+    output
+        .flush()
+        .map_err(|error| format!("Could not finish Forgepack extraction: {error}"))?;
     Ok((format!("{:x}", hasher.finalize()), total))
 }
