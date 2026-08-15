@@ -1305,6 +1305,27 @@ export function useForgekeeperState() {
     return true;
   }
 
+  function consumeMaterialForProduction(referenceId: string, allocations: Array<{ spoolId: string; grams: number }>, reason = "Recorded Foundry production consumption") {
+    if (!referenceId.trim() || !allocations.length) return false;
+    const nextSpools = [...filament];
+    const entries: MaterialTransaction[] = [];
+    for (const allocation of allocations) {
+      const index = nextSpools.findIndex((spool) => spool.id === allocation.spoolId);
+      const spool = nextSpools[index];
+      if (!spool || spool.quantityConfidence === "Unknown" || allocation.grams <= 0 || allocation.grams > spool.gramsAvailable) return false;
+      const result = materialTransaction(spool, "Consumption", spool.gramsAvailable - allocation.grams, reason, {
+        confidence: spool.quantityConfidence,
+        notes: `Foundry production ${referenceId}`,
+      });
+      nextSpools[index] = result.spool;
+      entries.push(result.transaction);
+    }
+    setFilament(nextSpools);
+    setMaterialTransactions((previous) => [...entries, ...previous]);
+    appendAudit("Data Change", "Record production material", "Success", `${allocations.reduce((sum, item) => sum + item.grams, 0).toFixed(1)}g consumed for ${referenceId}.`, referenceId);
+    return true;
+  }
+
   function createMaterialReservation(profileId: string, grams: number, purpose: string, orderId?: string, spoolId?: string) {
     if (!filamentProfiles.some((profile) => profile.id === profileId) || !Number.isFinite(grams) || grams <= 0) return null;
     const reservation: MaterialReservation = { id: uid("RES"), profileId, spoolId, orderId, grams, status: "Active", purpose: purpose.trim() || "Queued work", createdAt: new Date().toISOString() };
@@ -1862,7 +1883,7 @@ export function useForgekeeperState() {
     addCollection, updateCollection, removeCollection, assignProductToCollection, setCollectionHero,
     addRelease, updateRelease, removeRelease, addProductToRelease, removeProductFromRelease,
     addOrder, updateOrder, removeOrder, consumeFilamentForOrder,
-    addFilament, addFilamentProfile, updateFilamentProfile, removeFilamentProfile, receiveFilamentBatch, importFilamentCensusCsv, updateFilament, adjustFilament, removeFilament, restoreArchivedFilament, consumeMaterialForOrder, createMaterialReservation, releaseMaterialReservation, recordFilamentDrying, reverseMaterialTransaction, printFilamentLabels,
+    addFilament, addFilamentProfile, updateFilamentProfile, removeFilamentProfile, receiveFilamentBatch, importFilamentCensusCsv, updateFilament, adjustFilament, removeFilament, restoreArchivedFilament, consumeMaterialForOrder, consumeMaterialForProduction, createMaterialReservation, releaseMaterialReservation, recordFilamentDrying, reverseMaterialTransaction, printFilamentLabels,
     addPrinter, updatePrinter, removePrinter,
     addMaintenance, updateMaintenance, removeMaintenance,
     recordGenerationJob, updateGenerationJob, linkGeneratedStl,
