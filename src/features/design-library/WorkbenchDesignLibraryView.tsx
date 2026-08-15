@@ -2,8 +2,9 @@ import { useState } from "react";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 import { AssetVaultView } from "./AssetVaultView";
 import { IntakeStation } from "./IntakeStation";
+import { ModelInspectorStation } from "./ModelInspectorStation";
 
-type WorkbenchSurface = "vault" | "intake";
+type WorkbenchSurface = "vault" | "intake" | "inspector";
 
 export function WorkbenchDesignLibraryView({ state }: { state: ForgekeeperState }) {
   const [surface, setSurface] = useState<WorkbenchSurface>("vault");
@@ -27,12 +28,21 @@ export function WorkbenchDesignLibraryView({ state }: { state: ForgekeeperState 
             >
               Intake Station
             </button>
+            <button
+              type="button"
+              onClick={() => setSurface("inspector")}
+              className={`min-h-[44px] rounded-xl px-4 py-2 text-sm font-semibold ${surface === "inspector" ? "bg-amber-600 text-white" : "bg-white/5 text-slate-300 hover:bg-white/10"}`}
+            >
+              Model Inspector
+            </button>
           </div>
           <div className="text-xs text-slate-500">Workbench Domain · Shared Foundry identity</div>
         </div>
       </div>
 
-      {surface === "vault" ? <AssetVaultView state={state} /> : <IntakeStation state={state} />}
+      {surface === "vault" ? <AssetVaultView state={state} /> : null}
+      {surface === "intake" ? <IntakeStation state={state} /> : null}
+      {surface === "inspector" ? <ModelInspectorStation state={state} /> : null}
     </div>
   );
 }
