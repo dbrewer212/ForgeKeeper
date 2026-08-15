@@ -20,6 +20,8 @@ export type WorkbenchEventType =
   | "production.job.failed"
   | "print_record.created"
   | "asset.production_evidence.changed"
+  | "provider.generation.submitted"
+  | "provider.generation.terminal"
   | "forgepack.exported"
   | "forgepack.imported";
 
