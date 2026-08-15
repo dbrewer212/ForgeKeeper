@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
@@ -6,7 +6,7 @@ import { Select } from "../../components/ui/Select";
 import { Textarea } from "../../components/ui/Textarea";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 import type { PrintOutcome } from "../../workbench/contracts";
-import { getWorkbenchProductionGate } from "../../workbench/productionGate";
+import { getWorkbenchProductionGate, type PrintMaterialAllocation } from "../../workbench/productionGate";
 import { useWorkbenchVault } from "../../workbench/useWorkbenchVault";
 
 const outcomes: PrintOutcome[] = ["success", "partial-success", "failed", "cancelled", "aborted"];
@@ -31,10 +31,27 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
   const [observation, setObservation] = useState("");
   const [failureMode, setFailureMode] = useState("");
   const [elapsedMinutes, setElapsedMinutes] = useState("");
-  const [materialGrams, setMaterialGrams] = useState("");
+  const [allocationDrafts, setAllocationDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  const candidateSpools = useMemo(() => {
+    if (!preparation?.materialProfileId) return [];
+    const assigned = new Set(preparation.physicalSpoolIds ?? []);
+    const matching = state.filament.filter((spool) =>
+      spool.profileId === preparation.materialProfileId && spool.status !== "Archived" && spool.status !== "Empty" && spool.condition !== "Empty"
+    );
+    return [...matching].sort((a, b) => {
+      const aAssigned = assigned.has(a.id) ? 0 : 1;
+      const bAssigned = assigned.has(b.id) ? 0 : 1;
+      return aAssigned - bAssigned || a.foundrySpoolCode.localeCompare(b.foundrySpoolCode);
+    });
+  }, [preparation?.materialProfileId, preparation?.physicalSpoolIds, state.filament]);
+
+  useEffect(() => {
+    setAllocationDrafts({});
+  }, [preparation?.preparationId]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -50,12 +67,30 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
     }
   }
 
+  function materialAllocations(): PrintMaterialAllocation[] {
+    return Object.entries(allocationDrafts)
+      .map(([spoolId, raw]) => ({ spoolId, grams: Number(raw) }))
+      .filter((item) => item.spoolId && Number.isFinite(item.grams) && item.grams > 0);
+  }
+
+  function validateLedgerAllocations(allocations: PrintMaterialAllocation[]): string | undefined {
+    for (const allocation of allocations) {
+      const spool = state.filament.find((item) => item.id === allocation.spoolId);
+      if (!spool) return `Physical spool ${allocation.spoolId} is no longer in inventory.`;
+      if (spool.quantityConfidence === "Unknown") return `${spool.foundrySpoolCode} has unknown remaining quantity. Measure or estimate it before posting production consumption.`;
+      if (allocation.grams > spool.gramsAvailable) return `${spool.foundrySpoolCode} has ${spool.gramsAvailable.toFixed(1)}g recorded, but ${allocation.grams.toFixed(1)}g was entered as actual use.`;
+      if (preparation?.materialProfileId && spool.profileId !== preparation.materialProfileId) return `${spool.foundrySpoolCode} does not match the preparation material profile.`;
+      if (preparation?.physicalSpoolIds?.length && !preparation.physicalSpoolIds.includes(spool.id)) return `${spool.foundrySpoolCode} was not assigned to this preparation. Return to Build Bench if the physical spool assignment changed before execution.`;
+    }
+    return undefined;
+  }
+
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-amber-500/15 bg-[#0d131c] p-4">
         <div className="text-xs uppercase tracking-[0.24em] text-amber-400">Foundry Workbench</div>
         <h1 className="mt-1 text-2xl font-semibold text-slate-100">Production Gate</h1>
-        <p className="mt-1 max-w-4xl text-sm text-slate-400">Human approval remains explicit. Validated preparation is released to Production Steward, supervised through Bastion, and returned physical evidence is attached to the exact asset revision and production job.</p>
+        <p className="mt-1 max-w-4xl text-sm text-slate-400">Human approval remains explicit. Validated preparation is released to Production Steward, supervised through Bastion, and returned physical evidence is attached to the exact asset revision, production job, printer, and physical material consumed.</p>
       </div>
 
       {preparations.length === 0 ? (
@@ -77,6 +112,7 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
                 <Readout label="Preparation" value={preparation?.preparationId ?? "Unknown"} />
                 <Readout label="Status" value={preparation?.status ?? "Unknown"} />
                 <Readout label="Production Job" value={preparation?.productionJobId ?? "Not released"} />
+                <Readout label="Assigned spools" value={preparation?.physicalSpoolIds?.length ? preparation.physicalSpoolIds.join(", ") : "None fixed at preparation time"} />
               </div>
             </Card>
 
@@ -117,12 +153,43 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
                   </Select>
                 </label>
                 <Input type="number" min="0" value={elapsedMinutes} onChange={(event) => setElapsedMinutes(event.target.value)} placeholder="Elapsed minutes" />
-                <Input type="number" min="0" step="0.1" value={materialGrams} onChange={(event) => setMaterialGrams(event.target.value)} placeholder="Measured material grams" />
               </div>
+
+              {preparation?.materialProfileId ? (
+                <div className="mt-4 rounded-2xl border border-white/10 bg-[#0b1119] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs uppercase tracking-[0.14em] text-amber-400">Physical material used</div>
+                      <div className="mt-1 text-xs text-slate-500">Enter actual grams only for spools that fed this print. Zero/blank means the spool was not consumed.</div>
+                    </div>
+                    <div className="text-sm text-slate-300">{materialAllocations().reduce((sum, item) => sum + item.grams, 0).toFixed(1)}g total</div>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {candidateSpools.map((spool) => {
+                      const assigned = preparation.physicalSpoolIds?.includes(spool.id) ?? false;
+                      return (
+                        <div key={spool.id} className={`grid gap-3 rounded-xl border p-3 md:grid-cols-[minmax(0,1fr),140px] ${assigned ? "border-amber-500/20 bg-amber-500/5" : "border-white/8 bg-black/10"}`}>
+                          <div>
+                            <div className="text-sm font-medium text-slate-200">{spool.foundrySpoolCode}{assigned ? " · assigned" : ""}</div>
+                            <div className="mt-1 text-xs text-slate-500">{spool.colorName} · {spool.quantityConfidence} · {spool.quantityConfidence === "Unknown" ? "remainder unknown" : `${spool.gramsAvailable.toFixed(1)}g available`}</div>
+                          </div>
+                          <Input type="number" min="0" step="0.1" value={allocationDrafts[spool.id] ?? ""} onChange={(event) => setAllocationDrafts((current) => ({ ...current, [spool.id]: event.target.value }))} placeholder="grams used" />
+                        </div>
+                      );
+                    })}
+                    {candidateSpools.length === 0 ? <div className="text-sm text-amber-300">No usable physical spool matches this preparation. Record/measure inventory or return to Build Bench before posting material consumption.</div> : null}
+                  </div>
+                </div>
+              ) : null}
+
               <Textarea className="mt-3 min-h-[90px]" value={observation} onChange={(event) => setObservation(event.target.value)} placeholder="Operator observation / print result notes" />
               <Input className="mt-3" value={failureMode} onChange={(event) => setFailureMode(event.target.value)} placeholder="Failure mode, if applicable" />
               <Button className="mt-3" disabled={busy || !preparation?.productionJobId || !selectedPrinterId} onClick={() => void run(async () => {
                 if (!preparation) return;
+                const allocations = materialAllocations();
+                const allocationError = validateLedgerAllocations(allocations);
+                if (allocationError) throw new Error(allocationError);
+
                 const record = await getWorkbenchProductionGate().recordEvidence({
                   preparationId: preparation.preparationId,
                   printerId: selectedPrinterId,
@@ -130,13 +197,25 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
                   observation,
                   failureMode,
                   elapsedSeconds: elapsedMinutes ? Math.round(Number(elapsedMinutes) * 60) : undefined,
-                  measuredMaterialGrams: materialGrams ? Number(materialGrams) : undefined,
+                  materialAllocations: allocations,
                 });
-                setMessage(`Print evidence ${record.printRecordId} returned to the asset history.`);
+
+                if (allocations.length) {
+                  const consumed = state.consumeMaterialForProduction(
+                    record.productionJobId,
+                    allocations,
+                    `Measured production use for ${asset?.name ?? record.assetId}; PrintRecord ${record.printRecordId}`,
+                  );
+                  if (!consumed) {
+                    throw new Error(`Print evidence ${record.printRecordId} was recorded, but material ledger reconciliation failed. Do not re-record the print; reconcile physical spool consumption against that PrintRecord.`);
+                  }
+                }
+
+                setMessage(`Print evidence ${record.printRecordId} returned to the asset history${allocations.length ? " and physical spool consumption was posted to the material ledger" : ""}.`);
                 setObservation("");
                 setFailureMode("");
                 setElapsedMinutes("");
-                setMaterialGrams("");
+                setAllocationDrafts({});
               })}>Record Returned Evidence</Button>
             </Card>
 
@@ -148,6 +227,7 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
                     <div className="text-xs text-slate-500">{record.completedAt ?? record.createdAt}</div>
                   </div>
                   <div className="mt-2 text-xs text-slate-400">{record.printerId} · {record.productionJobId}</div>
+                  <div className="mt-1 text-xs text-slate-500">Material: {record.measuredMaterialGrams !== undefined ? `${record.measuredMaterialGrams.toFixed(1)}g` : "not measured"} · Spools: {record.physicalSpoolIds?.length ? record.physicalSpoolIds.join(", ") : "not recorded"}</div>
                   {record.observations.map((item) => <div key={item.observationId} className="mt-2 text-sm text-slate-300">{item.text}</div>)}
                 </div>
               ))}</div>
