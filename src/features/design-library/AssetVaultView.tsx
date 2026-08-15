@@ -5,14 +5,6 @@ import { Input } from "../../components/ui/Input";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 import type { FoundryAsset } from "../../workbench/contracts";
 import { useWorkbenchVault } from "../../workbench/useWorkbenchVault";
-import { DesignLibraryView } from "./DesignLibraryView";
-
-type VaultMode = "vault" | "engineering";
-
-function legacyProductId(assetId: string): string | null {
-  const prefix = "asset:legacy:";
-  return assetId.startsWith(prefix) ? assetId.slice(prefix.length) : null;
-}
 
 function countByAsset<T>(records: T[], assetId: (record: T) => string): Map<string, number> {
   const counts = new Map<string, number>();
@@ -25,7 +17,6 @@ function countByAsset<T>(records: T[], assetId: (record: T) => string): Map<stri
 
 export function AssetVaultView({ state }: { state: ForgekeeperState }) {
   const runtime = useWorkbenchVault(state);
-  const [mode, setMode] = useState<VaultMode>("vault");
   const [query, setQuery] = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState("");
 
@@ -66,29 +57,6 @@ export function AssetVaultView({ state }: { state: ForgekeeperState }) {
   const preparations = selectedProjection?.preparations ?? [];
   const prints = selectedProjection?.prints ?? [];
 
-  function focusEngineering(asset: FoundryAsset) {
-    const productId = legacyProductId(asset.assetId);
-    if (productId && state.products.some((item) => item.id === productId)) state.setSelectedProductId(productId);
-    setMode("engineering");
-  }
-
-  if (mode === "engineering") {
-    return (
-      <div className="space-y-4">
-        <div className="rounded-2xl border border-amber-500/15 bg-[#0d131c] p-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-amber-400">Workbench Domain</div>
-              <div className="mt-1 text-sm text-slate-300">Engineering tools remain attached while their records migrate onto FMI.</div>
-            </div>
-            <Button variant="ghost" onClick={() => setMode("vault")}>Return to Asset Vault</Button>
-          </div>
-        </div>
-        <DesignLibraryView state={state} />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-amber-500/15 bg-[#0d131c] p-4">
@@ -98,10 +66,7 @@ export function AssetVaultView({ state }: { state: ForgekeeperState }) {
             <h1 className="mt-1 text-2xl font-semibold text-slate-100">Asset Vault</h1>
             <p className="mt-1 max-w-3xl text-sm text-slate-400">Canonical Foundry assets, revisions, lineage, manufacturing evidence, and production history. Files are properties of assets; filenames are not identities.</p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => void runtime.refresh()}>Refresh Vault</Button>
-            {selected ? <Button onClick={() => focusEngineering(selected)}>Open Engineering</Button> : null}
-          </div>
+          <Button variant="ghost" onClick={() => void runtime.refresh()}>Refresh Vault</Button>
         </div>
       </div>
 
