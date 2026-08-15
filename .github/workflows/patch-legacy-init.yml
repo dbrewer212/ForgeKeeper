@@ -1,0 +1,45 @@
+name: One-Time Legacy Init Patch
+
+on:
+  push:
+    branches:
+      - foundry-mesh-core
+    paths:
+      - .github/workflows/patch-legacy-init.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Foundry branch
+        uses: actions/checkout@v4
+        with:
+          ref: foundry-mesh-core
+          fetch-depth: 0
+
+      - name: Apply exact initialization patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/state/useForgekeeperState.ts')
+          text = path.read_text(encoding='utf-8')
+          old = 'export function useForgekeeperState() {\n  const initial = hydrateData();'
+          new = 'export function useForgekeeperState() {\n  const [initial] = useState(hydrateData);'
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'Expected exactly one legacy initialization target, found {count}.')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Commit patch and remove this workflow
+        run: |
+          git config user.name "Foundry Patch Worker"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/state/useForgekeeperState.ts
+          git rm .github/workflows/patch-legacy-init.yml
+          git commit -m "Initialize legacy workspace state once per mount"
+          git push origin HEAD:foundry-mesh-core
