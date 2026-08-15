@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useForgekeeperState } from "./state/useForgekeeperState";
@@ -39,11 +39,9 @@ export default function App() {
 
 function ForgekeeperWorkspace() {
   const state = useForgekeeperState();
-  const startupSequenceStarted = useRef(false);
 
   useEffect(() => {
-    if (!state.storageReady || startupSequenceStarted.current) return;
-    startupSequenceStarted.current = true;
+    if (!state.storageReady) return;
     let cancelled = false;
 
     void (async () => {
