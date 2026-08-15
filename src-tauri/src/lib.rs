@@ -1,6 +1,7 @@
 mod bastion;
 mod managed_services;
 mod providers;
+mod workbench_files;
 
 use bastion::{
     bastion_close_window, bastion_launch_mode, bastion_open_window, bastion_set_startup,
@@ -13,6 +14,7 @@ use providers::{
     download_generation_asset, get_generation_status, submit_meshy_image_generation,
     submit_printpal_image_generation, test_provider_connections,
 };
+use workbench_files::{inspect_geometry, inspect_local_paths};
 use serde::Serialize;
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -74,7 +76,7 @@ $disks = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Obj
 })
 $gpu = Get-CimInstance Win32_VideoController | Where-Object { $_.Name -notmatch 'Microsoft Basic' } | Select-Object -First 1
 $totalMemoryBytes = [uint64]$os.TotalVisibleMemorySize * 1024
-$availableMemoryBytes = [uint64]$os.FreePhysicalMemory * 1024
+$availableMemoryBytes = [uint64]$os.FreePhysicalMemorySize * 1024
 $gpuObject = $null
 if ($null -ne $gpu) {
   $gpuObject = [pscustomobject]@{
@@ -357,6 +359,8 @@ pub fn run() {
             launch_external_tool,
             local_http_get,
             watcher_system_snapshot,
+            inspect_local_paths,
+            inspect_geometry,
             test_provider_connections,
             submit_meshy_image_generation,
             submit_printpal_image_generation,
