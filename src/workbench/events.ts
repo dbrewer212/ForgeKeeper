@@ -19,7 +19,9 @@ export type WorkbenchEventType =
   | "production.job.completed"
   | "production.job.failed"
   | "print_record.created"
-  | "asset.production_evidence.changed";
+  | "asset.production_evidence.changed"
+  | "forgepack.exported"
+  | "forgepack.imported";
 
 export type WorkbenchEvent<TPayload extends Record<string, unknown> = Record<string, unknown>> = {
   eventId: WorkbenchId;
