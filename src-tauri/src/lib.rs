@@ -76,7 +76,7 @@ $disks = @(Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Obj
 })
 $gpu = Get-CimInstance Win32_VideoController | Where-Object { $_.Name -notmatch 'Microsoft Basic' } | Select-Object -First 1
 $totalMemoryBytes = [uint64]$os.TotalVisibleMemorySize * 1024
-$availableMemoryBytes = [uint64]$os.FreePhysicalMemorySize * 1024
+$availableMemoryBytes = [uint64]$os.FreePhysicalMemory * 1024
 $gpuObject = $null
 if ($null -ne $gpu) {
   $gpuObject = [pscustomobject]@{
