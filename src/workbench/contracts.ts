@@ -269,6 +269,7 @@ export type PreparationRecord = {
   revisionId: WorkbenchId;
   variantId?: WorkbenchId;
   manufacturingSpecId: WorkbenchId;
+  productionJobId?: WorkbenchId;
   printerId?: WorkbenchId;
   materialProfileId?: WorkbenchId;
   slicerId?: string;
