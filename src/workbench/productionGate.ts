@@ -1,8 +1,14 @@
 import { HumanAuthority } from "../mesh/domainServices";
+import { ProductionSteward } from "../mesh/productionSteward";
 import { getFoundryMeshRuntime } from "../mesh/runtime";
 import type { ManufacturingSpec, PrintOutcome, PrintRecord } from "./contracts";
 import { WorkbenchRepository } from "./repository";
 import { getWorkbenchService } from "./service";
+
+export type PrintMaterialAllocation = {
+  spoolId: string;
+  grams: number;
+};
 
 export type PrintEvidenceInput = {
   preparationId: string;
@@ -12,6 +18,7 @@ export type PrintEvidenceInput = {
   failureMode?: string;
   elapsedSeconds?: number;
   measuredMaterialGrams?: number;
+  materialAllocations?: PrintMaterialAllocation[];
 };
 
 export class WorkbenchProductionGate {
@@ -44,6 +51,33 @@ export class WorkbenchProductionGate {
       throw new Error("Print evidence can only be recorded for a preparation released to Production Steward.");
     }
     if (!input.printerId.trim()) throw new Error("A printer is required for physical print evidence.");
+    if (preparation.printerId && input.printerId !== preparation.printerId) {
+      throw new Error(`Returned evidence names printer ${input.printerId}, but the preparation was released for ${preparation.printerId}.`);
+    }
+
+    const allocations = (input.materialAllocations ?? [])
+      .map((item) => ({ spoolId: item.spoolId.trim(), grams: Number(item.grams) }))
+      .filter((item) => item.spoolId || item.grams > 0);
+    const seen = new Set<string>();
+    for (const allocation of allocations) {
+      if (!allocation.spoolId || !Number.isFinite(allocation.grams) || allocation.grams <= 0) {
+        throw new Error("Every material allocation requires a physical spool and a positive measured gram amount.");
+      }
+      if (seen.has(allocation.spoolId)) throw new Error(`Physical spool ${allocation.spoolId} is allocated more than once. Combine its measured grams into one entry.`);
+      seen.add(allocation.spoolId);
+      if (preparation.physicalSpoolIds?.length && !preparation.physicalSpoolIds.includes(allocation.spoolId)) {
+        throw new Error(`Physical spool ${allocation.spoolId} was not assigned to preparation ${preparation.preparationId}.`);
+      }
+    }
+
+    const allocatedGrams = allocations.reduce((sum, item) => sum + item.grams, 0);
+    if (input.measuredMaterialGrams !== undefined && allocations.length && Math.abs(input.measuredMaterialGrams - allocatedGrams) > 0.05) {
+      throw new Error(`Measured material total (${input.measuredMaterialGrams}g) does not match physical-spool allocations (${allocatedGrams.toFixed(2)}g).`);
+    }
+    const measuredMaterialGrams = allocations.length ? allocatedGrams : input.measuredMaterialGrams;
+    const physicalSpoolIds = allocations.length
+      ? allocations.map((item) => item.spoolId)
+      : preparation.physicalSpoolIds;
 
     const now = new Date().toISOString();
     const record = await this.workbench.recordPrintResult({
@@ -53,11 +87,12 @@ export class WorkbenchProductionGate {
       productionJobId: preparation.productionJobId,
       printerId: input.printerId,
       materialProfileId: preparation.materialProfileId,
+      physicalSpoolIds,
       slicerId: preparation.slicerId,
       profileRef: preparation.slicerProfileRef,
       completedAt: now,
       elapsedSeconds: input.elapsedSeconds,
-      measuredMaterialGrams: input.measuredMaterialGrams,
+      measuredMaterialGrams,
       outcome: input.outcome,
       telemetryRefIds: [],
       observations: input.observation?.trim() ? [{
@@ -73,22 +108,41 @@ export class WorkbenchProductionGate {
 
     const runtime = getFoundryMeshRuntime();
     await runtime.initialize();
+    const steward = new ProductionSteward(runtime);
+    const successful = input.outcome === "success" || input.outcome === "partial-success";
     const current = await runtime.domain.get().production.get(preparation.productionJobId);
     if (current) {
-      const successful = input.outcome === "success" || input.outcome === "partial-success";
-      await runtime.domainState.upsertProductionItem({
-        ...current,
-        stage: "evidence-recorded",
-        status: successful ? "completed" : "attention-required",
-        nextAction: successful
-          ? "Review returned print evidence and determine whether the manufacturing specification should remain approved."
-          : "Review failure evidence, identify corrective action, and return the asset to preparation or inspection as required.",
-      }, {
+      const context = {
         requestedBy: HumanAuthority,
         authorizedBy: HumanAuthority,
         correlationId: preparation.productionJobId,
         reason: `Recorded ${input.outcome} print evidence for Workbench preparation ${preparation.preparationId}.`,
-      });
+      };
+      if (successful) {
+        await steward.completeProductionItem(preparation.productionJobId, context);
+        const completed = await runtime.domain.get().production.get(preparation.productionJobId);
+        if (completed) {
+          await runtime.domainState.upsertProductionItem({
+            ...completed,
+            stage: "evidence-recorded",
+            nextAction: "Review returned print evidence and determine whether the manufacturing specification should remain approved.",
+          }, context);
+        }
+      } else {
+        await steward.markAttention(
+          preparation.productionJobId,
+          input.failureMode?.trim() || `Returned print outcome: ${input.outcome}. Review evidence and determine corrective action.`,
+          context,
+        );
+        const attention = await runtime.domain.get().production.get(preparation.productionJobId);
+        if (attention) {
+          await runtime.domainState.upsertProductionItem({
+            ...attention,
+            stage: "evidence-recorded",
+            nextAction: "Review failure evidence, identify corrective action, and return the asset to preparation or inspection as required.",
+          }, context);
+        }
+      }
     }
 
     return record;
