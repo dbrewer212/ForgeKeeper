@@ -482,10 +482,6 @@ export function useForgekeeperState() {
   }, [products, stls, concepts, productionReferences, modelVerifications, printTrials, variants, collections, releases, orders, filamentProfiles, filament, materialTransactions, materialReservations, filamentDryingRecords, materialImportHistory, printers, maintenance, generationJobs, controlCenter, canonRecords, libraryAssets, recovery, settings, prototypes, plannedFilament, productPlanning, realmMaterials]);
 
   useEffect(() => {
-    setPrinters((prev) => prev.map((printer) => printerStatusFromOrders(printer, orders, products)));
-  }, [orders, products]);
-
-  useEffect(() => {
     if (!products.some((product) => product.id === selectedProductId)) {
       setSelectedProductId(products[0]?.id ?? "");
     }
