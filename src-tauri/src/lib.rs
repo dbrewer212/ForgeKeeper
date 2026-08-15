@@ -3,6 +3,7 @@ mod forgepack;
 mod managed_files;
 mod managed_services;
 mod providers;
+mod three_mf;
 mod workbench_files;
 
 use bastion::{
@@ -18,7 +19,7 @@ use providers::{
     download_generation_asset, get_generation_status, submit_meshy_image_generation,
     submit_printpal_image_generation, test_provider_connections,
 };
-use workbench_files::{inspect_geometry, inspect_local_paths};
+use workbench_files::{inspect_geometry as inspect_legacy_geometry, inspect_local_paths};
 use serde::Serialize;
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -62,6 +63,23 @@ async fn local_http_get(url: String, timeout_ms: Option<u64>) -> Result<LocalHtt
     tauri::async_runtime::spawn_blocking(move || local_http_get_blocking(&url, timeout_ms.unwrap_or(1500)))
         .await
         .map_err(|error| format!("Local service probe task failed: {error}"))?
+}
+
+#[tauri::command]
+fn inspect_geometry(path: String) -> Result<workbench_files::NativeGeometryInspection, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("No geometry path was provided.".to_string());
+    }
+    let extension = Path::new(trimmed)
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if extension == "3mf" {
+        return three_mf::inspect_3mf(Path::new(trimmed));
+    }
+    inspect_legacy_geometry(path)
 }
 
 #[cfg(target_os = "windows")]
