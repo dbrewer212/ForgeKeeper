@@ -138,7 +138,6 @@ export interface ProjectService {
 export interface ProductionService {
   get(id: string): Promise<ProductionItemSummary | undefined>;
   list(projectId?: string): Promise<ProductionItemSummary[]>;
-  create(item: ProductionItemSummary, context: DomainMutationContext): Promise<void>;
   getActiveWork(): Promise<ActiveWorkSnapshot>;
   setNextAction(id: string, nextAction: string, context: DomainMutationContext): Promise<void>;
   setBlocker(id: string, blocker: string | undefined, context: DomainMutationContext): Promise<void>;
