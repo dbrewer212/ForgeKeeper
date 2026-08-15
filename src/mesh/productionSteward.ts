@@ -1,6 +1,7 @@
 import type {
   ActiveWorkSnapshot,
   DomainMutationContext,
+  FoundrySession,
   ParkedThought,
   ParkedThoughtCategory,
   ProductionItemSummary,
@@ -31,6 +32,17 @@ export type ProductionCandidate = {
   preparationId: string;
   printerId?: string;
 };
+
+export type ProductionExecutionStage = "ready-for-production" | "printing" | "finishing";
+
+function humanContext(reason: string, correlationId?: string): DomainMutationContext {
+  return {
+    requestedBy: HumanAuthority,
+    authorizedBy: HumanAuthority,
+    correlationId,
+    reason,
+  };
+}
 
 export class ProductionSteward {
   constructor(private readonly runtime: FoundryMeshRuntime) {}
@@ -71,7 +83,7 @@ export class ProductionSteward {
 
   async acceptProductionCandidate(
     candidate: ProductionCandidate,
-    context: DomainMutationContext = { requestedBy: HumanAuthority, authorizedBy: HumanAuthority },
+    context: DomainMutationContext = humanContext(`Accept Workbench preparation ${candidate.preparationId}.`, candidate.productionItemId),
   ): Promise<ProductionItemSummary> {
     await this.runtime.initialize();
     const existing = await this.runtime.domain.get().production.get(candidate.productionItemId);
@@ -100,6 +112,153 @@ export class ProductionSteward {
       reason: context.reason ?? `Accepted Workbench preparation ${candidate.preparationId} for production.`,
     });
     return item;
+  }
+
+  async startProductionItem(
+    productionItemId: string,
+    context: DomainMutationContext = humanContext(`Start production item ${productionItemId}.`, productionItemId),
+  ): Promise<ProductionItemSummary> {
+    await this.runtime.initialize();
+    const domain = this.runtime.domain.get();
+    const item = await domain.production.get(productionItemId);
+    if (!item) throw new Error(`Production item ${productionItemId} does not exist.`);
+    if (item.status === "completed") throw new Error(`Production item ${productionItemId} is already completed.`);
+
+    const active = await domain.sessions.getActive();
+    if (active && active.activeProductionItemId !== productionItemId) {
+      throw new Error(`Production session ${active.id} is already active for ${active.activeProductionItemId ?? "other Foundry work"}. Finish, pause, or recover that work before starting another production item.`);
+    }
+
+    if (!active) {
+      const now = new Date().toISOString();
+      const session: FoundrySession = {
+        id: `session:production:${productionItemId}:${Date.now()}`,
+        startedAt: now,
+        updatedAt: now,
+        state: "active",
+        activeProjectId: item.projectId,
+        activeProductionItemId: item.id,
+        currentObjective: `Produce ${item.name}`,
+        currentStage: "printing",
+        currentAction: item.workbench?.printerId
+          ? `Execute preparation ${item.workbench.preparationId} on ${item.workbench.printerId}.`
+          : `Assign a printer and execute preparation ${item.workbench?.preparationId ?? "approved preparation"}.`,
+        nextAction: "Monitor the print through Bastion and record the physical result when execution finishes.",
+        parkedThoughtIds: [],
+        participatingWorkerIds: [],
+        resumeContext: {
+          currentCondition: "Production execution started.",
+          nextAction: "Monitor through Bastion and record the physical result.",
+        },
+      };
+      await domain.sessions.start(session, context);
+    }
+
+    const next: ProductionItemSummary = {
+      ...item,
+      stage: "printing",
+      status: "active",
+      blocker: undefined,
+      nextAction: "Monitor the print through Bastion and record the physical result when execution finishes.",
+    };
+    await this.runtime.domainState.upsertProductionItem(next, context);
+    return next;
+  }
+
+  async advanceProductionItem(
+    productionItemId: string,
+    stage: Extract<ProductionExecutionStage, "printing" | "finishing">,
+    context: DomainMutationContext = humanContext(`Advance production item ${productionItemId} to ${stage}.`, productionItemId),
+  ): Promise<ProductionItemSummary> {
+    await this.runtime.initialize();
+    const domain = this.runtime.domain.get();
+    const item = await domain.production.get(productionItemId);
+    if (!item) throw new Error(`Production item ${productionItemId} does not exist.`);
+    if (item.status === "completed") throw new Error(`Production item ${productionItemId} is already completed.`);
+
+    const next: ProductionItemSummary = {
+      ...item,
+      stage,
+      status: item.blocker ? "attention-required" : "active",
+      nextAction: stage === "finishing"
+        ? "Complete finishing/inspection and record the physical print result in the Workbench Production Gate."
+        : "Monitor the print through Bastion and record the physical result when execution finishes.",
+    };
+    await this.runtime.domainState.upsertProductionItem(next, context);
+
+    const active = await domain.sessions.getActive();
+    if (active?.activeProductionItemId === productionItemId) {
+      await domain.sessions.update(active.id, {
+        currentStage: stage,
+        currentAction: next.nextAction,
+        nextAction: next.nextAction,
+        state: item.blocker ? "blocked" : "active",
+      }, context);
+    }
+    return next;
+  }
+
+  async markAttention(
+    productionItemId: string,
+    blocker: string,
+    context: DomainMutationContext = humanContext(`Mark production item ${productionItemId} attention-required.`, productionItemId),
+  ): Promise<ProductionItemSummary> {
+    const trimmed = blocker.trim();
+    if (!trimmed) throw new Error("A production blocker must explain what needs attention.");
+    await this.runtime.initialize();
+    const domain = this.runtime.domain.get();
+    const item = await domain.production.get(productionItemId);
+    if (!item) throw new Error(`Production item ${productionItemId} does not exist.`);
+    const next = { ...item, status: "attention-required", blocker: trimmed };
+    await this.runtime.domainState.upsertProductionItem(next, context);
+    const active = await domain.sessions.getActive();
+    if (active?.activeProductionItemId === productionItemId) {
+      await domain.sessions.update(active.id, { state: "blocked", blockedBy: trimmed }, context);
+    }
+    return next;
+  }
+
+  async clearAttention(
+    productionItemId: string,
+    context: DomainMutationContext = humanContext(`Clear production blocker for ${productionItemId}.`, productionItemId),
+  ): Promise<ProductionItemSummary> {
+    await this.runtime.initialize();
+    const domain = this.runtime.domain.get();
+    const item = await domain.production.get(productionItemId);
+    if (!item) throw new Error(`Production item ${productionItemId} does not exist.`);
+    const active = await domain.sessions.getActive();
+    const isActive = active?.activeProductionItemId === productionItemId;
+    const next = { ...item, blocker: undefined, status: isActive ? "active" : "queued" };
+    await this.runtime.domainState.upsertProductionItem(next, context);
+    if (isActive && active) {
+      await domain.sessions.update(active.id, { state: "active", blockedBy: undefined }, context);
+    }
+    return next;
+  }
+
+  async completeProductionItem(
+    productionItemId: string,
+    context: DomainMutationContext = humanContext(`Complete production item ${productionItemId}.`, productionItemId),
+  ): Promise<ProductionItemSummary> {
+    await this.runtime.initialize();
+    const domain = this.runtime.domain.get();
+    const item = await domain.production.get(productionItemId);
+    if (!item) throw new Error(`Production item ${productionItemId} does not exist.`);
+    if (item.blocker) throw new Error(`Production item ${productionItemId} still has blocker: ${item.blocker}`);
+
+    const active = await domain.sessions.getActive();
+    if (active?.activeProductionItemId === productionItemId) {
+      await domain.sessions.end(active.id, "completed", context);
+    }
+    const next: ProductionItemSummary = {
+      ...item,
+      stage: "complete",
+      status: "completed",
+      blocker: undefined,
+      nextAction: undefined,
+    };
+    await this.runtime.domainState.upsertProductionItem(next, context);
+    return next;
   }
 
   async captureBranch(
