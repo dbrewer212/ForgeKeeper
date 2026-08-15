@@ -1,4 +1,4 @@
 import type { InputHTMLAttributes } from "react";
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`h-10 rounded-xl border border-white/10 bg-[#0d131c] px-3 text-sm text-slate-100 outline-none placeholder:text-slate-500 ${props.className || ""}`} />;
+  return <input {...props} className={`h-10 rounded-xl border border-slate-700/65 bg-[linear-gradient(180deg,rgba(13,11,9,0.96),rgba(21,18,15,0.94))] px-3 text-sm text-slate-100 shadow-forge-inset outline-none placeholder:text-slate-500 focus:border-amber-600/60 ${props.className || ""}`} />;
 }
