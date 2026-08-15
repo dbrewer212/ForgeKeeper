@@ -6,6 +6,7 @@ mod provider_staging;
 mod providers;
 mod three_mf;
 mod workbench_files;
+mod workbench_migrations;
 
 use bastion::{
     bastion_close_window, bastion_launch_mode, bastion_open_window, bastion_set_startup,
@@ -370,7 +371,11 @@ fn open_with_windows_shell(target: &str, asset_path: Option<&str>) -> Result<(),
 pub fn run() {
     tauri::Builder::default()
         .manage(ManagedProcesses::default())
-        .plugin(tauri_plugin_sql::Builder::default().build())
+        .plugin(
+            tauri_plugin_sql::Builder::default()
+                .add_migrations("sqlite:forgekeeper.db", workbench_migrations::migrations())
+                .build(),
+        )
         .setup(|app| {
             if bastion_launch_mode() {
                 open_bastion_window(app.handle())
