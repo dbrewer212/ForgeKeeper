@@ -124,7 +124,7 @@ export function BuildBenchStation({ state }: { state: ForgekeeperState }) {
               <label className="block text-xs text-slate-500">Material profile</label>
               <Select value={materialProfileId} onChange={(event) => setMaterialProfileId(event.target.value)}>
                 <option value="">Unassigned</option>
-                {state.filamentProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.brand} {profile.material} {profile.color}</option>)}
+                {state.filamentProfiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.brand} {profile.material}</option>)}
               </Select>
             </div>
           </Card>
