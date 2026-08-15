@@ -1,0 +1,75 @@
+name: One-Time Production Material Bridge Patch
+
+on:
+  push:
+    branches:
+      - foundry-mesh-core
+    paths:
+      - .github/workflows/patch-production-material.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Foundry branch
+        uses: actions/checkout@v4
+        with:
+          ref: foundry-mesh-core
+          fetch-depth: 0
+
+      - name: Apply exact production material bridge patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/state/useForgekeeperState.ts')
+          text = path.read_text(encoding='utf-8')
+
+          marker = '''  function createMaterialReservation(profileId: string, grams: number, purpose: string, orderId?: string, spoolId?: string) {'''
+          if text.count(marker) != 1:
+              raise SystemExit(f'Expected exactly one material reservation insertion point, found {text.count(marker)}.')
+
+          production_fn = '''  function consumeMaterialForProduction(referenceId: string, allocations: Array<{ spoolId: string; grams: number }>, reason = "Recorded Foundry production consumption") {
+    if (!referenceId.trim() || !allocations.length) return false;
+    const nextSpools = [...filament];
+    const entries: MaterialTransaction[] = [];
+    for (const allocation of allocations) {
+      const index = nextSpools.findIndex((spool) => spool.id === allocation.spoolId);
+      const spool = nextSpools[index];
+      if (!spool || spool.quantityConfidence === "Unknown" || allocation.grams <= 0 || allocation.grams > spool.gramsAvailable) return false;
+      const result = materialTransaction(spool, "Consumption", spool.gramsAvailable - allocation.grams, reason, {
+        confidence: spool.quantityConfidence,
+        notes: `Foundry production ${referenceId}`,
+      });
+      nextSpools[index] = result.spool;
+      entries.push(result.transaction);
+    }
+    setFilament(nextSpools);
+    setMaterialTransactions((previous) => [...entries, ...previous]);
+    appendAudit("Data Change", "Record production material", "Success", `${allocations.reduce((sum, item) => sum + item.grams, 0).toFixed(1)}g consumed for ${referenceId}.`, referenceId);
+    return true;
+  }
+
+'''
+          text = text.replace(marker, production_fn + marker, 1)
+
+          old_return = 'consumeMaterialForOrder, createMaterialReservation, releaseMaterialReservation'
+          new_return = 'consumeMaterialForOrder, consumeMaterialForProduction, createMaterialReservation, releaseMaterialReservation'
+          if text.count(old_return) != 1:
+              raise SystemExit(f'Expected exactly one state return target, found {text.count(old_return)}.')
+          text = text.replace(old_return, new_return, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit patch and remove this workflow
+        run: |
+          git config user.name "Foundry Patch Worker"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/state/useForgekeeperState.ts
+          git rm .github/workflows/patch-production-material.yml
+          git commit -m "Add governed production material consumption bridge"
+          git push origin HEAD:foundry-mesh-core
