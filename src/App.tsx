@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useForgekeeperState } from "./state/useForgekeeperState";
@@ -39,18 +39,37 @@ export default function App() {
 
 function ForgekeeperWorkspace() {
   const state = useForgekeeperState();
+  const startupSequenceStarted = useRef(false);
 
   useEffect(() => {
-    void invoke("bastion_open_window").catch((cause) => {
-      console.error("Bastion auto-open failed:", cause);
-    });
-  }, []);
+    if (!state.storageReady || startupSequenceStarted.current) return;
+    startupSequenceStarted.current = true;
+    let cancelled = false;
 
-  useEffect(() => {
-    if (!state.storageReady || state.storageStatus !== "SQLite") return;
-    void ensureWorkbenchBootstrap(state as unknown as AppData)
-      .then((result) => console.info("Workbench bootstrap", result))
-      .catch((cause) => console.error("Workbench bootstrap failed:", cause));
+    void (async () => {
+      if (state.storageStatus === "SQLite") {
+        try {
+          const result = await ensureWorkbenchBootstrap(state as unknown as AppData);
+          console.info("Workbench bootstrap", result);
+        } catch (cause) {
+          console.error("Workbench bootstrap failed:", cause);
+        }
+      }
+
+      if (cancelled) return;
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+      if (cancelled) return;
+
+      try {
+        await invoke("bastion_open_window");
+      } catch (cause) {
+        console.error("Bastion auto-open failed:", cause);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [state.storageReady, state.storageStatus]);
 
   const renderView = () => {
