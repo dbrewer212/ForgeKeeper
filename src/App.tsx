@@ -79,7 +79,7 @@ function ForgekeeperWorkspace() {
         return <WorkbenchDesignLibraryView state={state} />;
       case "production":
       case "orders":
-        return <ProductionView state={state} />;
+        return <ProductionView />;
       case "filament":
         return <FilamentView state={state} />;
       case "printers":
