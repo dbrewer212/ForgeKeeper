@@ -2,78 +2,39 @@ name: Foundry Render Hotpath Fix
 
 on:
   push:
-    branches:
-      - foundry-mesh-core
+    branches: [foundry-mesh-core]
 
 permissions:
   contents: write
 
 jobs:
   repair:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Foundry branch
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: foundry-mesh-core
           fetch-depth: 0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
-      - name: Patch render hot path
+      - name: Make recovery initialization lazy
+        shell: bash
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('src/state/useForgekeeperState.ts')
-          s = p.read_text()
-
-          old = 'const [recoveryCheckpoints, setRecoveryCheckpoints] = useState<RecoveryCheckpoint[]>(loadRecoveryCheckpoints());'
-          new = 'const [recoveryCheckpoints, setRecoveryCheckpoints] = useState<RecoveryCheckpoint[]>(loadRecoveryCheckpoints);'
-          if old not in s:
-              raise SystemExit('recovery checkpoint initializer pattern not found')
-          s = s.replace(old, new, 1)
-
-          old_block = '''  const selectedProduct = products.find((p) => p.id === selectedProductId) || products[0];
-  const productStls = stls.filter((s) => s.productId === selectedProductId);
-  const productConcepts = concepts.filter((c) => c.productId === selectedProductId);
-  const productOrders = orders.filter((o) => o.productId === selectedProductId);
-  const productVariants = variants.filter((variant) => variant.productId === selectedProductId);
-  const productRelease = releases.find((r) => r.productIds.includes(selectedProductId));'''
-          new_block = '''  const selectedProduct = useMemo(
-    () => products.find((p) => p.id === selectedProductId) || products[0],
-    [products, selectedProductId],
-  );
-  const productStls = useMemo(() => stls.filter((s) => s.productId === selectedProductId), [stls, selectedProductId]);
-  const productConcepts = useMemo(() => concepts.filter((c) => c.productId === selectedProductId), [concepts, selectedProductId]);
-  const productOrders = useMemo(() => orders.filter((o) => o.productId === selectedProductId), [orders, selectedProductId]);
-  const productVariants = useMemo(() => variants.filter((variant) => variant.productId === selectedProductId), [variants, selectedProductId]);
-  const productRelease = useMemo(() => releases.find((r) => r.productIds.includes(selectedProductId)), [releases, selectedProductId]);'''
-          if old_block not in s:
-              raise SystemExit('derived selection block not found')
-          s = s.replace(old_block, new_block, 1)
-
-          p.write_text(s)
-          PY
-
-      - name: Install dependencies
+          python -c "from pathlib import Path; p=Path('src/state/useForgekeeperState.ts'); s=p.read_text(); old='const [recoveryCheckpoints, setRecoveryCheckpoints] = useState<RecoveryCheckpoint[]>(loadRecoveryCheckpoints());'; new='const [recoveryCheckpoints, setRecoveryCheckpoints] = useState<RecoveryCheckpoint[]>(loadRecoveryCheckpoints);'; assert old in s; p.write_text(s.replace(old,new,1))"
+      - name: Install
         run: npm ci
-
-      - name: Run tests
+      - name: Test
         run: npm test
-
-      - name: Build frontend
+      - name: Build
         run: npm run build
-
-      - name: Commit hotpath repair and remove temporary workflow
+      - name: Commit repair
+        shell: bash
         run: |
           git config user.name "Foundry Performance Worker"
           git config user.email "actions@users.noreply.github.com"
           git add src/state/useForgekeeperState.ts
           git rm -f .github/workflows/foundry-render-hotpath-fix.yml
-          git commit -m "Remove legacy render hotpath work"
+          git commit -m "Make recovery checkpoint loading lazy"
           git push origin HEAD:foundry-mesh-core
