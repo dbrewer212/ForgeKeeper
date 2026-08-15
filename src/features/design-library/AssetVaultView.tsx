@@ -14,6 +14,15 @@ function legacyProductId(assetId: string): string | null {
   return assetId.startsWith(prefix) ? assetId.slice(prefix.length) : null;
 }
 
+function countByAsset<T>(records: T[], assetId: (record: T) => string): Map<string, number> {
+  const counts = new Map<string, number>();
+  records.forEach((record) => {
+    const id = assetId(record);
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  });
+  return counts;
+}
+
 export function AssetVaultView({ state }: { state: ForgekeeperState }) {
   const runtime = useWorkbenchVault(state);
   const [mode, setMode] = useState<VaultMode>("vault");
@@ -26,14 +35,36 @@ export function AssetVaultView({ state }: { state: ForgekeeperState }) {
     return runtime.assets.filter((asset) => [asset.name, asset.assetType, asset.lifecycleStatus, ...asset.tags].join(" ").toLowerCase().includes(needle));
   }, [query, runtime.assets]);
 
+  const revisionCounts = useMemo(
+    () => countByAsset(runtime.workbench.revisions, (record) => record.assetId),
+    [runtime.workbench.revisions],
+  );
+  const printCounts = useMemo(
+    () => countByAsset(runtime.workbench.printRecords, (record) => record.assetId),
+    [runtime.workbench.printRecords],
+  );
+
   const selected: FoundryAsset | undefined = runtime.assets.find((asset) => asset.assetId === selectedAssetId) ?? filtered[0] ?? runtime.assets[0];
-  const revision = selected ? runtime.workbench.revisions.find((item) => item.revisionId === selected.currentRevisionId) : undefined;
-  const relationships = selected ? runtime.workbench.relationships.filter((item) => item.fromAssetId === selected.assetId || item.toAssetId === selected.assetId) : [];
-  const variants = selected ? runtime.workbench.variants.filter((item) => item.assetId === selected.assetId || item.parentAssetId === selected.assetId) : [];
-  const specs = selected ? runtime.workbench.manufacturingSpecs.filter((item) => item.assetId === selected.assetId) : [];
-  const inspections = selected ? runtime.workbench.inspections.filter((item) => item.assetId === selected.assetId) : [];
-  const preparations = selected ? runtime.workbench.preparations.filter((item) => item.assetId === selected.assetId) : [];
-  const prints = selected ? runtime.workbench.printRecords.filter((item) => item.assetId === selected.assetId) : [];
+  const selectedProjection = useMemo(() => {
+    if (!selected) return undefined;
+    return {
+      revision: runtime.workbench.revisions.find((item) => item.revisionId === selected.currentRevisionId),
+      relationships: runtime.workbench.relationships.filter((item) => item.fromAssetId === selected.assetId || item.toAssetId === selected.assetId),
+      variants: runtime.workbench.variants.filter((item) => item.assetId === selected.assetId || item.parentAssetId === selected.assetId),
+      specs: runtime.workbench.manufacturingSpecs.filter((item) => item.assetId === selected.assetId),
+      inspections: runtime.workbench.inspections.filter((item) => item.assetId === selected.assetId),
+      preparations: runtime.workbench.preparations.filter((item) => item.assetId === selected.assetId),
+      prints: runtime.workbench.printRecords.filter((item) => item.assetId === selected.assetId),
+    };
+  }, [selected, runtime.workbench]);
+
+  const revision = selectedProjection?.revision;
+  const relationships = selectedProjection?.relationships ?? [];
+  const variants = selectedProjection?.variants ?? [];
+  const specs = selectedProjection?.specs ?? [];
+  const inspections = selectedProjection?.inspections ?? [];
+  const preparations = selectedProjection?.preparations ?? [];
+  const prints = selectedProjection?.prints ?? [];
 
   function focusEngineering(asset: FoundryAsset) {
     const productId = legacyProductId(asset.assetId);
@@ -85,8 +116,8 @@ export function AssetVaultView({ state }: { state: ForgekeeperState }) {
               <div className="space-y-2">
                 {filtered.map((asset) => {
                   const active = selected?.assetId === asset.assetId;
-                  const revisionCount = runtime.workbench.revisions.filter((item) => item.assetId === asset.assetId).length;
-                  const printCount = runtime.workbench.printRecords.filter((item) => item.assetId === asset.assetId).length;
+                  const revisionCount = revisionCounts.get(asset.assetId) ?? 0;
+                  const printCount = printCounts.get(asset.assetId) ?? 0;
                   return (
                     <button key={asset.assetId} type="button" onClick={() => setSelectedAssetId(asset.assetId)} className={`w-full rounded-2xl border p-4 text-left transition ${active ? "border-amber-500/35 bg-amber-500/10" : "border-white/10 bg-[#0b1119] hover:bg-white/5"}`}>
                       <div className="flex items-start justify-between gap-3">
