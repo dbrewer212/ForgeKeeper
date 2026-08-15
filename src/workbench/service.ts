@@ -142,15 +142,14 @@ export class WorkbenchService implements WorkbenchFmi {
     const state = await this.repository.loadState();
     const preparation = state.preparations.find((item) => item.preparationId === preparationId);
     if (!preparation) throw new Error(`Unknown preparation: ${preparationId}`);
+    if (preparation.status === "submitted" && preparation.productionJobId) {
+      return { productionJobId: preparation.productionJobId };
+    }
     const spec = state.manufacturingSpecs.find((item) => item.manufacturingSpecId === preparation.manufacturingSpecId);
     if (!spec || spec.approvalState !== "approved") throw new Error("Production submission requires an approved ManufacturingSpec.");
     if (preparation.status !== "approved" && preparation.status !== "validated") throw new Error("Production submission requires a validated or approved preparation.");
     const asset = state.assets.find((item) => item.assetId === preparation.assetId);
     if (!asset) throw new Error(`Production preparation references unknown asset: ${preparation.assetId}`);
-
-    if (preparation.status === "submitted" && preparation.productionJobId) {
-      return { productionJobId: preparation.productionJobId };
-    }
 
     const productionJobId = id("production-job");
     const runtime = getFoundryMeshRuntime();
