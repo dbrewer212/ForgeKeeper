@@ -148,6 +148,10 @@ export class WorkbenchService implements WorkbenchFmi {
     const asset = state.assets.find((item) => item.assetId === preparation.assetId);
     if (!asset) throw new Error(`Production preparation references unknown asset: ${preparation.assetId}`);
 
+    if (preparation.status === "submitted" && preparation.productionJobId) {
+      return { productionJobId: preparation.productionJobId };
+    }
+
     const productionJobId = id("production-job");
     const runtime = getFoundryMeshRuntime();
     await runtime.initialize();
@@ -166,7 +170,7 @@ export class WorkbenchService implements WorkbenchFmi {
       reason: `Release validated Workbench preparation ${preparation.preparationId} to Production Steward.`,
     });
 
-    await this.repository.upsertPreparation({ ...preparation, status: "submitted" });
+    await this.repository.upsertPreparation({ ...preparation, status: "submitted", productionJobId });
     await this.emit("production_candidate.approved", {
       preparationId,
       productionJobId,
