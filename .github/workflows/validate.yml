@@ -9,7 +9,7 @@ on:
 
 jobs:
   frontend:
-    name: TypeScript and Vite build
+    name: Frontend tests and build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,6 +23,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Run tests
+        run: npm test
 
       - name: Build frontend
         run: npm run build
