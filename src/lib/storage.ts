@@ -7,17 +7,32 @@ export const DATABASE_URL = "sqlite:forgekeeper.db";
 const WORKSPACE_SCHEMA_VERSION = 3;
 const WORKSPACE_TABLE = "forgekeeper_workspace_state";
 const LEGACY_WORKSPACE_ID = "local-foundry";
+const NATIVE_SAVE_DEBOUNCE_MS = 350;
+const IDLE_SAVE_TIMEOUT_MS = 1200;
 
 type WorkspaceRow = { payload: string };
 type LegacyWorkspaceRow = { payload_json: string };
 type TableInfoRow = { name: string };
 type ReadableDatabase = Pick<Database, "select">;
+type SaveWaiter = { resolve: () => void; reject: (error: unknown) => void };
+
+type IdleWindow = Window & typeof globalThis & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+  cancelIdleCallback?: (handle: number) => void;
+};
 
 export function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
 let databasePromise: Promise<Database> | null = null;
+let pendingNativeData: AppData | null = null;
+let pendingWaiters: SaveWaiter[] = [];
+let saveTimer: number | null = null;
+let idleHandle: number | null = null;
+let writeInFlight = false;
+let latestWorkspaceSnapshot: AppData | null = null;
+let closeJournalInstalled = false;
 
 async function getDatabase() {
   if (!isTauriRuntime()) return null;
@@ -92,24 +107,105 @@ export async function loadNativeStoredData(): Promise<AppData | null> {
   return loadHistoricalWorkspace(database);
 }
 
-export async function saveNativeStoredData(data: AppData): Promise<void> {
-  const database = await getDatabase();
-  if (!database) {
-    saveStoredData(data);
-    return;
+function installCloseJournal() {
+  if (closeJournalInstalled || typeof window === "undefined") return;
+  closeJournalInstalled = true;
+  const preserveLatest = () => {
+    if (!latestWorkspaceSnapshot) return;
+    // Closing is the one time synchronous serialization is preferable: if an idle SQLite
+    // write has not completed yet, this fallback is loaded first on the next startup.
+    saveStoredData(latestWorkspaceSnapshot);
+  };
+  window.addEventListener("pagehide", preserveLatest);
+  window.addEventListener("beforeunload", preserveLatest);
+}
+
+function clearScheduledSave() {
+  if (typeof window === "undefined") return;
+  if (saveTimer !== null) {
+    window.clearTimeout(saveTimer);
+    saveTimer = null;
   }
-  await database.execute(
-    `INSERT INTO ${WORKSPACE_TABLE} (id, schema_version, payload, updated_at)
-     VALUES (1, $1, $2, $3)
-     ON CONFLICT(id) DO UPDATE SET
-       schema_version = excluded.schema_version,
-       payload = excluded.payload,
-       updated_at = excluded.updated_at`,
-    [WORKSPACE_SCHEMA_VERSION, JSON.stringify(data), new Date().toISOString()],
-  );
+  const idleWindow = window as IdleWindow;
+  if (idleHandle !== null && idleWindow.cancelIdleCallback) {
+    idleWindow.cancelIdleCallback(idleHandle);
+    idleHandle = null;
+  }
+}
+
+function scheduleNativeFlush() {
+  if (typeof window === "undefined" || writeInFlight) return;
+  clearScheduledSave();
+  saveTimer = window.setTimeout(() => {
+    saveTimer = null;
+    const idleWindow = window as IdleWindow;
+    if (idleWindow.requestIdleCallback) {
+      idleHandle = idleWindow.requestIdleCallback(() => {
+        idleHandle = null;
+        void flushQueuedNativeSave();
+      }, { timeout: IDLE_SAVE_TIMEOUT_MS });
+    } else {
+      void flushQueuedNativeSave();
+    }
+  }, NATIVE_SAVE_DEBOUNCE_MS);
+}
+
+async function flushQueuedNativeSave(): Promise<void> {
+  if (writeInFlight || !pendingNativeData) return;
+  writeInFlight = true;
+  const data = pendingNativeData;
+  const waiters = pendingWaiters;
+  pendingNativeData = null;
+  pendingWaiters = [];
+
+  try {
+    const database = await getDatabase();
+    if (!database) {
+      saveStoredData(data);
+    } else {
+      // Serialization intentionally happens here, after debounce and during browser idle time.
+      const payload = JSON.stringify(data);
+      await database.execute(
+        `INSERT INTO ${WORKSPACE_TABLE} (id, schema_version, payload, updated_at)
+         VALUES (1, $1, $2, $3)
+         ON CONFLICT(id) DO UPDATE SET
+           schema_version = excluded.schema_version,
+           payload = excluded.payload,
+           updated_at = excluded.updated_at`,
+        [WORKSPACE_SCHEMA_VERSION, payload, new Date().toISOString()],
+      );
+    }
+    waiters.forEach(({ resolve }) => resolve());
+  } catch (error) {
+    waiters.forEach(({ reject }) => reject(error));
+  } finally {
+    writeInFlight = false;
+    if (pendingNativeData) scheduleNativeFlush();
+  }
+}
+
+export function saveNativeStoredData(data: AppData): Promise<void> {
+  latestWorkspaceSnapshot = data;
+  installCloseJournal();
+
+  if (!isTauriRuntime()) {
+    saveStoredData(data);
+    return Promise.resolve();
+  }
+
+  pendingNativeData = data;
+  const promise = new Promise<void>((resolve, reject) => {
+    pendingWaiters.push({ resolve, reject });
+  });
+  scheduleNativeFlush();
+  return promise;
 }
 
 export async function clearNativeStoredData(): Promise<void> {
+  clearScheduledSave();
+  pendingNativeData = null;
+  pendingWaiters = [];
+  latestWorkspaceSnapshot = null;
   const database = await getDatabase();
   if (database) {
     await database.execute(`DELETE FROM ${WORKSPACE_TABLE} WHERE id = 1`);
