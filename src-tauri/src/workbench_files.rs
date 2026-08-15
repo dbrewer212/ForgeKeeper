@@ -46,7 +46,6 @@ pub fn inspect_local_paths(paths: Vec<String>) -> Vec<LocalPathInspection> {
     paths.into_iter().map(inspect_path).collect()
 }
 
-#[tauri::command]
 pub fn inspect_geometry(path: String) -> Result<NativeGeometryInspection, String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
