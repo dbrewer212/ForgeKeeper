@@ -10,6 +10,8 @@ import type {
   PrintRecord,
   WorkbenchId,
 } from "./contracts";
+import { HumanAuthority } from "../mesh/domainServices";
+import { getFoundryMeshRuntime } from "../mesh/runtime";
 import { WORKBENCH_EVENT_SCHEMA_VERSION, type WorkbenchEvent, type WorkbenchEventType } from "./events";
 import type {
   CreateAssemblyInput,
@@ -143,9 +145,38 @@ export class WorkbenchService implements WorkbenchFmi {
     const spec = state.manufacturingSpecs.find((item) => item.manufacturingSpecId === preparation.manufacturingSpecId);
     if (!spec || spec.approvalState !== "approved") throw new Error("Production submission requires an approved ManufacturingSpec.");
     if (preparation.status !== "approved" && preparation.status !== "validated") throw new Error("Production submission requires a validated or approved preparation.");
+    const asset = state.assets.find((item) => item.assetId === preparation.assetId);
+    if (!asset) throw new Error(`Production preparation references unknown asset: ${preparation.assetId}`);
+
     const productionJobId = id("production-job");
+    const runtime = getFoundryMeshRuntime();
+    await runtime.initialize();
+    await runtime.productionSteward.acceptProductionCandidate({
+      productionItemId: productionJobId,
+      name: `${asset.name} · ${preparation.preparationId}`,
+      projectId: asset.owningProjectId,
+      assetId: preparation.assetId,
+      revisionId: preparation.revisionId,
+      preparationId: preparation.preparationId,
+      printerId: preparation.printerId,
+    }, {
+      requestedBy: HumanAuthority,
+      authorizedBy: HumanAuthority,
+      correlationId: productionJobId,
+      reason: `Release validated Workbench preparation ${preparation.preparationId} to Production Steward.`,
+    });
+
     await this.repository.upsertPreparation({ ...preparation, status: "submitted" });
-    await this.emit("production_candidate.approved", { preparationId, productionJobId }, { assetId: preparation.assetId, revisionId: preparation.revisionId, correlationId: productionJobId });
+    await this.emit("production_candidate.approved", {
+      preparationId,
+      productionJobId,
+      stewardAccepted: true,
+    }, {
+      assetId: preparation.assetId,
+      revisionId: preparation.revisionId,
+      projectId: asset.owningProjectId,
+      correlationId: productionJobId,
+    });
     return { productionJobId };
   }
 
