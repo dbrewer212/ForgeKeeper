@@ -16,7 +16,7 @@ export function PlanningView({ state }: { state: ForgekeeperState }) {
 
   const inspectionNeeded = workbench.assets.filter((asset) => asset.lifecycleStatus === "inspection-required");
   const draftSpecs = workbench.workbench.manufacturingSpecs.filter((spec) => spec.approvalState !== "approved");
-  const approvedWithoutPreparation = workbench.workbench.manufacturingSpecs.filter((spec) => spec.approvalState === "approved" && !workbench.workbench.preparations.some((prep) => prep.manufacturingSpecId === spec.id));
+  const approvedWithoutPreparation = workbench.workbench.manufacturingSpecs.filter((spec) => spec.approvalState === "approved" && !workbench.workbench.preparations.some((prep) => prep.manufacturingSpecId === spec.manufacturingSpecId));
   const submittedPreparations = workbench.workbench.preparations.filter((prep) => prep.status === "submitted");
   const activeSpools = state.filament.filter((spool) => spool.status !== "Archived");
   const unknownSpools = activeSpools.filter((spool) => spool.quantityConfidence === "Unknown");
@@ -44,24 +44,25 @@ export function PlanningView({ state }: { state: ForgekeeperState }) {
       <Card title="Readiness Lanes" right={<span className="text-xs text-slate-500">Derived, not manually staged</span>}>
         <div className="grid gap-4 xl:grid-cols-4">
           <Lane title="Inspect" helper="Revision needs evidence" count={inspectionNeeded.length}>
-            {inspectionNeeded.map((asset) => <AssetRow key={asset.id} name={asset.name} detail={asset.currentRevisionId || "No current revision"} />)}
+            {inspectionNeeded.map((asset) => <AssetRow key={asset.assetId} name={asset.name} detail={asset.currentRevisionId || "No current revision"} />)}
           </Lane>
           <Lane title="Specify" helper="Inspection exists; manufacturing approval incomplete" count={draftSpecs.length}>
             {draftSpecs.map((spec) => {
-              const asset = workbench.assets.find((item) => item.id === spec.assetId);
-              return <AssetRow key={spec.id} name={asset?.name || spec.assetId} detail={`${spec.process} · ${spec.approvalState}`} />;
+              const asset = workbench.assets.find((item) => item.assetId === spec.assetId);
+              return <AssetRow key={spec.manufacturingSpecId} name={asset?.name || spec.assetId} detail={`${spec.intendedProcess} · ${spec.approvalState}`} />;
             })}
           </Lane>
           <Lane title="Prepare" helper="Approved manufacturing spec needs a production preparation" count={approvedWithoutPreparation.length}>
             {approvedWithoutPreparation.map((spec) => {
-              const asset = workbench.assets.find((item) => item.id === spec.assetId);
-              return <AssetRow key={spec.id} name={asset?.name || spec.assetId} detail={`${spec.process} · revision ${shortId(spec.revisionId)}`} />;
+              const asset = workbench.assets.find((item) => item.assetId === spec.assetId);
+              return <AssetRow key={spec.manufacturingSpecId} name={asset?.name || spec.assetId} detail={`${spec.intendedProcess} · revision ${shortId(spec.revisionId)}`} />;
             })}
           </Lane>
           <Lane title="Release" helper="Preparation ready for Production Steward" count={submittedPreparations.length}>
             {submittedPreparations.map((prep) => {
-              const asset = workbench.assets.find((item) => item.id === prep.assetId);
-              return <AssetRow key={prep.id} name={asset?.name || prep.assetId} detail={`${prep.printerId || "printer unset"} · ${prep.physicalSpoolIds.length} spool${prep.physicalSpoolIds.length === 1 ? "" : "s"}`} />;
+              const asset = workbench.assets.find((item) => item.assetId === prep.assetId);
+              const spoolCount = prep.physicalSpoolIds?.length ?? 0;
+              return <AssetRow key={prep.preparationId} name={asset?.name || prep.assetId} detail={`${prep.printerId || "printer unset"} · ${spoolCount} spool${spoolCount === 1 ? "" : "s"}`} />;
             })}
           </Lane>
         </div>
@@ -76,13 +77,13 @@ export function PlanningView({ state }: { state: ForgekeeperState }) {
               const inspected = revisionId ? inspectionByRevision.has(revisionId) : false;
               const preparationCount = revisionId ? preparationsByRevision.get(revisionId) ?? 0 : 0;
               return (
-                <div key={asset.id} className="rounded-xl border border-slate-700/55 bg-slate-900/55 p-4">
+                <div key={asset.assetId} className="rounded-xl border border-slate-700/55 bg-slate-900/55 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="font-semibold text-slate-100">{asset.name}</div>
                       <div className="mt-1 text-xs text-slate-500">{asset.assetType} · {asset.lifecycleStatus}</div>
                     </div>
-                    <div className="text-[10px] text-slate-600">{shortId(asset.id)}</div>
+                    <div className="text-[10px] text-slate-600">{shortId(asset.assetId)}</div>
                   </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-4">
                     <Gate label="Revision" ready={Boolean(revisionId)} value={revisionId ? shortId(revisionId) : "missing"} />
