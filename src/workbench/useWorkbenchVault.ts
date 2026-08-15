@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import type { AppData } from "../types/domain";
 import type { ForgekeeperState } from "../state/useForgekeeperState";
 import type { FoundryAsset, WorkbenchState } from "./contracts";
@@ -13,34 +13,85 @@ export type WorkbenchVaultRuntime = {
   refresh: () => Promise<void>;
 };
 
-export function useWorkbenchVault(state: ForgekeeperState): WorkbenchVaultRuntime {
-  const [workbench, setWorkbench] = useState<WorkbenchState>(emptyWorkbenchState());
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState("");
+type SharedWorkbenchSnapshot = {
+  ready: boolean;
+  error: string;
+  workbench: WorkbenchState;
+};
 
-  const refresh = useCallback(async () => {
-    if (!state.storageReady || state.storageStatus !== "SQLite") return;
+let sharedSnapshot: SharedWorkbenchSnapshot = {
+  ready: false,
+  error: "",
+  workbench: emptyWorkbenchState(),
+};
+let loadPromise: Promise<void> | null = null;
+const listeners = new Set<() => void>();
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function getSnapshot(): SharedWorkbenchSnapshot {
+  return sharedSnapshot;
+}
+
+function publish(next: SharedWorkbenchSnapshot) {
+  sharedSnapshot = next;
+  listeners.forEach((listener) => listener());
+}
+
+async function loadWorkbench(state: ForgekeeperState, force: boolean): Promise<void> {
+  if (!state.storageReady || state.storageStatus !== "SQLite") return;
+  if (!force && sharedSnapshot.ready && !sharedSnapshot.error) return;
+  if (loadPromise) return loadPromise;
+
+  loadPromise = (async () => {
     try {
       await ensureWorkbenchBootstrap(state as unknown as AppData);
       const repository = new WorkbenchRepository();
       await repository.initialize();
-      setWorkbench(await repository.loadState());
-      setError("");
-      setReady(true);
+      const workbench = await repository.loadState();
+      publish({ ready: true, error: "", workbench });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-      setReady(true);
+      publish({
+        ...sharedSnapshot,
+        ready: true,
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+    } finally {
+      loadPromise = null;
     }
-  }, [state.storageReady, state.storageStatus]);
+  })();
+
+  return loadPromise;
+}
+
+export function invalidateWorkbenchRuntime() {
+  sharedSnapshot = { ...sharedSnapshot, ready: false };
+}
+
+export function useWorkbenchVault(state: ForgekeeperState): WorkbenchVaultRuntime {
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+  const refresh = useCallback(async () => {
+    await loadWorkbench(state, true);
+  }, [state]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    void loadWorkbench(state, false);
+  }, [state.storageReady, state.storageStatus]);
 
   const assets = useMemo(
-    () => [...workbench.assets].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-    [workbench.assets],
+    () => [...snapshot.workbench.assets].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    [snapshot.workbench.assets],
   );
 
-  return { ready, error, workbench, assets, refresh };
+  return {
+    ready: snapshot.ready,
+    error: snapshot.error,
+    workbench: snapshot.workbench,
+    assets,
+    refresh,
+  };
 }
