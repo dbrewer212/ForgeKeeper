@@ -86,6 +86,12 @@ export class ProductionSteward {
       nextAction: candidate.printerId
         ? `Review preparation ${candidate.preparationId} on Bastion and schedule ${candidate.printerId}.`
         : `Assign a printer, review preparation ${candidate.preparationId} on Bastion, and schedule execution.`,
+      workbench: {
+        assetId: candidate.assetId,
+        revisionId: candidate.revisionId,
+        preparationId: candidate.preparationId,
+        printerId: candidate.printerId,
+      },
     };
 
     await this.runtime.domainState.upsertProductionItem(item, {
