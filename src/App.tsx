@@ -7,7 +7,7 @@ import { ensureWorkbenchBootstrap } from "./workbench/bootstrap";
 
 import { Sidebar } from "./components/layout/Sidebar";
 import { DashboardView } from "./features/dashboard/DashboardView";
-import { AssetVaultView } from "./features/design-library/AssetVaultView";
+import { WorkbenchDesignLibraryView } from "./features/design-library/WorkbenchDesignLibraryView";
 import { ProductionView } from "./features/production/ProductionView";
 import { FilamentView } from "./features/filament/FilamentView";
 import { PrintersView } from "./features/printers/PrintersView";
@@ -55,7 +55,7 @@ function ForgekeeperWorkspace() {
         return <DashboardView state={state} />;
       case "designs":
       case "catalog":
-        return <AssetVaultView state={state} />;
+        return <WorkbenchDesignLibraryView state={state} />;
       case "production":
       case "orders":
         return <ProductionView state={state} />;
