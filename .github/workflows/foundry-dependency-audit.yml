@@ -1,0 +1,29 @@
+name: Foundry Dependency Audit
+
+on:
+  push:
+    branches:
+      - foundry-mesh-core
+    paths:
+      - .github/workflows/foundry-dependency-audit.yml
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Dependency audit
+        run: npm audit --json > npm-audit.json || true
+      - name: Print audit summary
+        run: cat npm-audit.json
