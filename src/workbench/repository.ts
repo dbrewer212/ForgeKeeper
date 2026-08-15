@@ -279,7 +279,7 @@ export class WorkbenchRepository {
   async appendEvent(event: WorkbenchEvent): Promise<void> {
     const db = await database(); if (!db) return;
     await db.execute(`INSERT OR IGNORE INTO workbench_events(event_id,event_type,occurred_at,actor_id,correlation_id,asset_id,revision_id,schema_version,payload_json) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [event.eventId,event.type,event.timestamp,event.actorId,event.correlationId ?? null,event.assetId ?? null,event.revisionId ?? null,event.schemaVersion,JSON.stringify(event)]);
+      [event.eventId,event.eventType,event.timestamp,event.actorId,event.correlationId,event.assetId ?? null,event.revisionId ?? null,event.schemaVersion,JSON.stringify(event)]);
   }
 
   async persistState(state: WorkbenchState): Promise<void> {
