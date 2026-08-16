@@ -147,7 +147,9 @@ ON CONFLICT(key) DO NOTHING;
 
 pub fn migrations() -> Vec<Migration> {
     vec![Migration {
-        version: 1,
+        // Migration version 1 belongs to the historical ForgeKeeper workspace schema.
+        // Workbench starts at version 2 so existing databases keep their valid SQLx ledger.
+        version: 2,
         description: "create_workbench_domain_schema",
         sql: WORKBENCH_SCHEMA_V1,
         kind: MigrationKind::Up,
