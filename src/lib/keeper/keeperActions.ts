@@ -1,4 +1,4 @@
-import type { KeeperAlert } from "./keeperAlerts";
+import type { KeeperAlert, KeeperAlertSeverity } from "./keeperAlerts";
 
 export type KeeperActionType =
   | "open-record"
@@ -6,6 +6,7 @@ export type KeeperActionType =
   | "add-media"
   | "set-price"
   | "assign-printer"
+  | "assign-filament"
   | "reorder-filament";
 
 export type KeeperAction = {
@@ -19,89 +20,62 @@ export type KeeperAction = {
   targetId?: string;
 };
 
-function priorityFromAlert(type: KeeperAlert["type"]): KeeperAction["priority"] {
-  if (type === "critical") return "Critical";
-  if (type === "warning") return "High";
-  if (type === "opportunity") return "Normal";
+function priorityFromAlert(severity: KeeperAlertSeverity): KeeperAction["priority"] {
+  if (severity === "critical") return "Critical";
+  if (severity === "warning") return "High";
+  if (severity === "opportunity") return "Normal";
   return "Low";
 }
 
 export function getKeeperActions(alerts: KeeperAlert[]): KeeperAction[] {
   return alerts.map((alert) => {
-    const priority = priorityFromAlert(alert.type);
+    const priority = priorityFromAlert(alert.severity);
+    const suggested = alert.suggestedActionId;
 
-    if (alert.id.startsWith("price-")) {
-      return {
-        id: `action-${alert.id}`,
-        alertId: alert.id,
-        type: "set-price",
-        title: "Review product pricing",
-        description: "Open the related product and set a target price so cost/profit reporting becomes useful.",
-        priority,
-        targetView: "catalog",
-        targetId: alert.id.replace("price-", ""),
-      };
+    if (suggested === "set-product-price") {
+      return action(alert, priority, "set-price", "Review product pricing", "Open the related product and set a target price so cost/profit reporting becomes useful.", "catalog");
     }
 
-    if (alert.id.startsWith("image-")) {
-      return {
-        id: `action-${alert.id}`,
-        alertId: alert.id,
-        type: "add-media",
-        title: "Add product media",
-        description: "Attach a concept image, product render, or prototype photo so the product is visually trackable.",
-        priority,
-        targetView: "catalog",
-        targetId: alert.id.replace("image-", ""),
-      };
+    if (suggested === "add-product-media" || suggested === "add-variant-media") {
+      return action(alert, priority, "add-media", "Add product media", "Attach a concept image, product render, or prototype photo so the product is visually trackable.", "catalog");
     }
 
-    if (alert.id.startsWith("notes-")) {
-      return {
-        id: `action-${alert.id}`,
-        alertId: alert.id,
-        type: "review-record",
-        title: "Clean product notes",
-        description: "Add internal notes, production context, or launch details for this product record.",
-        priority,
-        targetView: "catalog",
-        targetId: alert.id.replace("notes-", ""),
-      };
+    if (suggested === "clean-product-notes") {
+      return action(alert, priority, "review-record", "Clean product notes", "Add internal notes, production context, or launch details for this product record.", "catalog");
     }
 
-    if (alert.id.startsWith("filament-")) {
-      return {
-        id: `action-${alert.id}`,
-        alertId: alert.id,
-        type: "reorder-filament",
-        title: "Review filament reorder",
-        description: "Check current stock, pending orders, and whether this material should be moved to the shopping list.",
-        priority,
-        targetView: "filament",
-        targetId: alert.id.replace("filament-", ""),
-      };
+    if (suggested === "reorder-filament") {
+      return action(alert, priority, "reorder-filament", "Review filament reorder", "Check current stock, pending orders, and whether this material should be moved to the shopping list.", "filament");
     }
 
-    if (alert.id.startsWith("printer-")) {
-      return {
-        id: `action-${alert.id}`,
-        alertId: alert.id,
-        type: "assign-printer",
-        title: "Assign printer",
-        description: "Open the order board and assign a printer so production intelligence can calculate workload correctly.",
-        priority,
-        targetView: "orders",
-        targetId: alert.id.replace("printer-", ""),
-      };
+    if (suggested === "assign-printer") {
+      return action(alert, priority, "assign-printer", "Assign printer", "Open the order board and assign a printer so production intelligence can calculate workload correctly.", "orders");
     }
 
-    return {
-      id: `action-${alert.id}`,
-      alertId: alert.id,
-      type: "review-record",
-      title: "Review alert",
-      description: alert.message,
-      priority,
-    };
+    if (suggested === "assign-filament") {
+      return action(alert, priority, "assign-filament", "Assign filament", "Open the order board and assign the material needed for this production job.", "orders");
+    }
+
+    return action(alert, priority, "review-record", alert.title, alert.message, alert.section);
   });
+}
+
+function action(
+  alert: KeeperAlert,
+  priority: KeeperAction["priority"],
+  type: KeeperActionType,
+  title: string,
+  description: string,
+  targetView?: string,
+): KeeperAction {
+  return {
+    id: `action-${alert.id}`,
+    alertId: alert.id,
+    type,
+    title,
+    description,
+    priority,
+    targetView,
+    targetId: alert.relatedRecordId,
+  };
 }

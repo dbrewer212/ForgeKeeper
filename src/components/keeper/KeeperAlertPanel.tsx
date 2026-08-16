@@ -1,29 +1,24 @@
 import { getKeeperAlerts } from "../../lib/keeper/keeperAlerts";
+import type { KeeperAlert, KeeperAlertSeverity } from "../../lib/keeper/keeperAlerts";
 
-type KeeperAlert = {
-  id: string;
-  type: "info" | "warning" | "critical" | "opportunity";
-  message: string;
-};
-
-function alertStyle(type: KeeperAlert["type"]) {
-  if (type === "critical") return "border-rose-500/30 bg-rose-500/10 text-rose-200";
-  if (type === "warning") return "border-amber-500/30 bg-amber-500/10 text-amber-100";
-  if (type === "opportunity") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200";
+function alertStyle(severity: KeeperAlertSeverity) {
+  if (severity === "critical") return "border-rose-500/30 bg-rose-500/10 text-rose-200";
+  if (severity === "warning") return "border-amber-500/30 bg-amber-500/10 text-amber-100";
+  if (severity === "opportunity") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200";
   return "border-sky-500/25 bg-sky-500/10 text-sky-100";
 }
 
-function alertLabel(type: KeeperAlert["type"]) {
-  if (type === "critical") return "Critical";
-  if (type === "warning") return "Warning";
-  if (type === "opportunity") return "Opportunity";
+function alertLabel(severity: KeeperAlertSeverity) {
+  if (severity === "critical") return "Critical";
+  if (severity === "warning") return "Warning";
+  if (severity === "opportunity") return "Opportunity";
   return "Info";
 }
 
 export function KeeperAlertPanel({ state, title = "Keeper Alerts" }: { state: any; title?: string }) {
-  const alerts = getKeeperAlerts(state) as KeeperAlert[];
-  const criticalCount = alerts.filter((alert) => alert.type === "critical").length;
-  const warningCount = alerts.filter((alert) => alert.type === "warning").length;
+  const alerts: KeeperAlert[] = getKeeperAlerts(state);
+  const criticalCount = alerts.filter((alert) => alert.severity === "critical").length;
+  const warningCount = alerts.filter((alert) => alert.severity === "warning").length;
 
   return (
     <section className="rounded-3xl border border-amber-500/15 bg-[linear-gradient(180deg,rgba(17,23,34,0.98),rgba(10,14,22,0.96))] shadow-[0_12px_40px_rgba(0,0,0,0.35)]">
@@ -47,10 +42,11 @@ export function KeeperAlertPanel({ state, title = "Keeper Alerts" }: { state: an
         ) : (
           <div className="space-y-3">
             {alerts.slice(0, 12).map((alert) => (
-              <div key={alert.id} className={`rounded-2xl border p-4 ${alertStyle(alert.type)}`}>
+              <div key={alert.id} className={`rounded-2xl border p-4 ${alertStyle(alert.severity)}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div className="text-xs uppercase tracking-[0.18em] opacity-70">{alertLabel(alert.type)}</div>
+                    <div className="text-xs uppercase tracking-[0.18em] opacity-70">{alertLabel(alert.severity)}</div>
+                    <div className="mt-1 text-sm font-semibold">{alert.title}</div>
                     <div className="mt-1 text-sm font-medium">{alert.message}</div>
                   </div>
                   <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] uppercase tracking-[0.14em] opacity-80">

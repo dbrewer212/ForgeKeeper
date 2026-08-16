@@ -23,6 +23,13 @@
       "csp": null
     }
   },
+  "plugins": {
+    "sql": {
+      "preload": [
+        "sqlite:forgekeeper-workbench.db"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

@@ -1,135 +1,155 @@
-import { Card } from "../../components/ui/Card";
+import { useMemo } from "react";
 import { Button } from "../../components/ui/Button";
-import { Select } from "../../components/ui/Select";
-import type { PlannedFilament, PlannedPrototype, PrototypeStatus } from "../../types/planning";
+import { Card } from "../../components/ui/Card";
+import type { ForgekeeperState } from "../../state/useForgekeeperState";
+import { useWorkbenchVault } from "../../workbench/useWorkbenchVault";
 
-const prototypeStatuses: PrototypeStatus[] = ["Active Idea", "In Progress", "Refining", "Modeled", "On Hold"];
+export function PlanningView({ state }: { state: ForgekeeperState }) {
+  const workbench = useWorkbenchVault(state);
+  const inspectionByRevision = useMemo(() => new Set(workbench.workbench.inspections.map((item) => item.revisionId)), [workbench.workbench.inspections]);
+  const specByRevision = useMemo(() => new Map(workbench.workbench.manufacturingSpecs.map((item) => [item.revisionId, item])), [workbench.workbench.manufacturingSpecs]);
+  const preparationsByRevision = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const preparation of workbench.workbench.preparations) map.set(preparation.revisionId, (map.get(preparation.revisionId) ?? 0) + 1);
+    return map;
+  }, [workbench.workbench.preparations]);
 
-function statusClass(value: string) {
-  if (value === "High" || value === "Need to Order") return "border-amber-500/25 bg-amber-500/15 text-amber-200";
-  if (value === "Approved" || value === "Active" || value === "Modeled") return "border-emerald-500/25 bg-emerald-500/15 text-emerald-300";
-  return "border-white/10 bg-white/5 text-slate-300";
-}
-
-export function PlanningView({ state }: { state: any }) {
-  const prototypes: PlannedPrototype[] = state.prototypes ?? [];
-  const plannedFilament: PlannedFilament[] = state.plannedFilament ?? [];
-  const productPlanning = state.productPlanning ?? [];
-  const realmMaterials = state.realmMaterials ?? [];
+  const inspectionNeeded = workbench.assets.filter((asset) => asset.lifecycleStatus === "inspection-required");
+  const draftSpecs = workbench.workbench.manufacturingSpecs.filter((spec) => spec.approvalState !== "approved");
+  const approvedWithoutPreparation = workbench.workbench.manufacturingSpecs.filter((spec) => spec.approvalState === "approved" && !workbench.workbench.preparations.some((prep) => prep.manufacturingSpecId === spec.manufacturingSpecId));
+  const submittedPreparations = workbench.workbench.preparations.filter((prep) => prep.status === "submitted");
+  const activeSpools = state.filament.filter((spool) => spool.status !== "Archived");
+  const unknownSpools = activeSpools.filter((spool) => spool.quantityConfidence === "Unknown");
+  const emptySpools = activeSpools.filter((spool) => spool.status === "Empty" || spool.gramsAvailable <= 0);
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card title="Planned Products"><div className="text-3xl font-semibold">{productPlanning.length}</div><div className="mt-1 text-xs text-slate-500">Architecture records</div></Card>
-        <Card title="Prototype Backlog"><div className="text-3xl font-semibold">{prototypes.length}</div><div className="mt-1 text-xs text-slate-500">Ideas and active tests</div></Card>
-        <Card title="Filament To Order"><div className="text-3xl font-semibold">{plannedFilament.filter((f) => f.status === "Need to Order").length}</div><div className="mt-1 text-xs text-slate-500">Planned material library</div></Card>
-        <Card title="Realm Profiles"><div className="text-3xl font-semibold">{realmMaterials.length}</div><div className="mt-1 text-xs text-slate-500">Material / finish guides</div></Card>
+      <div className="rounded-2xl border border-amber-700/35 bg-[linear-gradient(180deg,rgba(25,22,19,0.94),rgba(13,11,9,0.96))] p-5 shadow-forge">
+        <div className="text-xs uppercase tracking-[0.24em] text-amber-400">Workbench Planning</div>
+        <h1 className="mt-1 text-3xl font-semibold text-slate-100">Readiness & Dependency Board</h1>
+        <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">Planning is derived from canonical Workbench state. It identifies what must happen next without creating a second Product/Order workflow or changing manufacturing authority.</p>
       </div>
 
-      <Card title="Prototype Board" right={<span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">Planning, not production</span>}>
-        <div className="grid gap-4 xl:grid-cols-5">
-          {prototypeStatuses.map((status) => {
-            const items = prototypes.filter((prototype) => prototype.status === status);
-            return (
-              <div key={status} className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div className="font-semibold text-slate-100">{status}</div>
-                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">{items.length}</span>
-                </div>
-                <div className="space-y-3">
-                  {items.map((prototype) => (
-                    <div key={prototype.id} className="rounded-xl border border-white/10 bg-[#111722] p-3">
-                      <div className="font-medium text-slate-100">{prototype.productName}</div>
-                      <div className="mt-1 text-xs text-slate-500">{prototype.family} · {prototype.collection}</div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <span className={`rounded-full border px-2 py-0.5 text-xs ${statusClass(prototype.priority)}`}>{prototype.priority}</span>
-                        {prototype.realm ? <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-slate-300">{prototype.realm}</span> : null}
-                      </div>
-                      <div className="mt-3 text-xs text-slate-400">Next: {prototype.nextStep}</div>
-                      <div className="mt-3">
-                        <Select value={prototype.status} onChange={(e) => state.updatePrototype?.(prototype.id, { status: e.target.value })}>
-                          {prototypeStatuses.map((option) => <option key={option} value={option}>{option}</option>)}
-                        </Select>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+      {workbench.error ? <div className="rounded-xl border border-rose-500/25 bg-rose-500/5 p-4 text-sm text-rose-300">Workbench runtime: {workbench.error}</div> : null}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+        <Metric label="Assets" value={workbench.assets.length} helper="Canonical Workbench identities" />
+        <Metric label="Needs inspection" value={inspectionNeeded.length} helper="Geometry/evidence gate" warning={inspectionNeeded.length > 0} />
+        <Metric label="Draft specs" value={draftSpecs.length} helper="Manufacturing decision pending" warning={draftSpecs.length > 0} />
+        <Metric label="Ready for prep" value={approvedWithoutPreparation.length} helper="Approved spec, no preparation" />
+        <Metric label="Released prep" value={submittedPreparations.length} helper="Eligible for production handoff" />
+        <Metric label="Material uncertainty" value={unknownSpools.length} helper={`${emptySpools.length} empty / depleted`} warning={unknownSpools.length > 0 || emptySpools.length > 0} />
+      </div>
+
+      <Card title="Readiness Lanes" right={<span className="text-xs text-slate-500">Derived, not manually staged</span>}>
+        <div className="grid gap-4 xl:grid-cols-4">
+          <Lane title="Inspect" helper="Revision needs evidence" count={inspectionNeeded.length}>
+            {inspectionNeeded.map((asset) => <AssetRow key={asset.assetId} name={asset.name} detail={asset.currentRevisionId || "No current revision"} />)}
+          </Lane>
+          <Lane title="Specify" helper="Inspection exists; manufacturing approval incomplete" count={draftSpecs.length}>
+            {draftSpecs.map((spec) => {
+              const asset = workbench.assets.find((item) => item.assetId === spec.assetId);
+              return <AssetRow key={spec.manufacturingSpecId} name={asset?.name || spec.assetId} detail={`${spec.intendedProcess} · ${spec.approvalState}`} />;
+            })}
+          </Lane>
+          <Lane title="Prepare" helper="Approved manufacturing spec needs a production preparation" count={approvedWithoutPreparation.length}>
+            {approvedWithoutPreparation.map((spec) => {
+              const asset = workbench.assets.find((item) => item.assetId === spec.assetId);
+              return <AssetRow key={spec.manufacturingSpecId} name={asset?.name || spec.assetId} detail={`${spec.intendedProcess} · revision ${shortId(spec.revisionId)}`} />;
+            })}
+          </Lane>
+          <Lane title="Release" helper="Preparation ready for Production Steward" count={submittedPreparations.length}>
+            {submittedPreparations.map((prep) => {
+              const asset = workbench.assets.find((item) => item.assetId === prep.assetId);
+              const spoolCount = prep.physicalSpoolIds?.length ?? 0;
+              return <AssetRow key={prep.preparationId} name={asset?.name || prep.assetId} detail={`${prep.printerId || "printer unset"} · ${spoolCount} spool${spoolCount === 1 ? "" : "s"}`} />;
+            })}
+          </Lane>
         </div>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr,1fr]">
-        <Card title="Filament Planner / Shopping List" right={<span className="text-xs text-slate-500">Planned ≠ Owned</span>}>
+      <div className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
+        <Card title="Asset Dependency Detail" right={<Button variant="ghost" onClick={() => state.setView("designs")}>Open Workbench</Button>}>
           <div className="space-y-3">
-            {plannedFilament.map((item) => (
-              <div key={item.id} className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="font-semibold text-slate-100">{item.brand} {item.name}</div>
-                    <div className="mt-1 text-xs text-slate-500">{item.materialFamily} · {item.batchGroup}</div>
+            {workbench.assets.map((asset) => {
+              const revisionId = asset.currentRevisionId;
+              const spec = revisionId ? specByRevision.get(revisionId) : undefined;
+              const inspected = revisionId ? inspectionByRevision.has(revisionId) : false;
+              const preparationCount = revisionId ? preparationsByRevision.get(revisionId) ?? 0 : 0;
+              return (
+                <div key={asset.assetId} className="rounded-xl border border-slate-700/55 bg-slate-900/55 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-slate-100">{asset.name}</div>
+                      <div className="mt-1 text-xs text-slate-500">{asset.assetType} · {asset.lifecycleStatus}</div>
+                    </div>
+                    <div className="text-[10px] text-slate-600">{shortId(asset.assetId)}</div>
                   </div>
-                  <span className={`rounded-full border px-3 py-1 text-xs ${statusClass(item.status)}`}>{item.status}</span>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                    <Gate label="Revision" ready={Boolean(revisionId)} value={revisionId ? shortId(revisionId) : "missing"} />
+                    <Gate label="Inspection" ready={inspected} value={inspected ? "recorded" : "required"} />
+                    <Gate label="Spec" ready={spec?.approvalState === "approved"} value={spec?.approvalState || "missing"} />
+                    <Gate label="Preparation" ready={preparationCount > 0} value={preparationCount ? String(preparationCount) : "none"} />
+                  </div>
                 </div>
-                <div className="mt-3 text-sm text-slate-400">{item.finishDirection}</div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {item.realms.map((realm) => <span key={realm} className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-slate-300">{realm}</span>)}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Select value={item.status} onChange={(e) => state.updatePlannedFilament?.(item.id, { status: e.target.value })} className="w-40">
-                    <option value="Need to Order">Need to Order</option>
-                    <option value="Ordered">Ordered</option>
-                    <option value="In Testing">In Testing</option>
-                    <option value="Approved">Approved</option>
-                    <option value="Active">Active</option>
-                    <option value="Archived">Archived</option>
-                  </Select>
-                  <Button variant="ghost" onClick={() => state.movePlannedFilamentToInventory?.(item.id)}>Move to Inventory</Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
+            {workbench.assets.length === 0 ? <div className="rounded-xl border border-dashed border-slate-700/60 p-8 text-center text-sm text-slate-500">No Workbench assets yet. Intake is the entry point for new geometry.</div> : null}
           </div>
         </Card>
 
-        <Card title="Realm Material Reference">
+        <Card title="Material Readiness" right={<Button variant="ghost" onClick={() => state.setView("filament")}>Open Materials</Button>}>
           <div className="space-y-3">
-            {realmMaterials.map((realm: any) => (
-              <div key={realm.realm} className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
+            {activeSpools.map((spool) => (
+              <div key={spool.id} className={`rounded-xl border p-3 ${spool.quantityConfidence === "Unknown" || spool.status === "Empty" ? "border-amber-500/25 bg-amber-500/5" : "border-slate-700/55 bg-slate-900/55"}`}>
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-semibold text-slate-100">{realm.realm}</div>
-                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-400">{realm.batchGroup}</span>
+                  <div>
+                    <div className="text-sm font-semibold text-slate-100">{spool.foundrySpoolCode}</div>
+                    <div className="mt-1 text-xs text-slate-500">{spool.brand} · {spool.material} · {spool.colorName}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-semibold text-slate-200">{spool.quantityConfidence === "Unknown" ? "Unknown" : `${spool.gramsAvailable.toFixed(0)}g`}</div>
+                    <div className="mt-1 text-[10px] text-slate-600">{spool.status}</div>
+                  </div>
                 </div>
-                <div className="mt-2 text-xs text-slate-500">Base candidates: {realm.baseCandidates.join(" · ")}</div>
-                <div className="mt-3 text-sm text-slate-400">{realm.finishDirection}</div>
               </div>
             ))}
           </div>
         </Card>
       </div>
 
-      <Card title="Product Planning Board">
-        <div className="grid gap-3 xl:grid-cols-2">
-          {productPlanning.map((item: any) => (
-            <div key={item.id} className="rounded-2xl border border-white/10 bg-[#0d131c] p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <div className="font-semibold text-slate-100">{item.baseProduct}</div>
-                  <div className="mt-1 text-xs text-slate-500">{item.productFamily} · {item.collection} · {item.tier}</div>
-                </div>
-                <span className={`rounded-full border px-3 py-1 text-xs ${statusClass(item.prototypePriority)}`}>{item.prototypePriority}</span>
-              </div>
-              <div className="mt-3 text-sm text-slate-400">{item.coreFunction}</div>
-              <div className="mt-3 grid gap-2 text-xs text-slate-500 md:grid-cols-2">
-                <div>Core Parts: {item.coreParts}</div>
-                <div>Variant Parts: {item.variantParts}</div>
-                <div>Attachments: {item.attachmentTypes}</div>
-                <div>Printer Fit: {item.bestPrinterFit}</div>
-              </div>
-            </div>
-          ))}
+      <Card title="Planning Authority Boundary">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm text-slate-400">
+          <Boundary title="Identity">Asset Vault owns asset and revision identity.</Boundary>
+          <Boundary title="Manufacturing">Build Bench and ManufacturingSpec own preparation decisions and approval.</Boundary>
+          <Boundary title="Execution">Production Steward owns the production workflow and active session.</Boundary>
+          <Boundary title="Machine state">Bastion / Watcher and explicit printer records own machine condition; Planning never infers it.</Boundary>
         </div>
       </Card>
     </div>
   );
+}
+
+function Metric({ label, value, helper, warning = false }: { label: string; value: number | string; helper: string; warning?: boolean }) {
+  return <div className={`rounded-2xl border p-4 shadow-forge-inset ${warning ? "border-amber-500/25 bg-amber-500/5" : "border-slate-700/55 bg-slate-900/60"}`}><div className="text-[10px] uppercase tracking-[0.14em] text-slate-600">{label}</div><div className={`mt-2 text-2xl font-semibold ${warning ? "text-amber-300" : "text-slate-100"}`}>{value}</div><div className="mt-1 text-xs text-slate-500">{helper}</div></div>;
+}
+
+function Lane({ title, helper, count, children }: { title: string; helper: string; count: number; children: React.ReactNode }) {
+  return <div className="rounded-xl border border-slate-700/55 bg-slate-950/45 p-4"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-slate-100">{title}</div><div className="mt-1 text-xs text-slate-500">{helper}</div></div><span className="rounded-full border border-amber-700/35 bg-amber-900/20 px-2.5 py-1 text-xs font-semibold text-amber-300">{count}</span></div><div className="mt-4 space-y-2">{children}{count === 0 ? <div className="rounded-lg border border-dashed border-slate-800/70 p-4 text-center text-xs text-slate-600">Lane clear</div> : null}</div></div>;
+}
+
+function AssetRow({ name, detail }: { name: string; detail: string }) {
+  return <div className="rounded-lg border border-slate-800/70 bg-slate-900/70 p-3"><div className="text-sm font-medium text-slate-200">{name}</div><div className="mt-1 text-xs text-slate-500">{detail}</div></div>;
+}
+
+function Gate({ label, ready, value }: { label: string; ready: boolean; value: string }) {
+  return <div className={`rounded-lg border px-3 py-2 ${ready ? "border-emerald-500/18 bg-emerald-500/5" : "border-amber-500/20 bg-amber-500/5"}`}><div className="text-[9px] uppercase tracking-[0.12em] text-slate-600">{label}</div><div className={`mt-1 text-xs font-semibold ${ready ? "text-emerald-300" : "text-amber-300"}`}>{value}</div></div>;
+}
+
+function Boundary({ title, children }: { title: string; children: React.ReactNode }) {
+  return <div className="rounded-xl border border-slate-700/55 bg-slate-950/45 p-4"><div className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-400">{title}</div><div className="mt-2 leading-6">{children}</div></div>;
+}
+
+function shortId(id: string) {
+  return id.length > 18 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id;
 }

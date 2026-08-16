@@ -44,30 +44,49 @@ export async function openPath(path: string, label = "Path") {
     return;
   }
 
+  const invoke = await getTauriInvoke();
+
+  if (invoke) {
+    try {
+      await invoke("open_path", { path });
+      return;
+    } catch (error) {
+      console.error(error);
+      window.alert(`Could not open ${label}.\n\n${String(error)}`);
+      return;
+    }
+  }
+
   if (isLikelyWebUrl(path)) {
     window.open(path, "_blank", "noopener,noreferrer");
     return;
   }
 
-  const invoke = await getTauriInvoke();
-
-  if (!invoke) {
-    window.alert(`${label} is linked, but local file launching only works in the Forgekeeper desktop app.\n\n${path}`);
-    return;
-  }
-
-  try {
-    await invoke("open_path", { path });
-  } catch (error) {
-    console.error(error);
-    window.alert(`Could not open ${label}.\n\n${String(error)}`);
-  }
+  window.alert(`${label} is linked, but local file launching only works in the Forgekeeper desktop app.\n\n${path}`);
 }
 
-export async function openUrl(url: string) {
+export async function openUrl(url: string, label = "URL") {
   if (!url) {
-    window.alert("URL is not configured yet.");
+    window.alert(`${label} is not configured yet.`);
     return;
+  }
+
+  if (!isLikelyWebUrl(url)) {
+    window.alert(`${label} is not a valid web address.\n\n${url}`);
+    return;
+  }
+
+  const invoke = await getTauriInvoke();
+
+  if (invoke) {
+    try {
+      await invoke("open_path", { path: url });
+      return;
+    } catch (error) {
+      console.error(error);
+      window.alert(`Could not open ${label}.\n\n${String(error)}`);
+      return;
+    }
   }
 
   window.open(url, "_blank", "noopener,noreferrer");
