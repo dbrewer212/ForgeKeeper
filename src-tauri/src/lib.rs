@@ -373,7 +373,7 @@ pub fn run() {
         .manage(ManagedProcesses::default())
         .plugin(
             tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:forgekeeper.db", workbench_migrations::migrations())
+                .add_migrations("sqlite:forgekeeper-workbench.db", workbench_migrations::migrations())
                 .build(),
         )
         .setup(|app| {
