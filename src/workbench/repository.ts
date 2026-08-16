@@ -14,7 +14,7 @@ import type {
 } from "./contracts";
 import type { WorkbenchEvent } from "./events";
 
-const DATABASE_URL = "sqlite:forgekeeper.db";
+const DATABASE_URL = "sqlite:forgekeeper-workbench.db";
 
 let databasePromise: Promise<Database> | null = null;
 
