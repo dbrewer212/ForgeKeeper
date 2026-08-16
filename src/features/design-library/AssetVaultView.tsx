@@ -19,6 +19,9 @@ export function AssetVaultView({ state }: { state: ForgekeeperState }) {
   const runtime = useWorkbenchVault(state);
   const [query, setQuery] = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState("");
+  const [busyAction, setBusyAction] = useState<"archive" | "retire" | "remove" | null>(null);
+  const [lifecycleMessage, setLifecycleMessage] = useState("");
+  const [lifecycleError, setLifecycleError] = useState("");
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -57,6 +60,53 @@ export function AssetVaultView({ state }: { state: ForgekeeperState }) {
   const preparations = selectedProjection?.preparations ?? [];
   const prints = selectedProjection?.prints ?? [];
 
+  async function changeLifecycle(action: "archive" | "retire") {
+    if (!selected) return;
+    setBusyAction(action);
+    setLifecycleError("");
+    setLifecycleMessage("");
+    try {
+      if (action === "archive") await runtime.archiveAsset(selected.assetId);
+      else await runtime.retireAsset(selected.assetId);
+      setLifecycleMessage(`${selected.name} is now ${action === "archive" ? "archived" : "retired"}. Its history remains intact.`);
+    } catch (cause) {
+      setLifecycleError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function removeSelected() {
+    if (!selected) return;
+    setBusyAction("remove");
+    setLifecycleError("");
+    setLifecycleMessage("");
+    try {
+      const summary = await runtime.assetDependencySummary(selected.assetId);
+      if (summary.printRecords > 0) throw new Error("This asset has physical print evidence and cannot be hard-deleted. Retire or archive it instead.");
+      if (summary.submittedPreparations > 0) throw new Error("This asset has work already released to production and cannot be hard-deleted.");
+
+      const detail = [
+        `${summary.revisions} revision(s)`,
+        `${summary.relationships} relationship(s)`,
+        `${summary.variants} variant record(s)`,
+        `${summary.manufacturingSpecs} manufacturing spec(s)`,
+        `${summary.inspections} inspection record(s)`,
+        `${summary.preparations} preparation(s)`,
+      ].join("\n");
+      const confirmed = window.confirm(`Permanently remove ${selected.name}?\n\nThis will remove the asset and its non-production Workbench records:\n${detail}\n\nFoundry-managed files are not deleted automatically. This action cannot be undone.`);
+      if (!confirmed) return;
+
+      await runtime.removeAsset(selected.assetId);
+      setSelectedAssetId("");
+      setLifecycleMessage(`${selected.name} was removed from the Workbench. Managed source files were preserved for separate cleanup/reuse.`);
+    } catch (cause) {
+      setLifecycleError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-amber-500/15 bg-[#0d131c] p-4">
@@ -72,6 +122,8 @@ export function AssetVaultView({ state }: { state: ForgekeeperState }) {
 
       {runtime.error ? <Card title="Workbench Runtime"><div className="text-sm text-rose-300">{runtime.error}</div></Card> : null}
       {!runtime.ready ? <Card title="Asset Vault"><div className="text-sm text-slate-400">Loading canonical Workbench state…</div></Card> : null}
+      {lifecycleError ? <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 text-sm text-rose-300">{lifecycleError}</div> : null}
+      {lifecycleMessage ? <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-emerald-200">{lifecycleMessage}</div> : null}
 
       {runtime.ready ? (
         <div className="grid gap-6 xl:grid-cols-[360px,minmax(0,1fr)]">
@@ -84,7 +136,7 @@ export function AssetVaultView({ state }: { state: ForgekeeperState }) {
                   const revisionCount = revisionCounts.get(asset.assetId) ?? 0;
                   const printCount = printCounts.get(asset.assetId) ?? 0;
                   return (
-                    <button key={asset.assetId} type="button" onClick={() => setSelectedAssetId(asset.assetId)} className={`w-full rounded-2xl border p-4 text-left transition ${active ? "border-amber-500/35 bg-amber-500/10" : "border-white/10 bg-[#0b1119] hover:bg-white/5"}`}>
+                    <button key={asset.assetId} type="button" onClick={() => { setSelectedAssetId(asset.assetId); setLifecycleError(""); setLifecycleMessage(""); }} className={`w-full rounded-2xl border p-4 text-left transition ${active ? "border-amber-500/35 bg-amber-500/10" : "border-white/10 bg-[#0b1119] hover:bg-white/5"}`}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="truncate font-semibold text-slate-100">{asset.name}</div>
@@ -130,6 +182,21 @@ export function AssetVaultView({ state }: { state: ForgekeeperState }) {
                     <Info label="Manufacturing specs" value={String(specs.length)} />
                   </div>
                 </div>
+              </Card>
+
+              <Card title="Asset Lifecycle" right={<span className="text-xs text-slate-500">History-preserving by default</span>}>
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr),auto] lg:items-center">
+                  <div className="text-sm leading-6 text-slate-400">
+                    Archive removes an asset from active work while preserving its history. Retire marks a historical Foundry asset that should no longer be used for new production. Permanent removal is limited to assets without returned print evidence or released production work.
+                  </div>
+                  <div className="flex flex-wrap gap-2 lg:justify-end">
+                    <Button variant="ghost" disabled={busyAction !== null || selected.lifecycleStatus === "archived"} onClick={() => void changeLifecycle("archive")}>{busyAction === "archive" ? "Archiving…" : "Archive"}</Button>
+                    <Button variant="ghost" disabled={busyAction !== null || selected.lifecycleStatus === "retired"} onClick={() => void changeLifecycle("retire")}>{busyAction === "retire" ? "Retiring…" : "Retire"}</Button>
+                    <Button variant="danger" disabled={busyAction !== null || prints.length > 0 || preparations.some((item) => item.status === "submitted")} onClick={() => void removeSelected()}>{busyAction === "remove" ? "Removing…" : "Remove Permanently"}</Button>
+                  </div>
+                </div>
+                {prints.length > 0 ? <div className="mt-3 text-xs text-amber-300">Permanent removal is disabled because this asset has physical print evidence.</div> : null}
+                {preparations.some((item) => item.status === "submitted") ? <div className="mt-2 text-xs text-amber-300">Permanent removal is disabled because a preparation has already been released to production.</div> : null}
               </Card>
 
               <div className="grid gap-5 lg:grid-cols-2">
