@@ -1,6 +1,6 @@
 import type Database from "@tauri-apps/plugin-sql";
 
-const DATABASE_URL = "sqlite:forgekeeper.db";
+const DATABASE_URL = "sqlite:forgekeeper-workbench.db";
 
 type MetaRow = { value: string };
 
