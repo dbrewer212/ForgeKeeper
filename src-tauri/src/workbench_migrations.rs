@@ -1,9 +1,5 @@
 use tauri_plugin_sql::{Migration, MigrationKind};
 
-// This is the exact migration that ForgeKeeper originally registered as SQLx migration 1.
-// It must remain byte-for-byte stable so existing databases validate their historical ledger.
-const HISTORICAL_WORKSPACE_SCHEMA_V1: &str = "CREATE TABLE IF NOT EXISTS workspace_state (id INTEGER PRIMARY KEY CHECK (id = 1), schema_version INTEGER NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);";
-
 const WORKBENCH_SCHEMA_V1: &str = r#"
 CREATE TABLE IF NOT EXISTS workbench_meta (
   key TEXT PRIMARY KEY,
@@ -150,18 +146,10 @@ ON CONFLICT(key) DO NOTHING;
 "#;
 
 pub fn migrations() -> Vec<Migration> {
-    vec![
-        Migration {
-            version: 1,
-            description: "create_workspace_state",
-            sql: HISTORICAL_WORKSPACE_SCHEMA_V1,
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 2,
-            description: "create_workbench_domain_schema",
-            sql: WORKBENCH_SCHEMA_V1,
-            kind: MigrationKind::Up,
-        },
-    ]
+    vec![Migration {
+        version: 1,
+        description: "create_workbench_domain_schema",
+        sql: WORKBENCH_SCHEMA_V1,
+        kind: MigrationKind::Up,
+    }]
 }
