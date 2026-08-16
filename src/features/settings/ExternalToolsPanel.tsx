@@ -2,7 +2,7 @@ import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Button } from "../../components/ui/Button";
-import { openLocalPathBestEffort, openWebUrl } from "../../lib/externalTools";
+import { launchExternalTool, openPath, openUrl } from "../../lib/tauriLaunchpad";
 
 export function ExternalToolsPanel({ state }: { state: any }) {
   const settings = state.settings;
@@ -32,7 +32,7 @@ export function ExternalToolsPanel({ state }: { state: any }) {
         </label>
         <label className="space-y-2">
           <div className="text-xs uppercase tracking-wide text-slate-500">Blender Path</div>
-          <Input value={settings.blenderPath ?? ""} onChange={(e) => update({ blenderPath: e.target.value })} placeholder="C:\\Users\\dbrew\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Blender" />
+          <Input value={settings.blenderPath ?? ""} onChange={(e) => update({ blenderPath: e.target.value })} placeholder="C:\\Program Files\\Blender Foundation\\Blender\\blender.exe" />
         </label>
         <label className="space-y-2">
           <div className="text-xs uppercase tracking-wide text-slate-500">Meshy.ai URL</div>
@@ -41,15 +41,15 @@ export function ExternalToolsPanel({ state }: { state: any }) {
       </div>
 
       <div className="mt-4 rounded-2xl border border-white/10 bg-[#0d131c] p-4 text-sm text-slate-400">
-        Default routing: Kobra 3 Combo → Anycubic Slicer Next; Neptune 4 Max → OrcaSlicer.
+        Default routing: Kobra 3 Combo → Anycubic Slicer Next; Neptune 4 Max → OrcaSlicer. Local applications are launched through the Forgekeeper desktop shell rather than browser file URLs.
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button variant="ghost" onClick={() => openLocalPathBestEffort(settings.forgekeeperLibraryPath || "")}>Open Library Folder</Button>
-        <Button variant="ghost" onClick={() => openLocalPathBestEffort(settings.orcaSlicerPath || "")}>Open Orca Path</Button>
-        <Button variant="ghost" onClick={() => openLocalPathBestEffort(settings.anycubicSlicerPath || "")}>Open Anycubic Path</Button>
-        <Button variant="ghost" onClick={() => openLocalPathBestEffort(settings.blenderPath || "")}>Open Blender Path</Button>
-        <Button onClick={() => openWebUrl(settings.meshyUrl || "https://www.meshy.ai/")}>Open Meshy.ai</Button>
+        <Button variant="ghost" onClick={() => void openPath(settings.forgekeeperLibraryPath || "", "Forgekeeper Library")}>Open Library Folder</Button>
+        <Button variant="ghost" onClick={() => void launchExternalTool(settings.orcaSlicerPath || "", undefined, "OrcaSlicer")}>Launch OrcaSlicer</Button>
+        <Button variant="ghost" onClick={() => void launchExternalTool(settings.anycubicSlicerPath || "", undefined, "Anycubic Slicer Next")}>Launch Anycubic</Button>
+        <Button variant="ghost" onClick={() => void launchExternalTool(settings.blenderPath || "", undefined, "Blender")}>Launch Blender</Button>
+        <Button onClick={() => void openUrl(settings.meshyUrl || "https://www.meshy.ai/")}>Open Meshy.ai</Button>
       </div>
     </Card>
   );
