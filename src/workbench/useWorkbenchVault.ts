@@ -4,6 +4,7 @@ import type { ForgekeeperState } from "../state/useForgekeeperState";
 import type { FoundryAsset, WorkbenchState } from "./contracts";
 import { ensureWorkbenchBootstrap } from "./bootstrap";
 import { emptyWorkbenchState, WorkbenchRepository } from "./repository";
+import { getWorkbenchAssetLifecycleService, type AssetDependencySummary } from "./assetLifecycle";
 
 export type WorkbenchVaultRuntime = {
   ready: boolean;
@@ -11,6 +12,10 @@ export type WorkbenchVaultRuntime = {
   workbench: WorkbenchState;
   assets: FoundryAsset[];
   refresh: () => Promise<void>;
+  archiveAsset: (assetId: string) => Promise<void>;
+  retireAsset: (assetId: string) => Promise<void>;
+  removeAsset: (assetId: string) => Promise<AssetDependencySummary>;
+  assetDependencySummary: (assetId: string) => Promise<AssetDependencySummary>;
 };
 
 type SharedWorkbenchSnapshot = {
@@ -78,6 +83,26 @@ export function useWorkbenchVault(state: ForgekeeperState): WorkbenchVaultRuntim
     await loadWorkbench(state, true);
   }, [state]);
 
+  const archiveAsset = useCallback(async (assetId: string) => {
+    await getWorkbenchAssetLifecycleService().setLifecycle(assetId, "archived");
+    await loadWorkbench(state, true);
+  }, [state]);
+
+  const retireAsset = useCallback(async (assetId: string) => {
+    await getWorkbenchAssetLifecycleService().setLifecycle(assetId, "retired");
+    await loadWorkbench(state, true);
+  }, [state]);
+
+  const removeAsset = useCallback(async (assetId: string) => {
+    const summary = await getWorkbenchAssetLifecycleService().remove(assetId);
+    await loadWorkbench(state, true);
+    return summary;
+  }, [state]);
+
+  const assetDependencySummary = useCallback(async (assetId: string) => {
+    return getWorkbenchAssetLifecycleService().dependencySummary(assetId);
+  }, []);
+
   useEffect(() => {
     void loadWorkbench(state, false);
   }, [state.storageReady, state.storageStatus]);
@@ -93,5 +118,9 @@ export function useWorkbenchVault(state: ForgekeeperState): WorkbenchVaultRuntim
     workbench: snapshot.workbench,
     assets,
     refresh,
+    archiveAsset,
+    retireAsset,
+    removeAsset,
+    assetDependencySummary,
   };
 }
