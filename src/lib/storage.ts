@@ -1,4 +1,5 @@
-import type { AppData } from "../types/domain";
+import type { AppData, CanonRecord } from "../types/domain";
+import { seedCanonRecords } from "../data/seed";
 import { downloadText, type CsvDownloadResult } from "./csv";
 import type Database from "@tauri-apps/plugin-sql";
 
@@ -35,6 +36,25 @@ let writeInFlight = false;
 let latestWorkspaceSnapshot: AppData | null = null;
 let closeJournalInstalled = false;
 
+function mergeSeedCanonRecords(records?: CanonRecord[]): CanonRecord[] {
+  const stored = records ?? [];
+  return [
+    ...seedCanonRecords.map((seed) => ({
+      ...seed,
+      ...(stored.find((record) => record.id === seed.id) ?? {}),
+    })),
+    ...stored.filter((record) => !seedCanonRecords.some((seed) => seed.id === record.id)),
+  ];
+}
+
+function migrateWorkspaceData(data: AppData | null): AppData | null {
+  if (!data) return null;
+  return {
+    ...data,
+    canonRecords: mergeSeedCanonRecords(data.canonRecords),
+  };
+}
+
 async function getDatabase() {
   if (!isTauriRuntime()) return null;
   if (!databasePromise) {
@@ -61,7 +81,7 @@ export function loadStoredData(): AppData | null {
   if (cachedStoredData !== undefined) return cachedStoredData;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    cachedStoredData = raw ? (JSON.parse(raw) as AppData) : null;
+    cachedStoredData = migrateWorkspaceData(raw ? (JSON.parse(raw) as AppData) : null);
     return cachedStoredData;
   } catch (error) {
     console.warn("Forgekeeper storage failed to load", error);
@@ -81,7 +101,7 @@ export function saveStoredData(data: AppData): void {
 }
 
 export function selectStartupWorkspace(fallbackData: AppData | null, nativeData: AppData | null): AppData | null {
-  return fallbackData ?? nativeData;
+  return migrateWorkspaceData(fallbackData ?? nativeData);
 }
 
 export async function loadHistoricalWorkspace(database: ReadableDatabase): Promise<AppData | null> {
@@ -92,11 +112,11 @@ export async function loadHistoricalWorkspace(database: ReadableDatabase): Promi
       "SELECT payload_json FROM workspace_state WHERE workspace_id = $1 LIMIT 1",
       [LEGACY_WORKSPACE_ID],
     );
-    return legacyRows.length ? (JSON.parse(legacyRows[0].payload_json) as AppData) : null;
+    return legacyRows.length ? migrateWorkspaceData(JSON.parse(legacyRows[0].payload_json) as AppData) : null;
   }
   if (columnNames.has("payload") && columnNames.has("id")) {
     const censusRows = await database.select<WorkspaceRow[]>("SELECT payload FROM workspace_state WHERE id = 1");
-    return censusRows.length ? (JSON.parse(censusRows[0].payload) as AppData) : null;
+    return censusRows.length ? migrateWorkspaceData(JSON.parse(censusRows[0].payload) as AppData) : null;
   }
   return null;
 }
@@ -105,7 +125,7 @@ export async function loadNativeStoredData(): Promise<AppData | null> {
   const database = await getDatabase();
   if (!database) return null;
   const rows = await database.select<WorkspaceRow[]>(`SELECT payload FROM ${WORKSPACE_TABLE} WHERE id = 1`);
-  if (rows.length) return JSON.parse(rows[0].payload) as AppData;
+  if (rows.length) return migrateWorkspaceData(JSON.parse(rows[0].payload) as AppData);
 
   // Import the authoritative JSON record from the pre-census Foundry schema without
   // modifying or renaming its tables. The caller persists the hydrated result afterward.
