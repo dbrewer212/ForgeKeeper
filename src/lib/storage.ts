@@ -117,8 +117,10 @@ function installCloseJournal() {
   closeJournalInstalled = true;
   const preserveLatest = () => {
     if (!latestWorkspaceSnapshot) return;
-    // Closing is the one time synchronous serialization is preferable: if an idle SQLite
-    // write has not completed yet, this fallback is loaded first on the next startup.
+    // The synchronous browser journal is only a crash/close fallback for a SQLite write
+    // that has not completed. Persisting it after a successful native save would let a
+    // stale localStorage snapshot override newer SQLite data on the next startup.
+    if (!pendingNativeData && !writeInFlight) return;
     saveStoredData(latestWorkspaceSnapshot);
   };
   window.addEventListener("pagehide", preserveLatest);
@@ -179,6 +181,9 @@ async function flushQueuedNativeSave(): Promise<void> {
            updated_at = excluded.updated_at`,
         [WORKSPACE_SCHEMA_VERSION, payload, new Date().toISOString()],
       );
+      // SQLite is authoritative after a successful native write. Remove any recovery journal
+      // so it cannot shadow this newer database snapshot on a later startup.
+      clearStoredData();
     }
     waiters.forEach(({ resolve }) => resolve());
   } catch (error) {
