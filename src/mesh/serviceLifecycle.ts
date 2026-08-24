@@ -61,7 +61,10 @@ export class ServiceLifecycleManager {
     }
 
     const service = this.requireService(serviceId);
-    this.requireCommissionedForExecution(service);
+    // An intentional stop sets enabled=false so the offline service is not treated as an
+    // unexpected health failure. A subsequent explicit Start is itself the request to
+    // re-enable that already-commissioned service, so disabled state must not deadlock Start.
+    this.requireCommissionedForExecution(service, true);
     const adapter = this.requireAdapterReady(service);
     if (!this.runtime.services.dependenciesSatisfied(serviceId)) {
       const missing = service.dependencies.filter((dependencyId) => {
@@ -175,9 +178,9 @@ export class ServiceLifecycleManager {
     return adapter;
   }
 
-  private requireCommissionedForExecution(service: ServiceDescriptor): void {
+  private requireCommissionedForExecution(service: ServiceDescriptor, allowDisabled = false): void {
     const allowed = service.commissioningState === "commissioning" || service.commissioningState === "active" || service.commissioningState === "degraded";
-    if (!service.enabled || !allowed) {
+    if ((!service.enabled && !allowDisabled) || !allowed) {
       throw new Error(`Service ${service.id} is ${service.commissioningState} and is not commissioned for execution.`);
     }
   }
