@@ -151,35 +151,93 @@ fn watcher_system_snapshot() -> Result<serde_json::Value, String> {
     Err("Watcher native host telemetry is currently implemented for Windows Foundry workstations.".to_string())
 }
 
-#[tauri::command]
-fn mesh_load_snapshot(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    let path = mesh_file_path(&app, SNAPSHOT_FILE)?;
+fn validate_mesh_snapshot(content: &str) -> Result<(), String> {
+    serde_json::from_str::<serde_json::Value>(content)
+        .map(|_| ())
+        .map_err(|error| format!("Foundry mesh snapshot is not valid JSON: {error}"))
+}
+
+fn read_valid_mesh_snapshot(path: &Path) -> Result<Option<String>, String> {
     if !path.exists() {
         return Ok(None);
     }
+    let content = fs::read_to_string(path)
+        .map_err(|error| format!("Failed to read Foundry mesh snapshot {}: {error}", path.display()))?;
+    validate_mesh_snapshot(&content)?;
+    Ok(Some(content))
+}
 
-    fs::read_to_string(path)
-        .map(Some)
-        .map_err(|error| format!("Failed to read Foundry mesh snapshot: {error}"))
+#[tauri::command]
+fn mesh_load_snapshot(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let path = mesh_file_path(&app, SNAPSHOT_FILE)?;
+    let backup_path = path.with_extension("json.bak");
+
+    match read_valid_mesh_snapshot(&path) {
+        Ok(Some(content)) => return Ok(Some(content)),
+        Ok(None) => {}
+        Err(active_error) => {
+            if !backup_path.exists() {
+                return Err(active_error);
+            }
+        }
+    }
+
+    match read_valid_mesh_snapshot(&backup_path) {
+        Ok(Some(content)) => {
+            // Self-heal the active slot so the next startup does not depend on the backup path.
+            let _ = fs::write(&path, &content);
+            Ok(Some(content))
+        }
+        Ok(None) => Ok(None),
+        Err(backup_error) => Err(format!(
+            "Foundry mesh active snapshot is unavailable and the last-known-good backup could not be loaded: {backup_error}"
+        )),
+    }
 }
 
 #[tauri::command]
 fn mesh_save_snapshot(app: tauri::AppHandle, content: String) -> Result<(), String> {
+    validate_mesh_snapshot(&content)?;
+
     let path = mesh_file_path(&app, SNAPSHOT_FILE)?;
     let temp_path = path.with_extension("json.tmp");
     let backup_path = path.with_extension("json.bak");
 
-    fs::write(&temp_path, content)
+    let mut temp_file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&temp_path)
+        .map_err(|error| format!("Failed to open temporary Foundry mesh snapshot: {error}"))?;
+    temp_file
+        .write_all(content.as_bytes())
         .map_err(|error| format!("Failed to write temporary Foundry mesh snapshot: {error}"))?;
+    temp_file
+        .sync_all()
+        .map_err(|error| format!("Failed to flush temporary Foundry mesh snapshot: {error}"))?;
+    drop(temp_file);
 
     if path.exists() {
-        let _ = fs::copy(&path, &backup_path);
+        fs::copy(&path, &backup_path)
+            .map_err(|error| format!("Failed to preserve last-known-good Foundry mesh snapshot: {error}"))?;
         fs::remove_file(&path)
-            .map_err(|error| format!("Failed to replace previous Foundry mesh snapshot: {error}"))?;
+            .map_err(|error| format!("Failed to prepare Foundry mesh snapshot replacement: {error}"))?;
     }
 
-    fs::rename(&temp_path, &path)
-        .map_err(|error| format!("Failed to commit Foundry mesh snapshot: {error}"))
+    if let Err(commit_error) = fs::rename(&temp_path, &path) {
+        let restore_detail = if backup_path.exists() {
+            match fs::copy(&backup_path, &path) {
+                Ok(_) => "The previous snapshot was restored from the last-known-good backup.".to_string(),
+                Err(restore_error) => format!("Automatic restore also failed: {restore_error}"),
+            }
+        } else {
+            "No prior snapshot existed to restore.".to_string()
+        };
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!("Failed to commit Foundry mesh snapshot: {commit_error}. {restore_detail}"));
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
