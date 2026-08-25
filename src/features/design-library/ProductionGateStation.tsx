@@ -4,6 +4,7 @@ import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { Textarea } from "../../components/ui/Textarea";
+import { printerProductionSnapshot } from "../../lib/printerOperations";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 import type { PrintOutcome } from "../../workbench/contracts";
 import { getWorkbenchProductionGate, type PrintMaterialAllocation } from "../../workbench/productionGate";
@@ -24,6 +25,8 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
   const asset = runtime.workbench.assets.find((item) => item.assetId === preparation?.assetId);
   const spec = runtime.workbench.manufacturingSpecs.find((item) => item.manufacturingSpecId === preparation?.manufacturingSpecId);
   const evidence = preparation ? runtime.workbench.printRecords.filter((item) => item.preparationId === preparation.preparationId) : [];
+  const preparedPrinter = preparation?.printerId ? state.printers.find((item) => item.id === preparation.printerId) : undefined;
+  const preparedPrinterSnapshot = preparedPrinter ? printerProductionSnapshot(preparedPrinter) : undefined;
 
   const [printerId, setPrinterId] = useState("");
   const selectedPrinterId = printerId || preparation?.printerId || "";
@@ -85,12 +88,20 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
     return undefined;
   }
 
+  const releaseBlockedReason = !preparation?.printerId
+    ? "Assign a printer in Build Bench before production release."
+    : !preparedPrinter
+      ? `Assigned printer ${preparation.printerId} is not in the Printer Pool.`
+      : !preparedPrinterSnapshot?.productionEligible
+        ? preparedPrinterSnapshot?.eligibilityReason ?? "Assigned printer is not production-cleared."
+        : undefined;
+
   return (
     <div className="space-y-5">
       <div className="rounded-2xl border border-amber-500/15 bg-[#0d131c] p-4">
         <div className="text-xs uppercase tracking-[0.24em] text-amber-400">Foundry Workbench</div>
         <h1 className="mt-1 text-2xl font-semibold text-slate-100">Production Gate</h1>
-        <p className="mt-1 max-w-4xl text-sm text-slate-400">Human approval remains explicit. Validated preparation is released to Production Steward, supervised through Bastion, and returned physical evidence is attached to the exact asset revision, production job, printer, and physical material consumed.</p>
+        <p className="mt-1 max-w-4xl text-sm text-slate-400">Human approval remains explicit. Validated preparation is released to Production Steward only when its assigned printer is operationally cleared, supervised through Bastion, and returned physical evidence is attached to the exact asset revision, production job, printer, and physical material consumed.</p>
       </div>
 
       {preparations.length === 0 ? (
@@ -112,6 +123,7 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
                 <Readout label="Preparation" value={preparation?.preparationId ?? "Unknown"} />
                 <Readout label="Status" value={preparation?.status ?? "Unknown"} />
                 <Readout label="Production Job" value={preparation?.productionJobId ?? "Not released"} />
+                <Readout label="Assigned printer" value={preparedPrinter?.name ?? preparation?.printerId ?? "Unassigned"} />
                 <Readout label="Assigned spools" value={preparation?.physicalSpoolIds?.length ? preparation.physicalSpoolIds.join(", ") : "None fixed at preparation time"} />
               </div>
             </Card>
@@ -128,11 +140,27 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
               ) : null}
             </Card>
 
+            <Card title="Printer Readiness">
+              {preparedPrinterSnapshot ? (
+                <div className="space-y-2">
+                  <Readout label="Operational state" value={preparedPrinterSnapshot.operationalState} />
+                  <Readout label="Expected power" value={preparedPrinterSnapshot.expectedPowerState} />
+                  <Readout label="Connectivity" value={preparedPrinterSnapshot.connectivity} />
+                  <Readout label="Production clearance" value={preparedPrinterSnapshot.productionClearance} />
+                  <Readout label="Native control" value={preparedPrinterSnapshot.nativeControlPath} />
+                  <div className={`mt-3 rounded-xl border p-3 text-xs leading-5 ${preparedPrinterSnapshot.productionEligible ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-200" : "border-amber-500/20 bg-amber-500/5 text-amber-200"}`}>
+                    {preparedPrinterSnapshot.productionEligible ? "Eligible for Production Steward scheduling." : preparedPrinterSnapshot.eligibilityReason}
+                  </div>
+                </div>
+              ) : <div className="text-sm text-amber-300">No valid printer is assigned to this preparation. Return to Build Bench to assign one.</div>}
+            </Card>
+
             <Card title="Steward Handoff">
-              <div className="text-sm text-slate-400">Release is available only after the exact preparation is validated and its ManufacturingSpec is approved.</div>
-              <Button className="mt-3 w-full" disabled={busy || !preparation || !spec || spec.approvalState !== "approved" || preparation.status === "submitted"} onClick={() => void run(async () => {
-                if (!preparation) return;
-                const result = await getWorkbenchProductionGate().release(preparation.preparationId);
+              <div className="text-sm text-slate-400">Release requires a validated preparation, an approved ManufacturingSpec, and an assigned production-cleared printer.</div>
+              {releaseBlockedReason ? <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs leading-5 text-amber-200">{releaseBlockedReason}</div> : null}
+              <Button className="mt-3 w-full" disabled={busy || !preparation || !spec || spec.approvalState !== "approved" || preparation.status === "submitted" || Boolean(releaseBlockedReason)} onClick={() => void run(async () => {
+                if (!preparation || !preparedPrinter) return;
+                const result = await getWorkbenchProductionGate().release(preparation.preparationId, printerProductionSnapshot(preparedPrinter));
                 setMessage(`Released to Production Steward as ${result.productionJobId}.`);
               })}>{preparation?.status === "submitted" ? "Released to Steward" : "Release to Production Steward"}</Button>
             </Card>
@@ -142,7 +170,7 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
             <Card title="Physical Print Evidence" right={<span className="text-xs text-slate-500">{evidence.length} record{evidence.length === 1 ? "" : "s"}</span>}>
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="text-xs text-slate-500">Printer
-                  <Select className="mt-1" value={selectedPrinterId} onChange={(event) => setPrinterId(event.target.value)}>
+                  <Select className="mt-1" value={selectedPrinterId} onChange={(event) => setPrinterId(event.target.value)} disabled={Boolean(preparation?.printerId)}>
                     <option value="">Select printer</option>
                     {state.printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
                   </Select>
