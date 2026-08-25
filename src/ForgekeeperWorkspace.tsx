@@ -7,7 +7,6 @@ import { ensureWorkbenchBootstrap } from "./workbench/bootstrap";
 
 const DashboardView = lazy(() => import("./features/dashboard/DashboardView").then((module) => ({ default: module.DashboardView })));
 const WorkbenchDesignLibraryView = lazy(() => import("./features/design-library/WorkbenchDesignLibraryView").then((module) => ({ default: module.WorkbenchDesignLibraryView })));
-const CanonRegistryView = lazy(() => import("./features/canon/CanonRegistryView").then((module) => ({ default: module.CanonRegistryView })));
 const ProductionView = lazy(() => import("./features/production/ProductionView").then((module) => ({ default: module.ProductionView })));
 const FilamentView = lazy(() => import("./features/filament/FilamentView").then((module) => ({ default: module.FilamentView })));
 const PrintersView = lazy(() => import("./features/printers/PrintersView").then((module) => ({ default: module.PrintersView })));
@@ -64,8 +63,6 @@ export default function ForgekeeperWorkspace() {
       case "designs":
       case "catalog":
         return <WorkbenchDesignLibraryView state={state} />;
-      case "canon":
-        return <CanonRegistryView state={state} />;
       case "production":
       case "orders":
         return <ProductionView />;
