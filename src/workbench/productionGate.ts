@@ -51,7 +51,7 @@ export class WorkbenchProductionGate {
     if (!printer.productionEligible) {
       throw new Error(`${printer.printerName} is not eligible for production: ${printer.eligibilityReason}`);
     }
-    return this.workbench.submitProductionCandidate(preparationId, printer);
+    return this.workbench.submitProductionCandidate(preparationId);
   }
 
   async recordEvidence(input: PrintEvidenceInput): Promise<PrintRecord> {
