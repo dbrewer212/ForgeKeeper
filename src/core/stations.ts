@@ -1,5 +1,5 @@
 export type FoundryStation = {
-  id: "command" | "design-library" | "planning" | "production" | "materials" | "printer-pool" | "reports" | "administration";
+  id: "command" | "design-library" | "canon" | "planning" | "production" | "materials" | "printer-pool" | "reports" | "administration";
   view: string;
   label: string;
   description: string;
@@ -17,6 +17,12 @@ export const foundryStations: FoundryStation[] = [
     view: "designs",
     label: "Design Library",
     description: "User-owned projects, concepts, STLs, variants, references, and production assets.",
+  },
+  {
+    id: "canon",
+    view: "canon",
+    label: "Canon Registry",
+    description: "Locked Foundry identities, authoritative references, character DNA, allowed variation, and drift protection.",
   },
   {
     id: "planning",
