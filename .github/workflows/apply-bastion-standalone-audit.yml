@@ -1,0 +1,214 @@
+name: Apply Standalone Bastion Audit Repair
+
+on:
+  push:
+    branches:
+      - audit/foundry-bastion-20260824
+    paths:
+      - .github/workflows/apply-bastion-standalone-audit.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+        with:
+          ref: audit/foundry-bastion-20260824
+          fetch-depth: 0
+
+      - name: Apply standalone Bastion lifecycle repairs
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          # --- Native host: hide all internal Windows console processes and make --bastion standalone.
+          lib = Path('src-tauri/src/lib.rs')
+          text = lib.read_text(encoding='utf-8')
+
+          if 'use std::os::windows::process::CommandExt;' not in text:
+              anchor = 'use std::process::Command;\n'
+              if anchor not in text:
+                  raise SystemExit('lib.rs: Command import anchor missing')
+              text = text.replace(anchor, anchor + '#[cfg(target_os = "windows")]\nuse std::os::windows::process::CommandExt;\n', 1)
+
+          if 'const CREATE_NO_WINDOW: u32 = 0x08000000;' not in text:
+              anchor = 'const EVENT_JOURNAL_FILE: &str = "events.jsonl";\n'
+              if anchor not in text:
+                  raise SystemExit('lib.rs: constants anchor missing')
+              text = text.replace(anchor, anchor + '#[cfg(target_os = "windows")]\nconst CREATE_NO_WINDOW: u32 = 0x08000000;\n', 1)
+
+          old = '''    let output = Command::new("powershell")
+              .args(["-NoProfile", "-NonInteractive", "-Command", script])
+              .output()
+              .map_err(|error| format!("Failed to launch Windows telemetry provider: {error}"))?;'''
+          if old not in text:
+              old = '''    let output = Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .output()
+        .map_err(|error| format!("Failed to launch Windows telemetry provider: {error}"))?;'''
+          new = '''    let mut command = Command::new("powershell");
+    command.args(["-NoProfile", "-NonInteractive", "-Command", script]);
+    command.creation_flags(CREATE_NO_WINDOW);
+    let output = command
+        .output()
+        .map_err(|error| format!("Failed to launch Windows telemetry provider: {error}"))?;'''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif 'command.creation_flags(CREATE_NO_WINDOW);' not in text:
+              raise SystemExit('lib.rs: telemetry launch block missing')
+
+          shell_old = '''    let mut command = Command::new("cmd");
+    command.arg("/C").arg("start").arg("").arg(target);'''
+          shell_new = '''    let mut command = Command::new("cmd");
+    command.creation_flags(CREATE_NO_WINDOW);
+    command.arg("/C").arg("start").arg("").arg(target);'''
+          if shell_old in text:
+              text = text.replace(shell_old, shell_new, 1)
+
+          setup_old = '''        .setup(|app| {
+            if bastion_launch_mode() {
+                open_bastion_window(app.handle())
+                    .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
+            }
+            Ok(())
+        })'''
+          setup_new = '''        .setup(|app| {
+            if bastion_launch_mode() {
+                open_bastion_window(app.handle())
+                    .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
+                if let Some(main) = app.get_webview_window("main") {
+                    main.close()?;
+                }
+            } else if let Some(main) = app.get_webview_window("main") {
+                main.show()?;
+            }
+            Ok(())
+        })'''
+          if setup_old in text:
+              text = text.replace(setup_old, setup_new, 1)
+          elif 'main.close()?;' not in text:
+              raise SystemExit('lib.rs: setup lifecycle block missing')
+
+          lib.write_text(text, encoding='utf-8')
+
+          # --- Bastion native module: registry commands must never create a console window.
+          bastion = Path('src-tauri/src/bastion.rs')
+          text = bastion.read_text(encoding='utf-8')
+          if 'use std::os::windows::process::CommandExt;' not in text:
+              text = text.replace('use std::process::Command;\n', 'use std::process::Command;\n#[cfg(target_os = "windows")]\nuse std::os::windows::process::CommandExt;\n', 1)
+          if 'const CREATE_NO_WINDOW: u32 = 0x08000000;' not in text:
+              text = text.replace('const STARTUP_VALUE_NAME: &str = "FenrirForgeworksBastion";\n', 'const STARTUP_VALUE_NAME: &str = "FenrirForgeworksBastion";\n#[cfg(target_os = "windows")]\nconst CREATE_NO_WINDOW: u32 = 0x08000000;\n', 1)
+
+          query_old = '''    let output = Command::new("reg")
+        .args(["query", STARTUP_KEY, "/v", STARTUP_VALUE_NAME])
+        .output()'''
+          query_new = '''    let mut command = Command::new("reg");
+    command.creation_flags(CREATE_NO_WINDOW);
+    let output = command
+        .args(["query", STARTUP_KEY, "/v", STARTUP_VALUE_NAME])
+        .output()'''
+          text = text.replace(query_old, query_new, 1)
+
+          add_old = '''        let output = Command::new("reg")
+            .args([
+                "add",'''
+          add_new = '''        let mut command = Command::new("reg");
+        command.creation_flags(CREATE_NO_WINDOW);
+        let output = command
+            .args([
+                "add",'''
+          text = text.replace(add_old, add_new, 1)
+
+          delete_old = '''        let output = Command::new("reg")
+            .args(["delete", STARTUP_KEY, "/v", STARTUP_VALUE_NAME, "/f"])
+            .output()'''
+          delete_new = '''        let mut command = Command::new("reg");
+        command.creation_flags(CREATE_NO_WINDOW);
+        let output = command
+            .args(["delete", STARTUP_KEY, "/v", STARTUP_VALUE_NAME, "/f"])
+            .output()'''
+          text = text.replace(delete_old, delete_new, 1)
+          bastion.write_text(text, encoding='utf-8')
+
+          # --- Bastion UI: no overlapping polling; startup registry state loads separately.
+          view = Path('src/features/bastion/BastionView.tsx')
+          ui = view.read_text(encoding='utf-8')
+          ui = ui.replace('import { useEffect, useMemo, useState } from "react";', 'import { useEffect, useMemo, useRef, useState } from "react";', 1)
+          marker = '  const [error, setError] = useState<string>();\n\n  async function refresh() {'
+          replacement = '  const [error, setError] = useState<string>();\n  const refreshInFlight = useRef(false);\n\n  async function refresh() {\n    if (refreshInFlight.current) return;\n    refreshInFlight.current = true;'
+          if marker in ui:
+              ui = ui.replace(marker, replacement, 1)
+
+          # Ensure the in-flight guard is always released.
+          catch_block = '''    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+    const id = window.setInterval(() => void refresh(), 5000);
+    return () => window.clearInterval(id);
+  }, []);'''
+          new_effect = '''    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      refreshInFlight.current = false;
+    }
+  }
+
+  useEffect(() => {
+    void invoke<StartupStatus>("bastion_startup_status")
+      .then(setStartup)
+      .catch(() => setStartup({ enabled: false }));
+    void refresh();
+    const id = window.setInterval(() => void refresh(), 15000);
+    return () => window.clearInterval(id);
+  }, []);'''
+          if catch_block in ui:
+              ui = ui.replace(catch_block, new_effect, 1)
+          elif 'window.setInterval(() => void refresh(), 15000)' not in ui:
+              raise SystemExit('BastionView: polling effect not found')
+
+          triple = '''      const [steward, telemetry, startupStatus] = await Promise.all([
+        runtime.productionSteward.inspect().catch(() => undefined),
+        invoke<WatcherSystemSnapshot>("watcher_system_snapshot").catch(() => undefined),
+        invoke<StartupStatus>("bastion_startup_status").catch(() => ({ enabled: false })),
+      ]);'''
+          double = '''      const [steward, telemetry] = await Promise.all([
+        runtime.productionSteward.inspect().catch(() => undefined),
+        invoke<WatcherSystemSnapshot>("watcher_system_snapshot").catch(() => undefined),
+      ]);'''
+          if triple in ui:
+              ui = ui.replace(triple, double, 1)
+              ui = ui.replace('      setStartup(startupStatus);\n', '', 1)
+          view.write_text(ui, encoding='utf-8')
+
+          # --- Main Forgekeeper window starts hidden; setup shows it only in normal mode.
+          conf = Path('src-tauri/tauri.conf.json')
+          data = json.loads(conf.read_text(encoding='utf-8'))
+          windows = data.setdefault('app', {}).setdefault('windows', [])
+          if not windows:
+              raise SystemExit('tauri.conf.json: main window missing')
+          windows[0]['visible'] = False
+          conf.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
+          PY
+
+      - name: Commit audited lifecycle repair
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src-tauri/src/lib.rs src-tauri/src/bastion.rs src/features/bastion/BastionView.tsx src-tauri/tauri.conf.json
+          if git diff --cached --quiet; then
+            echo "No lifecycle changes required."
+            exit 0
+          fi
+          git commit -m "Make Bastion a quiet standalone startup surface"
+          git push origin HEAD:audit/foundry-bastion-20260824
