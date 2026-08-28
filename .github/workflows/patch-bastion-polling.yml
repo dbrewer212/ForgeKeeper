@@ -21,8 +21,9 @@ jobs:
           fetch-depth: 0
 
       - name: Patch hidden process launch and polling
-        shell: python
+        shell: bash
         run: |
+          python - <<'PY'
           from pathlib import Path
 
           rust = Path("src-tauri/src/lib.rs")
@@ -97,6 +98,7 @@ jobs:
               raise SystemExit("Could not find Bastion polling effect")
           ui = ui.replace(old_effect, new_effect, 1)
           view.write_text(ui, encoding="utf-8")
+          PY
 
       - name: Commit repairs
         shell: bash
