@@ -1,9 +1,13 @@
 use serde::Serialize;
 use std::process::Command;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use tauri::{Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
 
 const STARTUP_VALUE_NAME: &str = "FenrirForgeworksBastion";
 const STARTUP_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -70,6 +74,17 @@ fn select_bastion_display(app: &tauri::AppHandle) -> Result<BastionDisplayTarget
 }
 
 pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
+    let standalone = bastion_launch_mode();
+
+    // In --bastion startup mode the normal Forgekeeper surface is only a temporary
+    // monitor-enumeration host. Hide it before showing Bastion so the user never has
+    // to keep the full workspace open on the desktop.
+    if standalone {
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.hide();
+        }
+    }
+
     let target = select_bastion_display(app)?;
 
     let window = if let Some(existing) = app.get_webview_window("bastion") {
@@ -105,6 +120,15 @@ pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarge
         .set_focus()
         .map_err(|error| format!("Failed to focus Bastion: {error}"))?;
 
+    // Once the standalone Bastion webview exists it keeps the Tauri process alive.
+    // The regular Forgekeeper window can therefore be closed completely.
+    if standalone {
+        if let Some(main) = app.get_webview_window("main") {
+            main.close()
+                .map_err(|error| format!("Failed to close the hidden Forgekeeper startup window: {error}"))?;
+        }
+    }
+
     Ok(target)
 }
 
@@ -126,7 +150,9 @@ pub async fn bastion_close_window(app: tauri::AppHandle) -> Result<(), String> {
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub fn bastion_startup_status() -> Result<BastionStartupStatus, String> {
-    let output = Command::new("reg")
+    let mut command = Command::new("reg");
+    command.creation_flags(CREATE_NO_WINDOW);
+    let output = command
         .args(["query", STARTUP_KEY, "/v", STARTUP_VALUE_NAME])
         .output()
         .map_err(|error| format!("Failed to inspect Bastion startup registration: {error}"))?;
@@ -169,7 +195,9 @@ pub fn bastion_set_startup(enabled: bool) -> Result<BastionStartupStatus, String
         let executable = std::env::current_exe()
             .map_err(|error| format!("Failed to resolve ForgeKeeper executable: {error}"))?;
         let command = format!("\"{}\" --bastion", executable.display());
-        let output = Command::new("reg")
+        let mut process = Command::new("reg");
+        process.creation_flags(CREATE_NO_WINDOW);
+        let output = process
             .args([
                 "add",
                 STARTUP_KEY,
@@ -191,7 +219,9 @@ pub fn bastion_set_startup(enabled: bool) -> Result<BastionStartupStatus, String
             ));
         }
     } else {
-        let output = Command::new("reg")
+        let mut process = Command::new("reg");
+        process.creation_flags(CREATE_NO_WINDOW);
+        let output = process
             .args(["delete", STARTUP_KEY, "/v", STARTUP_VALUE_NAME, "/f"])
             .output()
             .map_err(|error| format!("Failed to remove Bastion startup registration: {error}"))?;
