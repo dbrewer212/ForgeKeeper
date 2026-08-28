@@ -1,3 +1,4 @@
+# Standalone Bastion audit repair trigger
 name: Apply Standalone Bastion Audit Repair
 
 on:
@@ -27,7 +28,6 @@ jobs:
           from pathlib import Path
           import json
 
-          # --- Native host: hide all internal Windows console processes and make --bastion standalone.
           lib = Path('src-tauri/src/lib.rs')
           text = lib.read_text(encoding='utf-8')
 
@@ -44,11 +44,6 @@ jobs:
               text = text.replace(anchor, anchor + '#[cfg(target_os = "windows")]\nconst CREATE_NO_WINDOW: u32 = 0x08000000;\n', 1)
 
           old = '''    let output = Command::new("powershell")
-              .args(["-NoProfile", "-NonInteractive", "-Command", script])
-              .output()
-              .map_err(|error| format!("Failed to launch Windows telemetry provider: {error}"))?;'''
-          if old not in text:
-              old = '''    let output = Command::new("powershell")
         .args(["-NoProfile", "-NonInteractive", "-Command", script])
         .output()
         .map_err(|error| format!("Failed to launch Windows telemetry provider: {error}"))?;'''
@@ -60,8 +55,6 @@ jobs:
         .map_err(|error| format!("Failed to launch Windows telemetry provider: {error}"))?;'''
           if old in text:
               text = text.replace(old, new, 1)
-          elif 'command.creation_flags(CREATE_NO_WINDOW);' not in text:
-              raise SystemExit('lib.rs: telemetry launch block missing')
 
           shell_old = '''    let mut command = Command::new("cmd");
     command.arg("/C").arg("start").arg("").arg(target);'''
@@ -97,7 +90,6 @@ jobs:
 
           lib.write_text(text, encoding='utf-8')
 
-          # --- Bastion native module: registry commands must never create a console window.
           bastion = Path('src-tauri/src/bastion.rs')
           text = bastion.read_text(encoding='utf-8')
           if 'use std::os::windows::process::CommandExt;' not in text:
@@ -136,7 +128,6 @@ jobs:
           text = text.replace(delete_old, delete_new, 1)
           bastion.write_text(text, encoding='utf-8')
 
-          # --- Bastion UI: no overlapping polling; startup registry state loads separately.
           view = Path('src/features/bastion/BastionView.tsx')
           ui = view.read_text(encoding='utf-8')
           ui = ui.replace('import { useEffect, useMemo, useState } from "react";', 'import { useEffect, useMemo, useRef, useState } from "react";', 1)
@@ -145,7 +136,6 @@ jobs:
           if marker in ui:
               ui = ui.replace(marker, replacement, 1)
 
-          # Ensure the in-flight guard is always released.
           catch_block = '''    } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -190,7 +180,6 @@ jobs:
               ui = ui.replace('      setStartup(startupStatus);\n', '', 1)
           view.write_text(ui, encoding='utf-8')
 
-          # --- Main Forgekeeper window starts hidden; setup shows it only in normal mode.
           conf = Path('src-tauri/tauri.conf.json')
           data = json.loads(conf.read_text(encoding='utf-8'))
           windows = data.setdefault('app', {}).setdefault('windows', [])
