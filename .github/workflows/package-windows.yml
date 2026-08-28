@@ -1,0 +1,59 @@
+name: Package Forgekeeper Windows
+
+on:
+  push:
+    branches:
+      - audit/foundry-bastion-20260824
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout audited Forgekeeper
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build Windows installer
+        run: npm run desktop:build
+
+      - name: Collect installer bundles
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path installer-output | Out-Null
+          $bundle = 'src-tauri/target/release/bundle'
+          if (Test-Path "$bundle/nsis") {
+            Copy-Item "$bundle/nsis/*" installer-output -Recurse -Force
+          }
+          if (Test-Path "$bundle/msi") {
+            Copy-Item "$bundle/msi/*" installer-output -Recurse -Force
+          }
+          if (-not (Get-ChildItem installer-output -File -ErrorAction SilentlyContinue)) {
+            throw 'Tauri build completed but no NSIS or MSI installer was produced.'
+          }
+          Get-ChildItem installer-output -Recurse
+
+      - name: Upload Forgekeeper Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Forgekeeper-Windows-Installer
+          path: installer-output/**
+          if-no-files-found: error
+          retention-days: 30

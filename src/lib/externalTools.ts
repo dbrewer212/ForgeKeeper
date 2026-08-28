@@ -1,3 +1,5 @@
+import { invoke } from "@tauri-apps/api/core";
+
 export type ExternalToolKey = "orca" | "anycubic" | "blender" | "meshy";
 export type SlicerKey = "orca" | "anycubic";
 
@@ -51,17 +53,53 @@ export async function copyText(value: string): Promise<boolean> {
   }
 }
 
-export function openWebUrl(url: string) {
-  window.open(url, "_blank", "noopener,noreferrer");
+function isNativeDesktop(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-export function openLocalPathBestEffort(path: string) {
-  if (!path) {
+export async function openWebUrl(url: string): Promise<void> {
+  const target = url.trim();
+  if (!target) throw new Error("No web address has been configured.");
+
+  if (isNativeDesktop()) {
+    await invoke("launch_external_tool", { toolPath: target, assetPath: null });
+    return;
+  }
+
+  window.open(target, "_blank", "noopener,noreferrer");
+}
+
+export async function openLocalPathBestEffort(path: string): Promise<void> {
+  const target = path.trim();
+  if (!target) {
     window.alert("No local path has been linked yet.");
     return;
   }
 
-  const fileUrl = path.startsWith("file://") ? path : `file:///${path.replace(/\\/g, "/")}`;
+  if (isNativeDesktop()) {
+    await invoke("open_path", { path: target });
+    return;
+  }
+
+  const fileUrl = target.startsWith("file://") ? target : `file:///${target.replace(/\\/g, "/")}`;
+  window.open(fileUrl, "_blank");
+}
+
+export async function launchExternalTool(toolPath: string, assetPath?: string): Promise<void> {
+  const target = toolPath.trim();
+  if (!target) throw new Error("Tool path is not configured.");
+
+  if (isNativeDesktop()) {
+    await invoke("launch_external_tool", { toolPath: target, assetPath: assetPath?.trim() || null });
+    return;
+  }
+
+  if (/^https?:\/\//i.test(target)) {
+    window.open(target, "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  const fileUrl = target.startsWith("file://") ? target : `file:///${target.replace(/\\/g, "/")}`;
   window.open(fileUrl, "_blank");
 }
 

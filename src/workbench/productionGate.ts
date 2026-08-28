@@ -1,3 +1,4 @@
+import type { PrinterProductionSnapshot } from "../lib/printerOperations";
 import { HumanAuthority } from "../mesh/domainServices";
 import { ProductionSteward } from "../mesh/productionSteward";
 import { getFoundryMeshRuntime } from "../mesh/runtime";
@@ -39,7 +40,17 @@ export class WorkbenchProductionGate {
     });
   }
 
-  async release(preparationId: string): Promise<{ productionJobId: string }> {
+  async release(preparationId: string, printer: PrinterProductionSnapshot): Promise<{ productionJobId: string }> {
+    const state = await this.repository.loadState();
+    const preparation = state.preparations.find((item) => item.preparationId === preparationId);
+    if (!preparation) throw new Error(`Unknown preparation: ${preparationId}`);
+    if (!preparation.printerId) throw new Error("Production release requires an assigned printer.");
+    if (printer.printerId !== preparation.printerId) {
+      throw new Error(`Printer readiness snapshot ${printer.printerId} does not match preparation printer ${preparation.printerId}.`);
+    }
+    if (!printer.productionEligible) {
+      throw new Error(`${printer.printerName} is not eligible for production: ${printer.eligibilityReason}`);
+    }
     return this.workbench.submitProductionCandidate(preparationId);
   }
 

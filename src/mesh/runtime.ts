@@ -36,7 +36,7 @@ export class FoundryMeshRuntime {
   readonly approvals = new InMemoryApprovalStore();
   readonly domain = new FoundryDomainRegistry();
   readonly services = new ServiceRegistry();
-  readonly health = new DefaultHealthAggregator(this.workers, this.resources);
+  readonly health = new DefaultHealthAggregator(this.workers, this.resources, this.services);
   readonly actions = new ActionGateway(this.permissions);
   readonly events: DurableEventBus;
   readonly coordinator: MeshActionCoordinator;

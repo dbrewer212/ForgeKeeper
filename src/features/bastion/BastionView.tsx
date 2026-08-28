@@ -44,7 +44,7 @@ const GROUP_LABELS: Record<LaunchGroup, string> = {
 function defaultLaunchTargets(state: any): LaunchTarget[] {
   return [
     { id: "obs", label: "OBS Studio", target: "C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe", group: "stream", enabled: true },
-    { id: "discord", label: "Discord", target: "Discord.exe", group: "stream", enabled: true },
+    { id: "netflix", label: "Netflix", target: "https://www.netflix.com/", group: "stream", enabled: true },
     { id: "crunchyroll", label: "Crunchyroll", target: "https://www.crunchyroll.com/", group: "stream", enabled: true },
     { id: "disney-plus", label: "Disney+", target: "https://www.disneyplus.com/", group: "stream", enabled: true },
     { id: "hidive", label: "HIDIVE", target: "https://www.hidive.com/", group: "stream", enabled: true },
@@ -59,8 +59,9 @@ function defaultLaunchTargets(state: any): LaunchTarget[] {
 }
 
 function mergeLaunchTargets(stored: LaunchTarget[], defaults: LaunchTarget[]): LaunchTarget[] {
-  const storedIds = new Set(stored.map((target) => target.id));
-  return [...stored, ...defaults.filter((target) => !storedIds.has(target.id))];
+  const sanitizedStored = stored.filter((target) => target.id !== "discord");
+  const storedIds = new Set(sanitizedStored.map((target) => target.id));
+  return [...sanitizedStored, ...defaults.filter((target) => target.id !== "discord" && !storedIds.has(target.id))];
 }
 
 function percent(used?: number, total?: number): number | undefined {
@@ -153,11 +154,7 @@ export function BastionView({ state, onExit }: { state: any; onExit: () => void 
     setError(undefined);
     setMessage(undefined);
     try {
-      if (/^https?:\/\//i.test(target.target)) {
-        window.open(target.target, "_blank", "noopener,noreferrer");
-      } else {
-        await invoke("launch_external_tool", { toolPath: target.target, assetPath: null });
-      }
+      await invoke("launch_external_tool", { toolPath: target.target, assetPath: null });
       setMessage(`${target.label} launch requested.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));

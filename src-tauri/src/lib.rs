@@ -29,12 +29,16 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::time::Duration;
 use tauri::Manager;
 
 const MESH_DIR: &str = "mesh";
 const SNAPSHOT_FILE: &str = "snapshot.json";
 const EVENT_JOURNAL_FILE: &str = "events.jsonl";
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Serialize)]
 struct LocalHttpResponse {
@@ -87,7 +91,14 @@ fn inspect_geometry(path: String) -> Result<workbench_files::NativeGeometryInspe
 
 #[cfg(target_os = "windows")]
 #[tauri::command]
-fn watcher_system_snapshot() -> Result<serde_json::Value, String> {
+async fn watcher_system_snapshot() -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(watcher_system_snapshot_blocking)
+        .await
+        .map_err(|error| format!("Windows telemetry sampling task failed: {error}"))?
+}
+
+#[cfg(target_os = "windows")]
+fn watcher_system_snapshot_blocking() -> Result<serde_json::Value, String> {
     let script = r#"
 $ErrorActionPreference = 'Stop'
 $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
@@ -125,8 +136,10 @@ if ($null -ne $gpu) {
 } | ConvertTo-Json -Depth 6 -Compress
 "#;
 
-    let output = Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+    let mut command = Command::new("powershell");
+    command.args(["-NoProfile", "-NonInteractive", "-Command", script]);
+    command.creation_flags(CREATE_NO_WINDOW);
+    let output = command
         .output()
         .map_err(|error| format!("Failed to launch Windows telemetry provider: {error}"))?;
 
@@ -147,39 +160,97 @@ if ($null -ne $gpu) {
 
 #[cfg(not(target_os = "windows"))]
 #[tauri::command]
-fn watcher_system_snapshot() -> Result<serde_json::Value, String> {
+async fn watcher_system_snapshot() -> Result<serde_json::Value, String> {
     Err("Watcher native host telemetry is currently implemented for Windows Foundry workstations.".to_string())
+}
+
+fn validate_mesh_snapshot(content: &str) -> Result<(), String> {
+    serde_json::from_str::<serde_json::Value>(content)
+        .map(|_| ())
+        .map_err(|error| format!("Foundry mesh snapshot is not valid JSON: {error}"))
+}
+
+fn read_valid_mesh_snapshot(path: &Path) -> Result<Option<String>, String> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let content = fs::read_to_string(path)
+        .map_err(|error| format!("Failed to read Foundry mesh snapshot {}: {error}", path.display()))?;
+    validate_mesh_snapshot(&content)?;
+    Ok(Some(content))
 }
 
 #[tauri::command]
 fn mesh_load_snapshot(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let path = mesh_file_path(&app, SNAPSHOT_FILE)?;
-    if !path.exists() {
-        return Ok(None);
+    let backup_path = path.with_extension("json.bak");
+
+    match read_valid_mesh_snapshot(&path) {
+        Ok(Some(content)) => return Ok(Some(content)),
+        Ok(None) => {}
+        Err(active_error) => {
+            if !backup_path.exists() {
+                return Err(active_error);
+            }
+        }
     }
 
-    fs::read_to_string(path)
-        .map(Some)
-        .map_err(|error| format!("Failed to read Foundry mesh snapshot: {error}"))
+    match read_valid_mesh_snapshot(&backup_path) {
+        Ok(Some(content)) => {
+            // Self-heal the active slot so the next startup does not depend on the backup path.
+            let _ = fs::write(&path, &content);
+            Ok(Some(content))
+        }
+        Ok(None) => Ok(None),
+        Err(backup_error) => Err(format!(
+            "Foundry mesh active snapshot is unavailable and the last-known-good backup could not be loaded: {backup_error}"
+        )),
+    }
 }
 
 #[tauri::command]
 fn mesh_save_snapshot(app: tauri::AppHandle, content: String) -> Result<(), String> {
+    validate_mesh_snapshot(&content)?;
+
     let path = mesh_file_path(&app, SNAPSHOT_FILE)?;
     let temp_path = path.with_extension("json.tmp");
     let backup_path = path.with_extension("json.bak");
 
-    fs::write(&temp_path, content)
+    let mut temp_file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(&temp_path)
+        .map_err(|error| format!("Failed to open temporary Foundry mesh snapshot: {error}"))?;
+    temp_file
+        .write_all(content.as_bytes())
         .map_err(|error| format!("Failed to write temporary Foundry mesh snapshot: {error}"))?;
+    temp_file
+        .sync_all()
+        .map_err(|error| format!("Failed to flush temporary Foundry mesh snapshot: {error}"))?;
+    drop(temp_file);
 
     if path.exists() {
-        let _ = fs::copy(&path, &backup_path);
+        fs::copy(&path, &backup_path)
+            .map_err(|error| format!("Failed to preserve last-known-good Foundry mesh snapshot: {error}"))?;
         fs::remove_file(&path)
-            .map_err(|error| format!("Failed to replace previous Foundry mesh snapshot: {error}"))?;
+            .map_err(|error| format!("Failed to prepare Foundry mesh snapshot replacement: {error}"))?;
     }
 
-    fs::rename(&temp_path, &path)
-        .map_err(|error| format!("Failed to commit Foundry mesh snapshot: {error}"))
+    if let Err(commit_error) = fs::rename(&temp_path, &path) {
+        let restore_detail = if backup_path.exists() {
+            match fs::copy(&backup_path, &path) {
+                Ok(_) => "The previous snapshot was restored from the last-known-good backup.".to_string(),
+                Err(restore_error) => format!("Automatic restore also failed: {restore_error}"),
+            }
+        } else {
+            "No prior snapshot existed to restore.".to_string()
+        };
+        let _ = fs::remove_file(&temp_path);
+        return Err(format!("Failed to commit Foundry mesh snapshot: {commit_error}. {restore_detail}"));
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -336,6 +407,7 @@ fn resolve_tool_path(tool_path: &str) -> String {
 #[cfg(target_os = "windows")]
 fn open_with_windows_shell(target: &str, asset_path: Option<&str>) -> Result<(), String> {
     let mut command = Command::new("cmd");
+    command.creation_flags(CREATE_NO_WINDOW);
     command.arg("/C").arg("start").arg("").arg(target);
 
     if let Some(asset) = asset_path {
