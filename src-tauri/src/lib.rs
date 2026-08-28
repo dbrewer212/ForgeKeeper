@@ -91,7 +91,14 @@ fn inspect_geometry(path: String) -> Result<workbench_files::NativeGeometryInspe
 
 #[cfg(target_os = "windows")]
 #[tauri::command]
-fn watcher_system_snapshot() -> Result<serde_json::Value, String> {
+async fn watcher_system_snapshot() -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(watcher_system_snapshot_blocking)
+        .await
+        .map_err(|error| format!("Windows telemetry sampling task failed: {error}"))?
+}
+
+#[cfg(target_os = "windows")]
+fn watcher_system_snapshot_blocking() -> Result<serde_json::Value, String> {
     let script = r#"
 $ErrorActionPreference = 'Stop'
 $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
@@ -153,7 +160,7 @@ if ($null -ne $gpu) {
 
 #[cfg(not(target_os = "windows"))]
 #[tauri::command]
-fn watcher_system_snapshot() -> Result<serde_json::Value, String> {
+async fn watcher_system_snapshot() -> Result<serde_json::Value, String> {
     Err("Watcher native host telemetry is currently implemented for Windows Foundry workstations.".to_string())
 }
 
