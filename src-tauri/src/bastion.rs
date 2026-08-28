@@ -76,9 +76,6 @@ fn select_bastion_display(app: &tauri::AppHandle) -> Result<BastionDisplayTarget
 pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
     let standalone = bastion_launch_mode();
 
-    // In --bastion startup mode the normal Forgekeeper surface is only a temporary
-    // monitor-enumeration host. Hide it before showing Bastion so the user never has
-    // to keep the full workspace open on the desktop.
     if standalone {
         if let Some(main) = app.get_webview_window("main") {
             let _ = main.hide();
@@ -120,8 +117,6 @@ pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarge
         .set_focus()
         .map_err(|error| format!("Failed to focus Bastion: {error}"))?;
 
-    // Once the standalone Bastion webview exists it keeps the Tauri process alive.
-    // The regular Forgekeeper window can therefore be closed completely.
     if standalone {
         if let Some(main) = app.get_webview_window("main") {
             main.close()
@@ -139,6 +134,22 @@ pub async fn bastion_open_window(app: tauri::AppHandle) -> Result<BastionDisplay
 
 #[tauri::command]
 pub async fn bastion_close_window(app: tauri::AppHandle) -> Result<(), String> {
+    let main = if let Some(existing) = app.get_webview_window("main") {
+        existing
+    } else {
+        WebviewWindowBuilder::new(&app, "main", WebviewUrl::App("index.html".into()))
+            .title("Forgekeeper")
+            .inner_size(800.0, 600.0)
+            .resizable(true)
+            .build()
+            .map_err(|error| format!("Failed to open Forgekeeper from Bastion: {error}"))?
+    };
+
+    main.show()
+        .map_err(|error| format!("Failed to show Forgekeeper: {error}"))?;
+    main.set_focus()
+        .map_err(|error| format!("Failed to focus Forgekeeper: {error}"))?;
+
     if let Some(window) = app.get_webview_window("bastion") {
         window
             .close()
