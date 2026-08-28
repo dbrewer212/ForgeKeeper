@@ -1,0 +1,81 @@
+name: Patch Hidden Windows Processes
+
+on:
+  push:
+    branches:
+      - audit/foundry-bastion-20260824
+    paths:
+      - .github/workflows/fix-hidden-windows-processes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v4
+        with:
+          ref: audit/foundry-bastion-20260824
+          fetch-depth: 0
+
+      - name: Hide background Windows process windows
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("src-tauri/src/lib.rs")
+          text = path.read_text(encoding="utf-8")
+
+          import_anchor = "use std::process::Command;\n"
+          import_insert = "use std::process::Command;\n#[cfg(target_os = \"windows\")]\nuse std::os::windows::process::CommandExt;\n"
+          if "use std::os::windows::process::CommandExt;" not in text:
+              if import_anchor not in text:
+                  raise SystemExit("Could not find Command import anchor")
+              text = text.replace(import_anchor, import_insert, 1)
+
+          const_anchor = 'const EVENT_JOURNAL_FILE: &str = "events.jsonl";\n'
+          const_insert = 'const EVENT_JOURNAL_FILE: &str = "events.jsonl";\n#[cfg(target_os = "windows")]\nconst CREATE_NO_WINDOW: u32 = 0x08000000;\n'
+          if "const CREATE_NO_WINDOW" not in text:
+              if const_anchor not in text:
+                  raise SystemExit("Could not find mesh constant anchor")
+              text = text.replace(const_anchor, const_insert, 1)
+
+          old_telemetry = '''    let output = Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .output()
+        .map_err(|error| format!("Failed to launch Windows telemetry provider: {error}"))?;'''
+          new_telemetry = '''    let mut command = Command::new("powershell");
+    command.args(["-NoProfile", "-NonInteractive", "-Command", script]);
+    command.creation_flags(CREATE_NO_WINDOW);
+    let output = command
+        .output()
+        .map_err(|error| format!("Failed to launch Windows telemetry provider: {error}"))?;'''
+          if old_telemetry in text:
+              text = text.replace(old_telemetry, new_telemetry, 1)
+          elif "command.creation_flags(CREATE_NO_WINDOW);" not in text:
+              raise SystemExit("Could not find watcher telemetry launch block")
+
+          shell_anchor = '''    let mut command = Command::new("cmd");
+    command.arg("/C").arg("start").arg("").arg(target);'''
+          shell_replacement = '''    let mut command = Command::new("cmd");
+    command.creation_flags(CREATE_NO_WINDOW);
+    command.arg("/C").arg("start").arg("").arg(target);'''
+          if shell_anchor in text:
+              text = text.replace(shell_anchor, shell_replacement, 1)
+
+          path.write_text(text, encoding="utf-8")
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          if git diff --quiet -- src-tauri/src/lib.rs; then
+            echo "No patch required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src-tauri/src/lib.rs
+          git commit -m "Hide background Windows telemetry consoles"
+          git push origin HEAD:audit/foundry-bastion-20260824
