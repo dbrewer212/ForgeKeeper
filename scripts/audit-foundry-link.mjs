@@ -16,6 +16,7 @@ const files = {
   workers: read("src/mesh/workers.ts"),
   desktopRuntime: read("src/foundry-link/DesktopFoundryLinkRuntime.tsx"),
   desktopWorkspace: read("src/ForgekeeperWorkspace.tsx"),
+  rustHost: read("src-tauri/src/lib.rs"),
   rustLink: read("src-tauri/src/foundry_link.rs"),
   mobileCapabilities: read("src-tauri/capabilities/mobile.json"),
 };
@@ -42,6 +43,8 @@ const checks = [
   ["mobile-bastion-controls-use-queue", files.mobileBastion.includes("queueRemoteTool") && files.mobileBastion.includes("queueRemoteApproval")],
   ["desktop-link-runtime-mounted", files.desktopWorkspace.includes("<DesktopFoundryLinkRuntime")],
   ["desktop-pending-mobile-commit", files.desktopRuntime.includes("foundry_link_take_pending_workspace") && files.desktopRuntime.includes("commitLinkedWorkspace")],
+  ["bastion-startup-hides-main-host", files.rustHost.includes('get_webview_window("main")') && files.rustHost.includes("main_window") && files.rustHost.includes(".hide()")],
+  ["bastion-startup-autostarts-link", files.rustHost.includes("foundry_link_start(link_state, Some(4717))")],
   ["private-link-address-policy", files.rustLink.includes("is_private_link_ip") && files.rustLink.includes("is_cgnat")],
   ["link-request-size-bounded", files.rustLink.includes("MAX_REQUEST_BYTES")],
   ["mobile-native-sql-capability", files.mobileCapabilities.includes('"sql:default"')],
