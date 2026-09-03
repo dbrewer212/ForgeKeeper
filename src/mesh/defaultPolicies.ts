@@ -28,6 +28,7 @@ export const defaultPermissionRules: PermissionRule[] = [
   { id: "mobile-console-telemetry", workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.watcherReadTelemetry, effect: "allow", reason: "A paired human-operated mobile console may inspect workstation telemetry." },
   { id: "mobile-console-launch-tool", workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.workstationLaunchTool, effect: "allow", reason: "A paired human-operated mobile console may launch configured Foundry workstation tools." },
   { id: "mobile-console-open-path", workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.workstationOpenPath, effect: "allow", reason: "A paired human-operated mobile console may ask the workstation to open a configured local asset or folder." },
+  { id: "mobile-console-enter-safe-mode", workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.meshEnterSafeMode, effect: "allow", reason: "A paired human-operated mobile console may immediately reduce Foundry authority by entering protective Safe Mode; leaving Safe Mode remains approval-governed." },
 
   { id: "odysseus-session-read", workerKind: "odysseus", capabilityId: MeshCapabilities.foundrySessionRead, effect: "allow" },
   { id: "odysseus-session-write", workerKind: "odysseus", capabilityId: MeshCapabilities.foundrySessionWrite, effect: "allow", reason: "Odysseus may preserve user-driven session and re-entry context while commissioned." },
