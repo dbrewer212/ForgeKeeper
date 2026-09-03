@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { BastionView } from "./features/bastion/BastionView";
 import { BastionProductionQueue } from "./features/bastion/BastionProductionQueue";
+import { BastionMobileOverlay } from "./mobile/BastionMobileOverlay";
 import { isFoundryMobileRuntime } from "./platform/runtime";
 
 const ForgekeeperWorkspace = lazy(() => import("./ForgekeeperWorkspace"));
@@ -14,6 +15,7 @@ export default function App() {
     return (
       <Suspense fallback={<WorkspaceLoading mobile />}>
         <MobileFoundryWorkspace />
+        <BastionMobileOverlay />
       </Suspense>
     );
   }
