@@ -8,6 +8,10 @@ on:
       - mobile-foundry
   pull_request:
 
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   frontend:
     name: Frontend tests and build
