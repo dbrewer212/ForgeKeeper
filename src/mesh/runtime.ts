@@ -26,6 +26,7 @@ import { registerServiceTools } from "./serviceTools";
 import { FoundryToolGateway } from "./toolGateway";
 import { InMemoryWorkerRegistry } from "./workerRegistry";
 import type { SystemHealth } from "./types";
+import { registerWorkstationTools } from "./workstationTools";
 import { defaultFoundryWorkers } from "./workers";
 
 export class FoundryMeshRuntime {
@@ -69,6 +70,7 @@ export class FoundryMeshRuntime {
     registerServiceTools(this);
     registerDiagnosticTools(this);
     registerDomainTools(this);
+    registerWorkstationTools(this);
   }
 
   async initialize(): Promise<void> {
