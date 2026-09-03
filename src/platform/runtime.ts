@@ -1,6 +1,12 @@
 export type FoundryRuntimePlatform = "android" | "ios" | "desktop" | "web";
 
 export function getFoundryRuntimePlatform(): FoundryRuntimePlatform {
+  if (typeof window !== "undefined") {
+    const requestedPreview = new URLSearchParams(window.location.search).get("foundry-mobile");
+    if (requestedPreview === "1" || requestedPreview === "android") return "android";
+    if (requestedPreview === "ios") return "ios";
+  }
+
   if (typeof navigator === "undefined") return "web";
 
   const userAgent = navigator.userAgent ?? "";
