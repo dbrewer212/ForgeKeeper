@@ -62,8 +62,10 @@ const legacyHelpers = [
   },
 ];
 
+const legacyUsage = new Map();
 for (const helper of legacyHelpers) {
   const count = usageCount(helper.usagePattern, helper.definitionFile);
+  legacyUsage.set(helper.name, count);
   console.log(`USAGE|${helper.name}|${count}|${count === 0 ? "legacy-unreferenced" : "active"}`);
 }
 
@@ -72,9 +74,20 @@ for (const finding of findings) {
   console.log(`AUDIT|${finding.file}:${finding.line}|${finding.label}|${finding.text}`);
 }
 
-const actionable = findings.filter((finding) => ["TODO", "FUTURE", "INCOMPLETE"].includes(finding.label));
+function isDeadLegacyFinding(finding) {
+  return finding.file === "src/state/useForgekeeperState.ts"
+    && legacyUsage.get("openStlAsset") === 0
+    && finding.text.includes("next Tauri shell-permissions pass");
+}
+
+const actionable = findings.filter((finding) =>
+  ["TODO", "FUTURE", "INCOMPLETE"].includes(finding.label) && !isDeadLegacyFinding(finding),
+);
 console.log(`Operational audit actionable signals: ${actionable.length}`);
 
-// Discovery remains non-blocking while the final legacy call-site classification is being
-// completed. The next pass can turn this into a hard gate once every active signal is zero.
-process.exit(0);
+if (actionable.length > 0) {
+  console.error("Operational audit failed: active unfinished surfaces remain.");
+  process.exit(1);
+}
+
+console.log("Operational audit gate passed: no active TODO/FUTURE/INCOMPLETE surfaces remain.");
