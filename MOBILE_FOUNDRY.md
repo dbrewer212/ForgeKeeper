@@ -1,81 +1,124 @@
 # Forgekeeper Mobile Foundry
 
-The Mobile Foundry is the Android-first roaming console for the Fenrir Forgeworks Foundry ecosystem. It is not a separate lightweight companion product and it is not a duplicate data model. The mobile shell uses the same Forgekeeper React feature stations, domain types, state actions, Foundry mesh code, and native SQLite workspace layer as the desktop application.
+The Mobile Foundry is the Android-first roaming console for the Fenrir Forgeworks Foundry ecosystem. It is not a separate lightweight companion product and it does not maintain a competing domain model. Desktop and mobile share Forgekeeper feature stations, domain types, Foundry Mesh concepts, and native SQLite-backed workspace data while preserving platform-specific execution boundaries.
 
-## Current implementation
+## Operational architecture
 
-The `mobile-foundry` branch adds:
+The `mobile-foundry` branch currently provides:
 
-- Mobile runtime detection with a desktop-browser preview override.
-- An Android/iOS mobile application shell with safe-area handling and touch-sized controls.
-- Shared station rendering so desktop and mobile use the same operational station components.
-- Mobile navigation for Command, Design Library, Production, Materials, Planning, Printer Pool, Reports, Administration, and Commissioning.
-- The same `useForgekeeperState()` domain actions used on desktop, so supported station edits are real workspace edits rather than read-only cards.
-- Native SQLite plugin registration in the Tauri Rust builder.
-- Separate mobile Tauri capability permissions for Android and iOS.
-- Android init, development, Android Studio, and APK build scripts.
+- Mobile runtime detection plus browser preview mode.
+- Android/iOS-oriented mobile shell with safe-area and touch-sized controls.
+- Shared station rendering for Command, Design Library, Production, Materials, Printer Pool, Reports, Administration, Planning, and Commissioning.
+- Native SQLite mobile workspace support.
+- Foundry Link pairing and private/trusted-network transport.
+- Conflict-aware AppData synchronization.
+- Shared Mesh-domain synchronization while preserving device-local worker/runtime health.
+- Shared Workbench metadata/state synchronization with recovery snapshots.
+- A schema-v4 transient command/result control plane that is explicitly excluded from durable workspace conflict identity.
+- Governed mobile-to-workstation Mesh tool execution through the `forgekeeper-mobile` worker identity.
+- Short-lived remote commands with five-minute expiry so stale offline actions do not execute unexpectedly after reconnection.
+- Remote approval/denial round trips through the existing Mesh coordinator.
+- Bastion Mobile supervisory UI with workstation health, Watcher telemetry, services, approvals, Safe Mode controls, service controls, Launch Bay, and remote activity results.
+- A consolidated `bastion.mobile_snapshot` tool to minimize remote polling traffic.
+- Bastion Windows startup mode that hides the ordinary main window, starts Foundry Link, and leaves the Forgekeeper host process available behind the Bastion touch surface.
 
-## What "mobile" changes
+## Authority and execution boundaries
 
-Mobile changes the presentation and the device boundary, not the Foundry domain model.
+Mobile is a control surface. The Windows workstation remains execution authority for Windows-bound operations.
 
-Desktop keeps its sidebar and desktop-specific launch surfaces. Mobile replaces the sidebar with a bottom command rail and a station sheet while preserving access to the existing operational stations. The layout is designed around a narrow touch surface and device safe areas rather than attempting to squeeze the desktop UI into a phone viewport.
+Remote operations are never an arbitrary PowerShell/CMD tunnel. Requests are registered Mesh tools with a capability, requester identity, risk level, permission evaluation, audit/result path, and approval policy.
 
-## What is local today
+Current examples include:
 
-The current mobile build can maintain a native local Forgekeeper SQLite workspace. That makes the application operational as a standalone Foundry workspace on the phone.
+- `bastion.mobile_snapshot`
+- `workstation.telemetry`
+- `workstation.launch_tool`
+- `workstation.open_path`
+- `system.service.probe`
+- `system.service.start`
+- `system.service.stop`
+- `system.service.restart`
+- `mesh.enter_safe_mode`
+- `mesh.exit_safe_mode`
 
-However, a phone-local SQLite database is not automatically the same physical database file as the desktop Forgekeeper database. Live PC-to-phone synchronization must be handled through a deliberate Foundry transport rather than by pretending two independent SQLite files are one workspace.
+The paired human mobile console may enter protective Safe Mode directly because doing so reduces autonomous authority. Leaving Safe Mode remains governed. Service lifecycle changes are also approval-governed by default rather than receiving a blanket mobile allow rule.
 
-## Foundry Link: required for the full roaming-console goal
+## Foundry Link data plane
 
-The next architectural layer is **Foundry Link**: a secure paired transport between Forgekeeper Desktop and Forgekeeper Mobile.
+Foundry Link currently synchronizes three authoritative data layers:
 
-Foundry Link should provide:
+1. **Forgekeeper AppData** — products, models, materials, printers, maintenance, generation jobs, planning, settings, and related workspace records.
+2. **Foundry Mesh domain state** — projects, production items, assets, inventory, canon, decisions, sessions, and parked thoughts. Device-local service/worker/runtime health remains local.
+3. **Workbench state** — assets, files, revisions, relationships, variants, assemblies, manufacturing specifications, inspections, preparations, and print records.
 
-1. **Device pairing**
-   - Pair a trusted mobile device with the desktop Foundry.
-   - Use short-lived pairing material and a persistent device identity after approval.
-   - Allow explicit revocation from either side.
+The system does **not** copy a live SQLite database file between devices.
 
-2. **Workspace synchronization**
-   - Desktop remains the authoritative home Foundry when it is reachable.
-   - Mobile keeps an offline-capable cache and a journal of mutations.
-   - Sync uses domain operations/events rather than copying a live SQLite database file.
-   - Conflicts are surfaced and resolved explicitly instead of silently overwriting work.
+Workbench managed-file metadata can synchronize, but Windows file paths do not become Android files. STL/3MF/image binary transfer still requires the planned bounded/hash-verified Foundry Asset Service.
 
-3. **Action transport**
-   - Remote actions pass through the existing Foundry mesh permission and approval concepts.
-   - The phone may request an action; the desktop executes desktop-bound actions.
-   - High-impact actions remain approval-gated.
-   - Every remote action receives an audit record and result.
+## Foundry Link control plane
 
-4. **Bastion remote console**
-   - Mobile receives Bastion health, service state, worker state, approvals, and telemetry from the desktop.
-   - Windows executables, local paths, slicers, and system commands execute on the desktop host, never on Android.
-   - Mobile becomes the control surface, not a fake Windows runtime.
+Schema v4 carries optional transient `remoteCommands` and `remoteCommandResults` beside durable workspace data.
 
-5. **Printer control boundary**
-   - Preserve each printer's native operational path.
-   - Foundry Link transports state and approved commands where an integration exists; it does not replace printer firmware or force a universal control stack.
+Those records are removed before durable workspace hashing and conflict comparison. This prevents a telemetry refresh, approval request, or command result from looking like a product/material/production edit.
 
-6. **Notifications**
-   - Production completion, material alerts, maintenance, Watcher/Bastion faults, and approval requests can be surfaced as Android notifications after the bridge exists.
+The communication lifecycle is:
+
+1. Mobile queues a short-lived command.
+2. The command is published through the authenticated Foundry Link revision stream.
+3. Desktop receives the revision and processes the command as `forgekeeper-mobile` through the Mesh Tool Gateway.
+4. Mesh permissions either execute it, deny it, or return an approval request.
+5. Desktop publishes the result.
+6. Mobile absorbs the result and removes the fulfilled command from its queue.
+7. Command-only/result-only revisions do not replace AppData/Mesh/Workbench state and do not trigger workspace reloads.
+
+If a command expires before the workstation can execute it, it is denied rather than replayed later.
+
+## Printer boundary
+
+Foundry continues to preserve native printer operation:
+
+- Anycubic Kobra family → Anycubic control path / Anycubic Slicer Next.
+- Elegoo Neptune 4 Max → Fluidd.
+
+Bastion and Forgekeeper supervise state and coordinate Foundry work rather than replacing printer firmware or forcing a universal control stack.
+
+Expected-off printers must not be treated as faults merely because they are offline.
+
+## Remote networking boundary
+
+The current Foundry Link server accepts private LAN, loopback/link-local, private IPv6, and CGNAT/trusted-overlay style addresses. It is not intended to be port-forwarded directly to the public Internet.
+
+For away-from-home operation, the intended deployment is an encrypted private overlay such as Tailscale/WireGuard between the phone and workstation. Foundry Link authentication remains an additional application-level boundary.
+
+## Notifications and Android native bridge
+
+The in-app Bastion control/approval path is operational in the shared application code, but reliable Android wake/push notification delivery is a separate native deployment boundary.
+
+Still to commission on a physical Android environment:
+
+- Tauri/native notification permission and channels.
+- Notification action/deep-link handling.
+- Biometric confirmation for higher-risk approvals.
+- Firebase Cloud Messaging or equivalent minimal-data wake/push channel for alerts while Android has suspended the app.
+- Secure device-key storage and stronger persistent device revocation/trust management.
+
+Push notifications should carry only minimal alert identity/severity. Full Foundry details and approvals should be retrieved through the private Foundry connection after the app wakes.
 
 ## Android development
 
-Prerequisites follow the Tauri 2 Android toolchain requirements: Rust, Node/npm, Android Studio/SDK, Android NDK, and the Java toolchain.
-
-From the ForgeKeeper repository:
+Prerequisites follow the Tauri 2 Android toolchain requirements: Rust, Node/npm, Android Studio/SDK, Android NDK, and Java toolchain.
 
 ```bash
 git checkout mobile-foundry
 npm ci
+npm test
+npm run audit:operational
+npm run audit:integration
 npm run android:init
 npm run android:dev
 ```
 
-Open the generated Android project in Android Studio when needed:
+Open Android Studio when needed:
 
 ```bash
 npm run android:open
@@ -87,39 +130,44 @@ Build an APK:
 npm run android:build
 ```
 
-The first `android:init` generates the platform project under Tauri's generated Android area. It should be run on the development workstation with the Android SDK installed.
-
 ## Browser preview
-
-The mobile shell can be inspected without an Android device:
 
 ```bash
 npm run dev
 ```
 
-Then open the local Vite application with:
+Append this query to the local Vite URL:
 
 ```text
 ?foundry-mobile=1
 ```
 
-appended to the local development URL. This preview exercises the mobile React shell but does not substitute for native Android testing.
+Browser preview validates React layout and shared application logic. It does not substitute for Android lifecycle, network, native notification, biometric, storage, or APK testing.
 
-## Validation boundary
+## Automated validation
 
-A successful frontend build and Rust `cargo check` validate the shared application/core integration. A real Android device or emulator is still required to validate Android WebView behavior, permissions, native SQLite persistence, safe-area behavior, lifecycle/background behavior, and APK installation.
+The validation workflow runs:
 
-## Definition of fully operational
+- `npm ci`
+- Vitest test suite, including Foundry Link durable/control-plane protocol tests.
+- Operational surface discovery audit.
+- Hard Foundry Link integration invariant audit.
+- TypeScript/Vite production build.
+- Rust/Tauri core `cargo check`.
 
-The mobile effort is complete when all of the following are true:
+The integration audit fails CI when required cross-platform communication invariants disappear.
 
-- Existing Foundry data/workflow stations operate correctly on Android.
-- Native mobile SQLite persistence survives application restart.
-- Foundry Link securely pairs with the desktop and synchronizes workspace operations.
-- Mobile can observe and request Bastion/Foundry mesh actions without attempting desktop-only execution locally.
-- Offline edits reconcile after reconnection with explicit conflict handling.
-- Printer and production state respect existing native printer control paths.
-- Notifications and approvals arrive on the phone where appropriate.
-- The APK is installed and exercised on a physical Android device through the core production workflows.
+## Remaining physical commissioning
 
-This keeps the end goal intact: the phone is a roaming Foundry console with meaningful operational capability, while the workstation remains the host for operations that physically belong to the workstation.
+Automated CI cannot certify the following without the actual Windows workstation and Pixel/Android environment:
+
+- Real LAN pairing and bidirectional revision traffic.
+- Cellular/remote private-overlay access.
+- Android process suspension/background reconnect behavior.
+- Native notification delivery and notification actions.
+- Biometric approval flow.
+- APK installation/restart persistence.
+- Actual Anycubic Slicer/Blender/Fluidd launch/control handoff on the user's workstation.
+- Managed model/image file transfer once the Asset Service is built.
+
+The intended end state remains: Mobile Foundry is the roaming workspace, Bastion Mobile is the roaming supervisory console, and the workstation remains the authoritative host for operations that physically belong to it.
