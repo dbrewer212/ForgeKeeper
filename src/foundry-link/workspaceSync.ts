@@ -56,9 +56,12 @@ export function snapshotForgekeeperState(state: ForgekeeperState): AppData {
   };
 }
 
-export async function serializeForgekeeperState(state: ForgekeeperState): Promise<string> {
+export function serializeForgekeeperState(state: ForgekeeperState): string {
   const mesh = getFoundryMeshRuntime();
-  await mesh.initialize();
+  // Mesh initialization is started at application bootstrap. Calling initialize again is
+  // idempotent and makes sure a subsequent Link tick sees the persisted domain even if
+  // the very first render raced startup.
+  void mesh.initialize().catch((cause) => console.error("Foundry Link Mesh initialization failed:", cause));
   const bundle: FoundryLinkWorkspaceBundle = {
     format: LINK_FORMAT,
     schemaVersion: LINK_SCHEMA_VERSION,
