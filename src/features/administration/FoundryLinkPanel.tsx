@@ -32,9 +32,11 @@ export function FoundryLinkPanel({ state }: { state: ForgekeeperState }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const stateRef = useRef(state);
   const knownRevision = useRef(0);
   const lastPublishedPayload = useRef("");
   const applyingRemote = useRef(false);
+  stateRef.current = state;
 
   async function getStatus() {
     const next = await invoke<LinkStatus>("foundry_link_status");
@@ -46,7 +48,7 @@ export function FoundryLinkPanel({ state }: { state: ForgekeeperState }) {
   }
 
   async function publishCurrentWorkspace(baseRevision: number) {
-    const payload = serializeForgekeeperState(state);
+    const payload = serializeForgekeeperState(stateRef.current);
     if (payload === lastPublishedPayload.current) return;
     const envelope = await invoke<FoundryLinkWorkspaceEnvelope>("foundry_link_publish_workspace", {
       payload,
@@ -69,7 +71,7 @@ export function FoundryLinkPanel({ state }: { state: ForgekeeperState }) {
         lastPublishedPayload.current = pending.payload;
         setMessage(`Applying mobile revision ${pending.revision}…`);
         await commitLinkedWorkspace(
-          state,
+          stateRef.current,
           pending,
           pending.sourceDeviceId ? `paired device ${pending.sourceDeviceId}` : "paired mobile device",
         );
@@ -96,7 +98,7 @@ export function FoundryLinkPanel({ state }: { state: ForgekeeperState }) {
     void getStatus().catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
     const timer = window.setInterval(() => void serviceTick(), 1500);
     return () => window.clearInterval(timer);
-  });
+  }, []);
 
   async function startLink() {
     setBusy(true);
