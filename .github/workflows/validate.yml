@@ -31,6 +31,9 @@ jobs:
       - name: Audit operational surfaces
         run: npm run audit:operational
 
+      - name: Audit Foundry Link integration
+        run: npm run audit:integration
+
       - name: Build frontend
         run: npm run build
 
