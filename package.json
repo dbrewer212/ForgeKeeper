@@ -9,7 +9,11 @@
     "test": "vitest run",
     "preview": "vite preview",
     "desktop": "tauri dev",
-    "desktop:build": "tauri build"
+    "desktop:build": "tauri build",
+    "android:init": "tauri android init",
+    "android:dev": "tauri android dev",
+    "android:build": "tauri android build --apk",
+    "android:open": "tauri android open"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.0",
