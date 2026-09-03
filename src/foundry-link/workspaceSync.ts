@@ -5,9 +5,12 @@ import type { FoundryDomainState } from "../mesh/domainState";
 import type { Checkpoint } from "../mesh/types";
 import type { ForgekeeperState } from "../state/useForgekeeperState";
 import type { AppData } from "../types/domain";
+import type { WorkbenchState } from "../workbench/contracts";
+import { getWorkbenchStateForFoundryLink } from "../workbench/useWorkbenchVault";
+import { replaceWorkbenchStateFromFoundryLink } from "./workbenchSync";
 
 const LINK_FORMAT = "forgekeeper.foundry-link";
-const LINK_SCHEMA_VERSION = 2;
+const LINK_SCHEMA_VERSION = 3;
 
 export type FoundryLinkWorkspaceEnvelope = {
   revision: number;
@@ -18,9 +21,10 @@ export type FoundryLinkWorkspaceEnvelope = {
 
 type FoundryLinkWorkspaceBundle = {
   format: typeof LINK_FORMAT;
-  schemaVersion: typeof LINK_SCHEMA_VERSION;
+  schemaVersion: 2 | typeof LINK_SCHEMA_VERSION;
   appData: AppData;
   meshDomain: FoundryDomainState;
+  workbench?: WorkbenchState;
 };
 
 export function snapshotForgekeeperState(state: ForgekeeperState): AppData {
@@ -58,15 +62,12 @@ export function snapshotForgekeeperState(state: ForgekeeperState): AppData {
 
 export function serializeForgekeeperState(state: ForgekeeperState): string {
   const mesh = getFoundryMeshRuntime();
-  // Mesh initialization is started at application bootstrap. Calling initialize again is
-  // idempotent and makes sure a subsequent Link tick sees the persisted domain even if
-  // the very first render raced startup.
-  void mesh.initialize().catch((cause) => console.error("Foundry Link Mesh initialization failed:", cause));
   const bundle: FoundryLinkWorkspaceBundle = {
     format: LINK_FORMAT,
     schemaVersion: LINK_SCHEMA_VERSION,
     appData: snapshotForgekeeperState(state),
     meshDomain: mesh.snapshot().domain,
+    workbench: getWorkbenchStateForFoundryLink() ?? undefined,
   };
   return JSON.stringify(bundle);
 }
@@ -90,21 +91,25 @@ function validateAppData(parsed: Partial<AppData>): AppData {
   return parsed as AppData;
 }
 
-export function parseLinkedWorkspace(payload: string): { appData: AppData; meshDomain?: FoundryDomainState } {
+export function parseLinkedWorkspace(payload: string): { appData: AppData; meshDomain?: FoundryDomainState; workbench?: WorkbenchState } {
   const parsed = JSON.parse(payload) as Partial<FoundryLinkWorkspaceBundle> & Partial<AppData>;
 
   if (parsed.format === LINK_FORMAT) {
-    if (parsed.schemaVersion !== LINK_SCHEMA_VERSION) {
+    if (parsed.schemaVersion !== 2 && parsed.schemaVersion !== LINK_SCHEMA_VERSION) {
       throw new Error(`Unsupported Foundry Link workspace schema ${String(parsed.schemaVersion)}.`);
     }
     if (!parsed.appData || !parsed.meshDomain) {
       throw new Error("Foundry Link workspace bundle is missing AppData or Mesh domain state.");
     }
-    return { appData: validateAppData(parsed.appData), meshDomain: parsed.meshDomain };
+    return {
+      appData: validateAppData(parsed.appData),
+      meshDomain: parsed.meshDomain,
+      workbench: parsed.schemaVersion === LINK_SCHEMA_VERSION ? parsed.workbench : undefined,
+    };
   }
 
   // Backward compatibility for the first Mobile Foundry branch, which synchronized
-  // AppData directly before the shared Mesh domain was included in the Link boundary.
+  // AppData directly before the Mesh and Workbench domains were included.
   return { appData: validateAppData(parsed as Partial<AppData>) };
 }
 
@@ -119,6 +124,10 @@ export async function commitLinkedWorkspace(
     current,
     `Automatic checkpoint before Foundry Link revision ${envelope.revision} from ${sourceLabel}`,
   );
+
+  if (next.workbench) {
+    await replaceWorkbenchStateFromFoundryLink(next.workbench, envelope.revision, sourceLabel);
+  }
 
   const mesh = getFoundryMeshRuntime();
   await mesh.initialize();
