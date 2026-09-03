@@ -1,13 +1,26 @@
 import { saveRecoveryCheckpoint } from "../lib/recovery";
 import { saveNativeStoredData } from "../lib/storage";
+import { getFoundryMeshRuntime } from "../mesh";
+import type { FoundryDomainState } from "../mesh/domainState";
+import type { Checkpoint } from "../mesh/types";
 import type { ForgekeeperState } from "../state/useForgekeeperState";
 import type { AppData } from "../types/domain";
+
+const LINK_FORMAT = "forgekeeper.foundry-link";
+const LINK_SCHEMA_VERSION = 2;
 
 export type FoundryLinkWorkspaceEnvelope = {
   revision: number;
   payload: string;
   updatedAtMs: number;
   sourceDeviceId?: string | null;
+};
+
+type FoundryLinkWorkspaceBundle = {
+  format: typeof LINK_FORMAT;
+  schemaVersion: typeof LINK_SCHEMA_VERSION;
+  appData: AppData;
+  meshDomain: FoundryDomainState;
 };
 
 export function snapshotForgekeeperState(state: ForgekeeperState): AppData {
@@ -43,12 +56,19 @@ export function snapshotForgekeeperState(state: ForgekeeperState): AppData {
   };
 }
 
-export function serializeForgekeeperState(state: ForgekeeperState): string {
-  return JSON.stringify(snapshotForgekeeperState(state));
+export async function serializeForgekeeperState(state: ForgekeeperState): Promise<string> {
+  const mesh = getFoundryMeshRuntime();
+  await mesh.initialize();
+  const bundle: FoundryLinkWorkspaceBundle = {
+    format: LINK_FORMAT,
+    schemaVersion: LINK_SCHEMA_VERSION,
+    appData: snapshotForgekeeperState(state),
+    meshDomain: mesh.snapshot().domain,
+  };
+  return JSON.stringify(bundle);
 }
 
-export function parseLinkedWorkspace(payload: string): AppData {
-  const parsed = JSON.parse(payload) as Partial<AppData>;
+function validateAppData(parsed: Partial<AppData>): AppData {
   const requiredArrays: Array<keyof AppData> = [
     "products",
     "stls",
@@ -67,6 +87,24 @@ export function parseLinkedWorkspace(payload: string): AppData {
   return parsed as AppData;
 }
 
+export function parseLinkedWorkspace(payload: string): { appData: AppData; meshDomain?: FoundryDomainState } {
+  const parsed = JSON.parse(payload) as Partial<FoundryLinkWorkspaceBundle> & Partial<AppData>;
+
+  if (parsed.format === LINK_FORMAT) {
+    if (parsed.schemaVersion !== LINK_SCHEMA_VERSION) {
+      throw new Error(`Unsupported Foundry Link workspace schema ${String(parsed.schemaVersion)}.`);
+    }
+    if (!parsed.appData || !parsed.meshDomain) {
+      throw new Error("Foundry Link workspace bundle is missing AppData or Mesh domain state.");
+    }
+    return { appData: validateAppData(parsed.appData), meshDomain: parsed.meshDomain };
+  }
+
+  // Backward compatibility for the first Mobile Foundry branch, which synchronized
+  // AppData directly before the shared Mesh domain was included in the Link boundary.
+  return { appData: validateAppData(parsed as Partial<AppData>) };
+}
+
 export async function commitLinkedWorkspace(
   state: ForgekeeperState,
   envelope: FoundryLinkWorkspaceEnvelope,
@@ -78,6 +116,29 @@ export async function commitLinkedWorkspace(
     current,
     `Automatic checkpoint before Foundry Link revision ${envelope.revision} from ${sourceLabel}`,
   );
-  await saveNativeStoredData(next);
+
+  const mesh = getFoundryMeshRuntime();
+  await mesh.initialize();
+  if (next.meshDomain) {
+    const currentMesh = mesh.snapshot();
+    const domainCheckpoint: Checkpoint<FoundryDomainState> = {
+      id: `LINK-DOMAIN-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      createdByWorkerId: "foundry-core",
+      scope: "foundry-link-domain",
+      summary: `Mesh domain before Foundry Link revision ${envelope.revision} from ${sourceLabel}`,
+      state: currentMesh.domain,
+      metadata: { revision: envelope.revision, sourceLabel },
+    };
+    const retainedCheckpoints = [...currentMesh.checkpoints, domainCheckpoint].slice(-100);
+    await mesh.persistence.saveSnapshot({
+      ...currentMesh,
+      savedAt: new Date().toISOString(),
+      checkpoints: retainedCheckpoints,
+      domain: next.meshDomain,
+    });
+  }
+
+  await saveNativeStoredData(next.appData);
   window.location.reload();
 }
