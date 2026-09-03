@@ -6,7 +6,7 @@ const extensions = new Set([".ts", ".tsx", ".rs"]);
 const signals = [
   ["TODO", /\b(?:TODO|FIXME|HACK)\b/i],
   ["FUTURE", /\b(?:next pass|next phase|coming soon|will be enabled|will be added)\b/i],
-  ["INCOMPLETE", /\b(?:not implemented|unimplemented|placeholder|stubbed?|temporary implementation)\b/i],
+  ["INCOMPLETE", /\b(?:not implemented|unimplemented|stubbed?|temporary implementation|placeholder implementation|placeholder behavior)\b/i],
   ["SILENT_FAILURE", /catch\s*\(\s*\(\)\s*=>\s*undefined\s*\)/i],
   ["ALERT_ONLY", /window\.alert\s*\(/i],
   ["PLATFORM_BOUNDARY", /currently (?:implemented|available|supported) (?:for|on)|only works (?:in|on)|not available on/i],
