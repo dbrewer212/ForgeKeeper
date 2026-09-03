@@ -56,6 +56,23 @@ function pruneExpiredQueue(commands: FoundryRemoteCommand[]): FoundryRemoteComma
   return commands.filter((command) => !isExpired(command)).slice(-MAX_COMMANDS);
 }
 
+function mergeResults(existing: FoundryRemoteCommandResult[], incoming: FoundryRemoteCommandResult[]): FoundryRemoteCommandResult[] {
+  const resolvedApprovalIds = new Set(
+    incoming
+      .filter((item) => item.approvalId && item.state !== "approval-required")
+      .map((item) => item.approvalId as string),
+  );
+  const merged = new Map(
+    existing
+      .filter((item) => !(item.state === "approval-required" && item.approvalId && resolvedApprovalIds.has(item.approvalId)))
+      .map((item) => [item.commandId, item]),
+  );
+  for (const item of incoming) merged.set(item.commandId, item);
+  return [...merged.values()]
+    .sort((left, right) => right.completedAt.localeCompare(left.completedAt))
+    .slice(0, MAX_RESULTS);
+}
+
 export function getPendingRemoteCommands(): FoundryRemoteCommand[] {
   const commands = readJson<FoundryRemoteCommand[]>(MOBILE_QUEUE_KEY, []);
   const retained = pruneExpiredQueue(commands);
@@ -114,26 +131,14 @@ export function getMobileRemoteCommandResults(): FoundryRemoteCommandResult[] {
 
 export function absorbRemoteCommandResults(results: FoundryRemoteCommandResult[] | undefined) {
   if (!results?.length) return;
-  const existing = getMobileRemoteCommandResults();
-  const merged = new Map(existing.map((item) => [item.commandId, item]));
-  for (const item of results) merged.set(item.commandId, item);
-  const retained = [...merged.values()]
-    .sort((left, right) => right.completedAt.localeCompare(left.completedAt))
-    .slice(0, MAX_RESULTS);
-  writeJson(MOBILE_RESULTS_KEY, retained);
+  writeJson(MOBILE_RESULTS_KEY, mergeResults(getMobileRemoteCommandResults(), results));
 
   const completedIds = new Set(results.map((item) => item.commandId));
   writeJson(MOBILE_QUEUE_KEY, getPendingRemoteCommands().filter((item) => !completedIds.has(item.id)));
 }
 
 function storeDesktopResults(results: FoundryRemoteCommandResult[]) {
-  const existing = getDesktopRemoteCommandResults();
-  const merged = new Map(existing.map((item) => [item.commandId, item]));
-  for (const item of results) merged.set(item.commandId, item);
-  writeJson(
-    DESKTOP_RESULTS_KEY,
-    [...merged.values()].sort((left, right) => right.completedAt.localeCompare(left.completedAt)).slice(0, MAX_RESULTS),
-  );
+  writeJson(DESKTOP_RESULTS_KEY, mergeResults(getDesktopRemoteCommandResults(), results));
 }
 
 export async function processRemoteCommands(commands: FoundryRemoteCommand[] | undefined): Promise<FoundryRemoteCommandResult[]> {
@@ -157,6 +162,7 @@ export async function processRemoteCommands(commands: FoundryRemoteCommand[] | u
           commandId: command.id,
           completedAt: new Date().toISOString(),
           state: "denied",
+          approvalId: command.approvalId,
           error: "Remote command expired before the workstation could execute it.",
         };
       } else if (command.action === "mesh.tool") {
@@ -196,6 +202,7 @@ export async function processRemoteCommands(commands: FoundryRemoteCommand[] | u
           commandId: command.id,
           completedAt: actionResult.completedAt,
           state: actionResult.state,
+          approvalId: command.approvalId,
           result: actionResult.result,
           error: actionResult.error,
         };
@@ -205,6 +212,7 @@ export async function processRemoteCommands(commands: FoundryRemoteCommand[] | u
         commandId: command.id,
         completedAt: new Date().toISOString(),
         state: "failed",
+        approvalId: command.approvalId,
         error: cause instanceof Error ? cause.message : String(cause),
       };
     }
