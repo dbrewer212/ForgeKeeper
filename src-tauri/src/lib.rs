@@ -386,6 +386,19 @@ pub fn run() {
         )
         .setup(|app| {
             if bastion_launch_mode() {
+                if let Some(main_window) = app.get_webview_window("main") {
+                    main_window
+                        .hide()
+                        .map_err(|error| -> Box<dyn std::error::Error> {
+                            format!("Failed to hide Forgekeeper host window for Bastion startup: {error}").into()
+                        })?;
+                }
+
+                let link_state = app.state::<FoundryLinkRuntime>();
+                if let Err(error) = foundry_link_start(link_state, Some(4717)) {
+                    eprintln!("Foundry Link host could not auto-start with Bastion: {error}");
+                }
+
                 open_bastion_window(app.handle())
                     .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
             }
