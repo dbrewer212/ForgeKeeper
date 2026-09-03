@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Sidebar } from "./components/layout/Sidebar";
 import { FoundryStationView } from "./components/layout/FoundryStationView";
+import { DesktopFoundryLinkRuntime } from "./foundry-link/DesktopFoundryLinkRuntime";
 import { useForgekeeperState } from "./state/useForgekeeperState";
 import type { AppData } from "./types/domain";
 import { ensureWorkbenchBootstrap } from "./workbench/bootstrap";
@@ -49,6 +50,7 @@ export default function ForgekeeperWorkspace() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[linear-gradient(135deg,rgba(8,7,6,0.2),rgba(21,18,15,0.32))] text-slate-100">
+      <DesktopFoundryLinkRuntime state={state} />
       <Sidebar view={state.view as string} setView={state.setView} onBastion={openBastion} />
       <main className="relative flex-1 overflow-auto">
         <div className="pointer-events-none sticky top-0 z-10 h-px bg-[linear-gradient(90deg,rgba(199,148,56,0.35),rgba(169,117,36,0.08),transparent)]" />
