@@ -1,5 +1,6 @@
 mod bastion;
 mod forgepack;
+mod foundry_link;
 mod managed_files;
 mod managed_services;
 mod provider_staging;
@@ -13,6 +14,12 @@ use bastion::{
     bastion_startup_status, open_bastion_window,
 };
 use forgepack::{workbench_export_forgepack, workbench_import_forgepack};
+use foundry_link::{
+    foundry_link_publish_workspace, foundry_link_remote_get_workspace,
+    foundry_link_remote_pair, foundry_link_remote_push_workspace, foundry_link_rotate_pairing_code,
+    foundry_link_start, foundry_link_status, foundry_link_stop, foundry_link_take_pending_workspace,
+    FoundryLinkRuntime,
+};
 use managed_files::workbench_store_file;
 use managed_services::{
     managed_service_start, managed_service_status, managed_service_stop, ManagedProcesses,
@@ -371,6 +378,7 @@ fn open_with_windows_shell(target: &str, asset_path: Option<&str>) -> Result<(),
 pub fn run() {
     tauri::Builder::default()
         .manage(ManagedProcesses::default())
+        .manage(FoundryLinkRuntime::default())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:forgekeeper-workbench.db", workbench_migrations::migrations())
@@ -411,7 +419,16 @@ pub fn run() {
             mesh_load_snapshot,
             mesh_save_snapshot,
             mesh_append_event,
-            mesh_read_events
+            mesh_read_events,
+            foundry_link_start,
+            foundry_link_stop,
+            foundry_link_status,
+            foundry_link_rotate_pairing_code,
+            foundry_link_publish_workspace,
+            foundry_link_take_pending_workspace,
+            foundry_link_remote_pair,
+            foundry_link_remote_get_workspace,
+            foundry_link_remote_push_workspace
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
