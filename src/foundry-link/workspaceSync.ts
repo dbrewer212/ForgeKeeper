@@ -3,14 +3,23 @@ import { saveNativeStoredData } from "../lib/storage";
 import { getFoundryMeshRuntime } from "../mesh";
 import type { FoundryDomainState } from "../mesh/domainState";
 import type { Checkpoint } from "../mesh/types";
+import { isFoundryMobileRuntime } from "../platform/runtime";
 import type { ForgekeeperState } from "../state/useForgekeeperState";
 import type { AppData } from "../types/domain";
 import type { WorkbenchState } from "../workbench/contracts";
 import { getWorkbenchStateForFoundryLink } from "../workbench/useWorkbenchVault";
+import {
+  absorbRemoteCommandResults,
+  getDesktopRemoteCommandResults,
+  getPendingRemoteCommands,
+  processRemoteCommands,
+  type FoundryRemoteCommand,
+  type FoundryRemoteCommandResult,
+} from "./remoteCommands";
 import { replaceWorkbenchStateFromFoundryLink } from "./workbenchSync";
 
 const LINK_FORMAT = "forgekeeper.foundry-link";
-const LINK_SCHEMA_VERSION = 3;
+const LINK_SCHEMA_VERSION = 4;
 
 export type FoundryLinkWorkspaceEnvelope = {
   revision: number;
@@ -21,10 +30,20 @@ export type FoundryLinkWorkspaceEnvelope = {
 
 type FoundryLinkWorkspaceBundle = {
   format: typeof LINK_FORMAT;
-  schemaVersion: 2 | typeof LINK_SCHEMA_VERSION;
+  schemaVersion: 2 | 3 | typeof LINK_SCHEMA_VERSION;
   appData: AppData;
   meshDomain: FoundryDomainState;
   workbench?: WorkbenchState;
+  remoteCommands?: FoundryRemoteCommand[];
+  remoteCommandResults?: FoundryRemoteCommandResult[];
+};
+
+type ParsedLinkedWorkspace = {
+  appData: AppData;
+  meshDomain?: FoundryDomainState;
+  workbench?: WorkbenchState;
+  remoteCommands?: FoundryRemoteCommand[];
+  remoteCommandResults?: FoundryRemoteCommandResult[];
 };
 
 export function snapshotForgekeeperState(state: ForgekeeperState): AppData {
@@ -62,14 +81,30 @@ export function snapshotForgekeeperState(state: ForgekeeperState): AppData {
 
 export function serializeForgekeeperState(state: ForgekeeperState): string {
   const mesh = getFoundryMeshRuntime();
+  const mobile = isFoundryMobileRuntime();
   const bundle: FoundryLinkWorkspaceBundle = {
     format: LINK_FORMAT,
     schemaVersion: LINK_SCHEMA_VERSION,
     appData: snapshotForgekeeperState(state),
     meshDomain: mesh.snapshot().domain,
     workbench: getWorkbenchStateForFoundryLink() ?? undefined,
+    remoteCommands: mobile ? getPendingRemoteCommands() : undefined,
+    remoteCommandResults: mobile ? undefined : getDesktopRemoteCommandResults(),
   };
   return JSON.stringify(bundle);
+}
+
+/**
+ * Returns only durable workspace identity. Transient control-plane records must never
+ * create false AppData/Mesh/Workbench conflicts between desktop and mobile.
+ */
+export function canonicalFoundryLinkPayload(payload: string): string {
+  const parsed = JSON.parse(payload) as Record<string, unknown>;
+  if (parsed.format !== LINK_FORMAT) return JSON.stringify(parsed);
+  const canonical = { ...parsed };
+  delete canonical.remoteCommands;
+  delete canonical.remoteCommandResults;
+  return JSON.stringify(canonical);
 }
 
 function validateAppData(parsed: Partial<AppData>): AppData {
@@ -91,11 +126,11 @@ function validateAppData(parsed: Partial<AppData>): AppData {
   return parsed as AppData;
 }
 
-export function parseLinkedWorkspace(payload: string): { appData: AppData; meshDomain?: FoundryDomainState; workbench?: WorkbenchState } {
+export function parseLinkedWorkspace(payload: string): ParsedLinkedWorkspace {
   const parsed = JSON.parse(payload) as Partial<FoundryLinkWorkspaceBundle> & Partial<AppData>;
 
   if (parsed.format === LINK_FORMAT) {
-    if (parsed.schemaVersion !== 2 && parsed.schemaVersion !== LINK_SCHEMA_VERSION) {
+    if (parsed.schemaVersion !== 2 && parsed.schemaVersion !== 3 && parsed.schemaVersion !== LINK_SCHEMA_VERSION) {
       throw new Error(`Unsupported Foundry Link workspace schema ${String(parsed.schemaVersion)}.`);
     }
     if (!parsed.appData || !parsed.meshDomain) {
@@ -104,7 +139,9 @@ export function parseLinkedWorkspace(payload: string): { appData: AppData; meshD
     return {
       appData: validateAppData(parsed.appData),
       meshDomain: parsed.meshDomain,
-      workbench: parsed.schemaVersion === LINK_SCHEMA_VERSION ? parsed.workbench : undefined,
+      workbench: parsed.schemaVersion >= 3 ? parsed.workbench : undefined,
+      remoteCommands: parsed.schemaVersion >= 4 ? parsed.remoteCommands : undefined,
+      remoteCommandResults: parsed.schemaVersion >= 4 ? parsed.remoteCommandResults : undefined,
     };
   }
 
@@ -119,6 +156,20 @@ export async function commitLinkedWorkspace(
   sourceLabel: string,
 ): Promise<void> {
   const next = parseLinkedWorkspace(envelope.payload);
+  const mobile = isFoundryMobileRuntime();
+
+  if (mobile) {
+    absorbRemoteCommandResults(next.remoteCommandResults);
+  } else {
+    await processRemoteCommands(next.remoteCommands);
+  }
+
+  // A command or command-result revision is transport state, not a database revision.
+  // Process it without replacing durable state or reloading either platform.
+  const incomingDurable = canonicalFoundryLinkPayload(envelope.payload);
+  const currentDurable = canonicalFoundryLinkPayload(serializeForgekeeperState(state));
+  if (incomingDurable === currentDurable) return;
+
   const current = snapshotForgekeeperState(state);
   await saveRecoveryCheckpoint(
     current,
