@@ -45,7 +45,7 @@ export function DesktopFoundryLinkRuntime({ state }: { state: ForgekeeperState }
   stateRef.current = state;
 
   async function publishCurrentWorkspace(baseRevision: number) {
-    const payload = serializeForgekeeperState(stateRef.current);
+    const payload = await serializeForgekeeperState(stateRef.current);
     if (payload === lastPublishedPayload.current) return;
     const envelope = await invoke<FoundryLinkWorkspaceEnvelope>("foundry_link_publish_workspace", {
       payload,
