@@ -74,4 +74,29 @@ export function registerWorkstationTools(runtime: FoundryMeshRuntime): void {
       return invoke("watcher_system_snapshot");
     },
   );
+
+  runtime.tools.register<Record<string, never>, unknown>(
+    {
+      name: "bastion.mobile_snapshot",
+      capabilityId: MeshCapabilities.meshReadState,
+      description: "Return a consolidated Bastion supervisory snapshot for the paired mobile console.",
+      risk: "read",
+      inputSchema: { type: "object", additionalProperties: false },
+      audit: false,
+    },
+    async (_payload, _request, worker) => {
+      requirePairedMobile(worker);
+      const telemetry = await invoke("watcher_system_snapshot").catch(() => undefined);
+      return {
+        sampledAt: new Date().toISOString(),
+        health: runtime.getSystemHealth(),
+        safeMode: runtime.isSafeMode(),
+        workers: runtime.workers.list(),
+        services: runtime.services.list(),
+        resources: runtime.resources.listStates(),
+        pendingApprovals: runtime.approvals.list("pending").length,
+        telemetry,
+      };
+    },
+  );
 }
