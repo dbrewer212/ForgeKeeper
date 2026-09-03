@@ -4,6 +4,7 @@ import { foundryStations } from "../core/stations";
 import { useForgekeeperState } from "../state/useForgekeeperState";
 import type { AppData, ViewKey } from "../types/domain";
 import { ensureWorkbenchBootstrap } from "../workbench/bootstrap";
+import { FoundryLinkMobilePanel } from "./FoundryLinkMobilePanel";
 
 const primaryNavigation: Array<{ view: ViewKey; label: string; shortLabel: string }> = [
   { view: "dashboard", label: "Command", shortLabel: "Command" },
@@ -103,6 +104,12 @@ export default function MobileFoundryWorkspace() {
             <div className="mt-2 break-all rounded-xl border border-rose-500/20 bg-black/30 p-3 font-mono text-[11px] leading-5 text-rose-200">
               {state.storageError || "No storage error message was returned."}
             </div>
+          </div>
+        ) : null}
+
+        {state.storageReady ? (
+          <div className="mb-3">
+            <FoundryLinkMobilePanel state={state} />
           </div>
         ) : null}
 
