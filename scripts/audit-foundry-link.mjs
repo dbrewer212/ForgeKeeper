@@ -1,0 +1,66 @@
+import fs from "node:fs";
+
+function read(path) {
+  return fs.readFileSync(path, "utf8");
+}
+
+const files = {
+  protocol: read("src/foundry-link/protocol.ts"),
+  workspace: read("src/foundry-link/workspaceSync.ts"),
+  commands: read("src/foundry-link/remoteCommands.ts"),
+  mobileLink: read("src/mobile/FoundryLinkMobilePanel.tsx"),
+  mobileBastion: read("src/mobile/BastionMobilePanel.tsx"),
+  app: read("src/App.tsx"),
+  workstationTools: read("src/mesh/workstationTools.ts"),
+  policies: read("src/mesh/defaultPolicies.ts"),
+  workers: read("src/mesh/workers.ts"),
+  desktopRuntime: read("src/foundry-link/DesktopFoundryLinkRuntime.tsx"),
+  desktopWorkspace: read("src/ForgekeeperWorkspace.tsx"),
+  rustLink: read("src-tauri/src/foundry_link.rs"),
+  mobileCapabilities: read("src-tauri/capabilities/mobile.json"),
+};
+
+const checks = [
+  ["schema-v4", files.protocol.includes("FOUNDRY_LINK_SCHEMA_VERSION = 4")],
+  ["commands-in-link-bundle", files.workspace.includes("remoteCommands?: FoundryRemoteCommand[]")],
+  ["results-in-link-bundle", files.workspace.includes("remoteCommandResults?: FoundryRemoteCommandResult[]")],
+  ["transient-control-plane-canonicalized", files.protocol.includes("delete canonical.remoteCommands") && files.protocol.includes("delete canonical.remoteCommandResults")],
+  ["command-only-revisions-skip-durable-replacement", files.workspace.includes("if (incomingDurable === currentDurable) return")],
+  ["mobile-command-push", files.mobileLink.includes("hasPendingRemoteCommands()") && files.mobileLink.includes("foundry_link_remote_push_workspace")],
+  ["mobile-durable-hash", files.mobileLink.includes("canonicalFoundryLinkPayload")],
+  ["command-expiration", files.commands.includes("DEFAULT_COMMAND_TTL_MS = 5 * 60 * 1000") && files.commands.includes("expiresAt")],
+  ["expired-commands-denied", files.commands.includes("Remote command expired before the workstation could execute it")],
+  ["mesh-governed-execution", files.commands.includes("runtime.tools.invoke") && files.commands.includes('requesterWorkerId: "forgekeeper-mobile"')],
+  ["approval-round-trip", files.commands.includes("runtime.coordinator.approve") && files.commands.includes("runtime.coordinator.deny")],
+  ["mobile-worker-registered", files.workers.includes('id: "forgekeeper-mobile"')],
+  ["workstation-requester-guard", files.workstationTools.includes('worker.id !== "forgekeeper-mobile"')],
+  ["consolidated-bastion-snapshot", files.workstationTools.includes('name: "bastion.mobile_snapshot"')],
+  ["protective-safe-mode-mobile-allow", files.policies.includes('id: "mobile-console-enter-safe-mode"') && files.policies.includes("effect: \"allow\"")],
+  ["safe-mode-exit-still-governed", !files.policies.includes('workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.meshExitSafeMode, effect: "allow"')],
+  ["service-lifecycle-not-unconditionally-allowed", !files.policies.includes('workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.systemServiceStart, effect: "allow"') && !files.policies.includes('workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.systemServiceStop, effect: "allow"')],
+  ["bastion-mobile-mounted", files.app.includes("<BastionMobileOverlay />")],
+  ["mobile-bastion-controls-use-queue", files.mobileBastion.includes("queueRemoteTool") && files.mobileBastion.includes("queueRemoteApproval")],
+  ["desktop-link-runtime-mounted", files.desktopWorkspace.includes("<DesktopFoundryLinkRuntime")],
+  ["desktop-pending-mobile-commit", files.desktopRuntime.includes("foundry_link_take_pending_workspace") && files.desktopRuntime.includes("commitLinkedWorkspace")],
+  ["private-link-address-policy", files.rustLink.includes("is_private_link_ip") && files.rustLink.includes("is_cgnat")],
+  ["link-request-size-bounded", files.rustLink.includes("MAX_REQUEST_BYTES")],
+  ["mobile-native-sql-capability", files.mobileCapabilities.includes('"sql:default"')],
+];
+
+let failures = 0;
+for (const [name, passed] of checks) {
+  console.log(`${passed ? "PASS" : "FAIL"}|${name}`);
+  if (!passed) failures += 1;
+}
+
+const external = [
+  ["android-notification-bridge", files.mobileCapabilities.includes("notification:")],
+  ["android-deep-link-bridge", files.mobileCapabilities.includes("deep-link:")],
+  ["mobile-biometric-bridge", files.mobileCapabilities.includes("biometric:")],
+];
+for (const [name, commissioned] of external) {
+  console.log(`${commissioned ? "COMMISSIONED" : "EXTERNAL-PENDING"}|${name}`);
+}
+
+console.log(`Foundry Link integration audit: ${checks.length - failures}/${checks.length} structural invariants passed.`);
+if (failures > 0) process.exit(1);
