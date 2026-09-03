@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "audit:operational": "node scripts/audit-operational.mjs",
+    "audit:integration": "node scripts/audit-foundry-link.mjs",
     "preview": "vite preview",
     "desktop": "tauri dev",
     "desktop:build": "tauri build",
