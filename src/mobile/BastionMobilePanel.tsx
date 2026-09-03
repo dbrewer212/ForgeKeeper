@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { buildBastionAlerts } from "../bastion/alertBus";
 import type { FoundryRemoteCommandResult } from "../foundry-link/remoteCommands";
 import {
   getMobileRemoteCommandResults,
@@ -74,6 +75,13 @@ function toneForHealth(state?: string): string {
   return "border-emerald-700/40 bg-emerald-950/25 text-emerald-200";
 }
 
+function toneForAlert(severity: string): string {
+  if (severity === "emergency" || severity === "critical") return "border-rose-800/55 bg-rose-950/25 text-rose-100";
+  if (severity === "approval") return "border-amber-700/50 bg-amber-950/30 text-amber-100";
+  if (severity === "attention") return "border-orange-800/45 bg-orange-950/20 text-orange-100";
+  return "border-slate-800 bg-black/20 text-slate-300";
+}
+
 export function BastionMobilePanel({ state }: { state: ForgekeeperState }) {
   const [expanded, setExpanded] = useState(false);
   const [paired, setPaired] = useState(Boolean(loadLinkConfig()?.token));
@@ -94,6 +102,7 @@ export function BastionMobilePanel({ state }: { state: ForgekeeperState }) {
     [handledApprovals, results],
   );
 
+  const alerts = useMemo(() => buildBastionAlerts(state, snapshot), [state, snapshot]);
   const labels = readLabels();
   const telemetry = snapshot?.telemetry;
   const memoryPercent = percent(telemetry?.usedMemoryBytes, telemetry?.totalMemoryBytes);
@@ -195,6 +204,29 @@ export function BastionMobilePanel({ state }: { state: ForgekeeperState }) {
                   <div className="text-[10px] uppercase tracking-[0.18em] opacity-70">Foundry health</div>
                   <div className="mt-1 text-sm font-semibold uppercase">{snapshot.health.state}</div>
                   <div className="mt-1 text-xs leading-5 opacity-80">{snapshot.health.summary}</div>
+                </div>
+              ) : null}
+
+              {alerts.length > 0 ? (
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Alert Bus</div>
+                    <div className="text-[9px] uppercase tracking-[0.14em] text-slate-600">{alerts.length} active</div>
+                  </div>
+                  <div className="space-y-2">
+                    {alerts.slice(0, 6).map((alert) => (
+                      <div key={alert.id} className={`rounded-xl border p-3 ${toneForAlert(alert.severity)}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-[9px] uppercase tracking-[0.16em] opacity-60">{alert.source} · {alert.severity}</div>
+                            <div className="mt-1 text-sm font-semibold">{alert.title}</div>
+                          </div>
+                          <span className="shrink-0 rounded-full border border-current/20 px-2 py-0.5 text-[8px] font-semibold uppercase tracking-[0.12em] opacity-70">{alert.delivery}</span>
+                        </div>
+                        <div className="mt-1 text-[11px] leading-5 opacity-70">{alert.message}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
 
