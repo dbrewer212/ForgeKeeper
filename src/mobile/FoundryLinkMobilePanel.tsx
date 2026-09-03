@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { sha256Text } from "../lib/recovery";
 import type { ForgekeeperState } from "../state/useForgekeeperState";
+import { hasPendingRemoteCommands } from "../foundry-link/remoteCommands";
 import {
+  canonicalFoundryLinkPayload,
   commitLinkedWorkspace,
   serializeForgekeeperState,
   type FoundryLinkWorkspaceEnvelope,
@@ -41,6 +43,10 @@ function saveConfig(config: LinkConfig | null) {
     return;
   }
   window.localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+}
+
+async function hashDurablePayload(payload: string): Promise<string> {
+  return sha256Text(canonicalFoundryLinkPayload(payload));
 }
 
 export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
@@ -110,8 +116,8 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
       });
       const localPayload = serializeForgekeeperState(stateRef.current);
       const [localHash, remoteHash] = await Promise.all([
-        sha256Text(localPayload),
-        sha256Text(remote.payload),
+        hashDurablePayload(localPayload),
+        hashDurablePayload(remote.payload),
       ]);
       const baselineHash = config.lastSyncedHash;
 
@@ -145,6 +151,8 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
         commitConfig(next);
         setMessage(`Applying workstation revision ${remote.revision}…`);
         await commitLinkedWorkspace(stateRef.current, remote, "workstation sync");
+        setLinkState("synced");
+        setError("");
         return;
       }
 
@@ -157,7 +165,7 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
           return;
         }
 
-        if (localHash !== baselineHash) {
+        if (localHash !== baselineHash || hasPendingRemoteCommands()) {
           const pushed = await invoke<FoundryLinkWorkspaceEnvelope>("foundry_link_remote_push_workspace", {
             endpoint: config.endpoint,
             token: config.token,
@@ -165,11 +173,13 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
             payload: localPayload,
             force: false,
           });
-          const nextHash = await sha256Text(pushed.payload);
+          const nextHash = await hashDurablePayload(pushed.payload);
           commitConfig({ ...config, revision: pushed.revision, lastSyncedHash: nextHash });
           setLinkState("synced");
           setError("");
-          setMessage(`Mobile changes sent as workstation revision ${pushed.revision}.`);
+          setMessage(hasPendingRemoteCommands()
+            ? `Remote Bastion request sent as revision ${pushed.revision}.`
+            : `Mobile changes sent as workstation revision ${pushed.revision}.`);
           return;
         }
 
@@ -178,6 +188,8 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
           commitConfig(next);
           setMessage("Applying workstation content update…");
           await commitLinkedWorkspace(stateRef.current, remote, "workstation sync");
+          setLinkState("synced");
+          setError("");
           return;
         }
 
@@ -245,7 +257,7 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
     if (!config || !conflictRemote) return;
     busyRef.current = true;
     try {
-      const remoteHash = await sha256Text(conflictRemote.payload);
+      const remoteHash = await hashDurablePayload(conflictRemote.payload);
       commitConfig({ ...config, revision: conflictRemote.revision, lastSyncedHash: remoteHash });
       setMessage(`Accepting workstation revision ${conflictRemote.revision}…`);
       await commitLinkedWorkspace(stateRef.current, conflictRemote, "explicit conflict resolution: workstation copy");
@@ -271,7 +283,7 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
         payload,
         force: true,
       });
-      const nextHash = await sha256Text(pushed.payload);
+      const nextHash = await hashDurablePayload(pushed.payload);
       commitConfig({ ...config, revision: pushed.revision, lastSyncedHash: nextHash });
       setConflictRemote(null);
       setLinkState("synced");
@@ -353,7 +365,7 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
             </div>
           )}
 
-          <div className="mt-3 text-[11px] leading-5 text-slate-600">Foundry Link accepts private LAN or trusted overlay-network IPs only. Offline edits remain in this phone's native workspace until the workstation reconnects.</div>
+          <div className="mt-3 text-[11px] leading-5 text-slate-600">Foundry Link accepts private LAN or trusted overlay-network IPs only. Offline workspace edits and short-lived Bastion commands remain local until the workstation reconnects.</div>
           {error ? <div className="mt-3 break-words text-xs leading-5 text-rose-300">{error}</div> : null}
         </div>
       ) : null}
