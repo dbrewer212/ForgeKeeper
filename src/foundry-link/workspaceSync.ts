@@ -16,10 +16,14 @@ import {
   type FoundryRemoteCommand,
   type FoundryRemoteCommandResult,
 } from "./remoteCommands";
+import {
+  canonicalFoundryLinkPayload,
+  FOUNDRY_LINK_FORMAT,
+  FOUNDRY_LINK_SCHEMA_VERSION,
+} from "./protocol";
 import { replaceWorkbenchStateFromFoundryLink } from "./workbenchSync";
 
-const LINK_FORMAT = "forgekeeper.foundry-link";
-const LINK_SCHEMA_VERSION = 4;
+export { canonicalFoundryLinkPayload } from "./protocol";
 
 export type FoundryLinkWorkspaceEnvelope = {
   revision: number;
@@ -29,8 +33,8 @@ export type FoundryLinkWorkspaceEnvelope = {
 };
 
 type FoundryLinkWorkspaceBundle = {
-  format: typeof LINK_FORMAT;
-  schemaVersion: 2 | 3 | typeof LINK_SCHEMA_VERSION;
+  format: typeof FOUNDRY_LINK_FORMAT;
+  schemaVersion: 2 | 3 | typeof FOUNDRY_LINK_SCHEMA_VERSION;
   appData: AppData;
   meshDomain: FoundryDomainState;
   workbench?: WorkbenchState;
@@ -83,8 +87,8 @@ export function serializeForgekeeperState(state: ForgekeeperState): string {
   const mesh = getFoundryMeshRuntime();
   const mobile = isFoundryMobileRuntime();
   const bundle: FoundryLinkWorkspaceBundle = {
-    format: LINK_FORMAT,
-    schemaVersion: LINK_SCHEMA_VERSION,
+    format: FOUNDRY_LINK_FORMAT,
+    schemaVersion: FOUNDRY_LINK_SCHEMA_VERSION,
     appData: snapshotForgekeeperState(state),
     meshDomain: mesh.snapshot().domain,
     workbench: getWorkbenchStateForFoundryLink() ?? undefined,
@@ -92,19 +96,6 @@ export function serializeForgekeeperState(state: ForgekeeperState): string {
     remoteCommandResults: mobile ? undefined : getDesktopRemoteCommandResults(),
   };
   return JSON.stringify(bundle);
-}
-
-/**
- * Returns only durable workspace identity. Transient control-plane records must never
- * create false AppData/Mesh/Workbench conflicts between desktop and mobile.
- */
-export function canonicalFoundryLinkPayload(payload: string): string {
-  const parsed = JSON.parse(payload) as Record<string, unknown>;
-  if (parsed.format !== LINK_FORMAT) return JSON.stringify(parsed);
-  const canonical = { ...parsed };
-  delete canonical.remoteCommands;
-  delete canonical.remoteCommandResults;
-  return JSON.stringify(canonical);
 }
 
 function validateAppData(parsed: Partial<AppData>): AppData {
@@ -129,8 +120,8 @@ function validateAppData(parsed: Partial<AppData>): AppData {
 export function parseLinkedWorkspace(payload: string): ParsedLinkedWorkspace {
   const parsed = JSON.parse(payload) as Partial<FoundryLinkWorkspaceBundle> & Partial<AppData>;
 
-  if (parsed.format === LINK_FORMAT) {
-    if (parsed.schemaVersion !== 2 && parsed.schemaVersion !== 3 && parsed.schemaVersion !== LINK_SCHEMA_VERSION) {
+  if (parsed.format === FOUNDRY_LINK_FORMAT) {
+    if (parsed.schemaVersion !== 2 && parsed.schemaVersion !== 3 && parsed.schemaVersion !== FOUNDRY_LINK_SCHEMA_VERSION) {
       throw new Error(`Unsupported Foundry Link workspace schema ${String(parsed.schemaVersion)}.`);
     }
     if (!parsed.appData || !parsed.meshDomain) {
