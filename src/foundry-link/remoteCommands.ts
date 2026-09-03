@@ -4,10 +4,13 @@ const MOBILE_QUEUE_KEY = "forgekeeper.foundry-link.remote-commands.mobile.v1";
 const DESKTOP_RESULTS_KEY = "forgekeeper.foundry-link.remote-results.desktop.v1";
 const MOBILE_RESULTS_KEY = "forgekeeper.foundry-link.remote-results.mobile.v1";
 const MAX_RESULTS = 40;
+const MAX_COMMANDS = 30;
+const DEFAULT_COMMAND_TTL_MS = 5 * 60 * 1000;
 
 export type FoundryRemoteCommand = {
   id: string;
   requestedAt: string;
+  expiresAt: string;
   action: "mesh.tool" | "mesh.approve" | "mesh.deny";
   toolName?: string;
   payload?: unknown;
@@ -41,36 +44,63 @@ function writeJson(key: string, value: unknown) {
   }
 }
 
+function expiresAt(ttlMs = DEFAULT_COMMAND_TTL_MS): string {
+  return new Date(Date.now() + Math.max(5_000, ttlMs)).toISOString();
+}
+
+function isExpired(command: Pick<FoundryRemoteCommand, "expiresAt">): boolean {
+  return Date.parse(command.expiresAt) <= Date.now();
+}
+
+function pruneExpiredQueue(commands: FoundryRemoteCommand[]): FoundryRemoteCommand[] {
+  return commands.filter((command) => !isExpired(command)).slice(-MAX_COMMANDS);
+}
+
 export function getPendingRemoteCommands(): FoundryRemoteCommand[] {
-  return readJson<FoundryRemoteCommand[]>(MOBILE_QUEUE_KEY, []);
+  const commands = readJson<FoundryRemoteCommand[]>(MOBILE_QUEUE_KEY, []);
+  const retained = pruneExpiredQueue(commands);
+  if (retained.length !== commands.length) writeJson(MOBILE_QUEUE_KEY, retained);
+  return retained;
 }
 
 export function hasPendingRemoteCommands(): boolean {
   return getPendingRemoteCommands().length > 0;
 }
 
-export function queueRemoteTool(toolName: string, payload: unknown = {}, reason?: string): FoundryRemoteCommand {
+export function queueRemoteTool(
+  toolName: string,
+  payload: unknown = {},
+  reason?: string,
+  ttlMs = DEFAULT_COMMAND_TTL_MS,
+): FoundryRemoteCommand {
   const command: FoundryRemoteCommand = {
     id: crypto.randomUUID(),
     requestedAt: new Date().toISOString(),
+    expiresAt: expiresAt(ttlMs),
     action: "mesh.tool",
     toolName,
     payload,
     reason,
   };
-  writeJson(MOBILE_QUEUE_KEY, [...getPendingRemoteCommands(), command].slice(-30));
+  writeJson(MOBILE_QUEUE_KEY, [...getPendingRemoteCommands(), command].slice(-MAX_COMMANDS));
   return command;
 }
 
-export function queueRemoteApproval(approvalId: string, approve: boolean, reason?: string): FoundryRemoteCommand {
+export function queueRemoteApproval(
+  approvalId: string,
+  approve: boolean,
+  reason?: string,
+  ttlMs = DEFAULT_COMMAND_TTL_MS,
+): FoundryRemoteCommand {
   const command: FoundryRemoteCommand = {
     id: crypto.randomUUID(),
     requestedAt: new Date().toISOString(),
+    expiresAt: expiresAt(ttlMs),
     action: approve ? "mesh.approve" : "mesh.deny",
     approvalId,
     reason,
   };
-  writeJson(MOBILE_QUEUE_KEY, [...getPendingRemoteCommands(), command].slice(-30));
+  writeJson(MOBILE_QUEUE_KEY, [...getPendingRemoteCommands(), command].slice(-MAX_COMMANDS));
   return command;
 }
 
@@ -113,7 +143,7 @@ export async function processRemoteCommands(commands: FoundryRemoteCommand[] | u
   await runtime.initialize();
   const produced: FoundryRemoteCommandResult[] = [];
 
-  for (const command of commands.slice(-30)) {
+  for (const command of commands.slice(-MAX_COMMANDS)) {
     const prior = existing.get(command.id);
     if (prior) {
       produced.push(prior);
@@ -122,7 +152,14 @@ export async function processRemoteCommands(commands: FoundryRemoteCommand[] | u
 
     let result: FoundryRemoteCommandResult;
     try {
-      if (command.action === "mesh.tool") {
+      if (isExpired(command)) {
+        result = {
+          commandId: command.id,
+          completedAt: new Date().toISOString(),
+          state: "denied",
+          error: "Remote command expired before the workstation could execute it.",
+        };
+      } else if (command.action === "mesh.tool") {
         if (!command.toolName) throw new Error("Remote Mesh command is missing a tool name.");
         const invocation = await runtime.tools.invoke({
           toolName: command.toolName,
