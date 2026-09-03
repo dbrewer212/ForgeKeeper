@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - foundry-mesh-core
+      - mobile-foundry
   pull_request:
 
 jobs:
@@ -26,6 +27,9 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Audit operational surfaces
+        run: npm run audit:operational
 
       - name: Build frontend
         run: npm run build
