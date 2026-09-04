@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActionGateway, DEFAULT_APPROVAL_TTL_MS } from "./actionGateway";
+import { MeshCapabilities } from "./catalog";
+import { defaultPermissionRules } from "./defaultPolicies";
 import { InMemoryPermissionService } from "./permissionService";
 import type { ActionRequest, WorkerIdentity } from "./types";
+import { FoundryWorkers } from "./workers";
 
 const worker: WorkerIdentity = {
   id: "forgekeeper-mobile",
@@ -39,5 +42,13 @@ describe("ActionGateway approvals", () => {
     expect(evaluation.approval?.requestedAt).toBe("2026-09-04T16:05:00.000Z");
     expect(Date.parse(evaluation.approval!.expiresAt!) - Date.parse(evaluation.approval!.requestedAt)).toBe(DEFAULT_APPROVAL_TTL_MS);
     expect(evaluation.approval?.summary).toBe(request.reason);
+  });
+
+  it("keeps Mobile Foundry Safe Mode authority aligned with advertised capabilities", () => {
+    const permissions = new InMemoryPermissionService(defaultPermissionRules);
+    const mobile = FoundryWorkers.forgekeeperMobile;
+
+    expect(permissions.evaluate(mobile, MeshCapabilities.meshEnterSafeMode).effect).toBe("allow");
+    expect(permissions.evaluate(mobile, MeshCapabilities.meshExitSafeMode).effect).toBe("approval-required");
   });
 });
