@@ -114,6 +114,12 @@ pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarge
         .set_focus()
         .map_err(|error| format!("Failed to focus Bastion: {error}"))?;
 
+    if let Some(main_window) = app.get_webview_window("main") {
+        main_window
+            .hide()
+            .map_err(|error| format!("Failed to hide Forgekeeper while Bastion is resident: {error}"))?;
+    }
+
     Ok(target)
 }
 
@@ -136,11 +142,38 @@ pub async fn bastion_open_window(_app: tauri::AppHandle) -> Result<BastionDispla
 
 #[cfg(target_os = "windows")]
 #[tauri::command]
+pub async fn bastion_return_to_forgekeeper(app: tauri::AppHandle) -> Result<(), String> {
+    let main_window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Forgekeeper main window is unavailable.".to_string())?;
+
+    if let Some(bastion_window) = app.get_webview_window("bastion") {
+        bastion_window
+            .hide()
+            .map_err(|error| format!("Failed to hide Bastion while opening Forgekeeper: {error}"))?;
+    }
+
+    main_window
+        .show()
+        .map_err(|error| format!("Failed to show Forgekeeper: {error}"))?;
+    main_window
+        .set_focus()
+        .map_err(|error| format!("Failed to focus Forgekeeper: {error}"))
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub async fn bastion_return_to_forgekeeper(_app: tauri::AppHandle) -> Result<(), String> {
+    Err("Forgekeeper workstation window control is only available on Windows Foundry hosts.".to_string())
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
 pub async fn bastion_close_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("bastion") {
         window
-            .close()
-            .map_err(|error| format!("Failed to close Bastion: {error}"))?;
+            .hide()
+            .map_err(|error| format!("Failed to hide Bastion: {error}"))?;
     }
     Ok(())
 }
@@ -149,6 +182,11 @@ pub async fn bastion_close_window(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn bastion_close_window(_app: tauri::AppHandle) -> Result<(), String> {
     Err("Bastion workstation display control is only available on Windows Foundry hosts.".to_string())
+}
+
+#[tauri::command]
+pub fn foundry_host_exit(app: tauri::AppHandle) {
+    app.exit(0);
 }
 
 #[cfg(target_os = "windows")]
