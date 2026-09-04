@@ -86,6 +86,35 @@ describe("Bastion Alert Bus", () => {
     expect(approval?.evidence).toContain("Pending approvals: 2");
   });
 
+  it("surfaces telemetry provider failures instead of silently showing missing metrics", () => {
+    const alerts = buildBastionAlerts({}, {
+      sampledAt: "2026-09-04T12:00:00.000Z",
+      telemetryError: "Watcher native provider unavailable",
+    });
+
+    const telemetry = alerts.find((item) => item.affectedEntity === "watcher-telemetry");
+    expect(telemetry?.severity).toBe("attention");
+    expect(telemetry?.evidence).toContain("Watcher native provider unavailable");
+  });
+
+  it("escalates uncertain remote command outcomes and blocks blind retries", () => {
+    const alerts = buildBastionAlerts({}, {
+      sampledAt: "2026-09-04T12:00:00.000Z",
+      uncertainRemoteCommands: [{
+        id: "remote-1",
+        correlationId: "corr-1",
+        requestedAtMs: 1_725_450_000_000,
+        operation: "mesh.tool",
+        toolName: "system.service.restart",
+      }],
+    });
+
+    const uncertain = alerts.find((item) => item.affectedEntity === "remote-1");
+    expect(uncertain?.severity).toBe("critical");
+    expect(uncertain?.message).toContain("Automatic re-execution is blocked");
+    expect(uncertain?.allowedActions).toContain("inspect-remote-command");
+  });
+
   it("does not alert when out-of-service printers remain offline", () => {
     const alerts = buildBastionAlerts({
       printers: [
