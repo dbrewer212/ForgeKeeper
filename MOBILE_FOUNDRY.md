@@ -14,7 +14,7 @@ The `mobile-foundry` branch currently provides:
 - Conflict-aware AppData synchronization.
 - Shared Mesh-domain synchronization while preserving device-local worker/runtime health.
 - Shared Workbench metadata/state synchronization with recovery snapshots.
-- A schema-v4 transient command/result control plane that is explicitly excluded from durable workspace conflict identity.
+- A dedicated authenticated FIFO command/result channel independent of durable workspace revisions.
 - Governed mobile-to-workstation Mesh tool execution through the `forgekeeper-mobile` worker identity.
 - Short-lived remote commands with five-minute expiry so stale offline actions do not execute unexpectedly after reconnection.
 - Remote approval/denial round trips through the existing Mesh coordinator.
@@ -57,19 +57,17 @@ Workbench managed-file metadata can synchronize, but Windows file paths do not b
 
 ## Foundry Link control plane
 
-Schema v4 carries optional transient `remoteCommands` and `remoteCommandResults` beside durable workspace data.
-
-Those records are removed before durable workspace hashing and conflict comparison. This prevents a telemetry refresh, approval request, or command result from looking like a product/material/production edit.
+Workspace synchronization remains schema v3. Operational commands and results use dedicated authenticated endpoints with host-assigned FIFO sequence numbers, per-device isolation, expiry, duplicate protection, and explicit result acknowledgements.
 
 The communication lifecycle is:
 
 1. Mobile queues a short-lived command.
-2. The command is published through the authenticated Foundry Link revision stream.
-3. Desktop receives the revision and processes the command as `forgekeeper-mobile` through the Mesh Tool Gateway.
+2. The command is submitted to the authenticated command FIFO without changing the workspace revision.
+3. Bastion Host dequeues it in order and processes it as `forgekeeper-mobile` through the Mesh Tool Gateway.
 4. Mesh permissions either execute it, deny it, or return an approval request.
-5. Desktop publishes the result.
-6. Mobile absorbs the result and removes the fulfilled command from its queue.
-7. Command-only/result-only revisions do not replace AppData/Mesh/Workbench state and do not trigger workspace reloads.
+5. Bastion Host publishes the result to the requesting device's result FIFO.
+6. Mobile absorbs the result and explicitly acknowledges it.
+7. Unacknowledged results are redelivered, while duplicate command IDs never execute twice.
 
 If a command expires before the workstation can execute it, it is denied rather than replayed later.
 

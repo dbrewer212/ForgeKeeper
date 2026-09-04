@@ -1,5 +1,5 @@
 export const FOUNDRY_LINK_FORMAT = "forgekeeper.foundry-link";
-export const FOUNDRY_LINK_SCHEMA_VERSION = 4 as const;
+export const FOUNDRY_LINK_SCHEMA_VERSION = 3 as const;
 
 /**
  * Produce the identity used for durable workspace conflict detection.

@@ -22,14 +22,13 @@ const files = {
 };
 
 const checks = [
-  ["schema-v4", files.protocol.includes("FOUNDRY_LINK_SCHEMA_VERSION = 4")],
-  ["commands-in-link-bundle", files.workspace.includes("remoteCommands?: FoundryRemoteCommand[]")],
-  ["results-in-link-bundle", files.workspace.includes("remoteCommandResults?: FoundryRemoteCommandResult[]")],
-  ["transient-control-plane-canonicalized", files.protocol.includes("delete canonical.remoteCommands") && files.protocol.includes("delete canonical.remoteCommandResults")],
-  ["command-only-revisions-skip-durable-replacement", files.workspace.includes("if (incomingDurable === currentDurable) return")],
-  ["mobile-command-push", files.mobileLink.includes("hasPendingRemoteCommands()") && files.mobileLink.includes("foundry_link_remote_push_workspace")],
+  ["workspace-schema-v3", files.protocol.includes("FOUNDRY_LINK_SCHEMA_VERSION = 3")],
+  ["commands-excluded-from-workspace", !files.workspace.includes("remoteCommands?: FoundryRemoteCommand[]")],
+  ["results-excluded-from-workspace", !files.workspace.includes("remoteCommandResults?: FoundryRemoteCommandResult[]")],
+  ["dedicated-command-routes", files.rustLink.includes('("POST", "/commands")') && files.rustLink.includes('("GET", "/results")') && files.rustLink.includes('("POST", "/results/ack")')],
+  ["mobile-command-channel", files.mobileLink.includes("foundry_link_remote_submit_command") && files.mobileLink.includes("foundry_link_remote_get_results") && files.mobileLink.includes("foundry_link_remote_ack_results")],
   ["mobile-durable-hash", files.mobileLink.includes("canonicalFoundryLinkPayload")],
-  ["command-expiration", files.commands.includes("DEFAULT_COMMAND_TTL_MS = 5 * 60 * 1000") && files.commands.includes("expiresAt")],
+  ["command-expiration", files.commands.includes("DEFAULT_COMMAND_TTL_MS = 5 * 60 * 1000") && files.commands.includes("expiresAtMs")],
   ["expired-commands-denied", files.commands.includes("Remote command expired before the workstation could execute it")],
   ["mesh-governed-execution", files.commands.includes("runtime.tools.invoke") && files.commands.includes('requesterWorkerId: "forgekeeper-mobile"')],
   ["approval-round-trip", files.commands.includes("runtime.coordinator.approve") && files.commands.includes("runtime.coordinator.deny")],
@@ -42,11 +41,13 @@ const checks = [
   ["bastion-mobile-mounted", files.app.includes("<BastionMobileOverlay />")],
   ["mobile-bastion-controls-use-queue", files.mobileBastion.includes("queueRemoteTool") && files.mobileBastion.includes("queueRemoteApproval")],
   ["desktop-link-runtime-mounted", files.desktopWorkspace.includes("<DesktopFoundryLinkRuntime")],
+  ["desktop-command-processor", files.desktopRuntime.includes("foundry_link_take_pending_commands") && files.desktopRuntime.includes("foundry_link_publish_command_result")],
   ["desktop-pending-mobile-commit", files.desktopRuntime.includes("foundry_link_take_pending_workspace") && files.desktopRuntime.includes("commitLinkedWorkspace")],
   ["bastion-startup-hides-main-host", files.rustHost.includes('get_webview_window("main")') && files.rustHost.includes("main_window") && files.rustHost.includes(".hide()")],
   ["bastion-startup-autostarts-link", files.rustHost.includes("foundry_link_start(link_state, Some(4717))")],
   ["private-link-address-policy", files.rustLink.includes("is_private_link_ip") && files.rustLink.includes("is_cgnat")],
   ["link-request-size-bounded", files.rustLink.includes("MAX_REQUEST_BYTES")],
+  ["trusted-launcher-boundary", files.workstationTools.includes("launcherId") && !files.workstationTools.includes("toolPath") && files.rustHost.includes("launch_trusted_tool")],
   ["mobile-native-sql-capability", files.mobileCapabilities.includes('"sql:default"')],
 ];
 

@@ -15,9 +15,10 @@ use bastion::{
 };
 use forgepack::{workbench_export_forgepack, workbench_import_forgepack};
 use foundry_link::{
-    foundry_link_publish_workspace, foundry_link_remote_get_workspace,
-    foundry_link_remote_pair, foundry_link_remote_push_workspace, foundry_link_rotate_pairing_code,
-    foundry_link_start, foundry_link_status, foundry_link_stop, foundry_link_take_pending_workspace,
+    foundry_link_publish_command_result, foundry_link_publish_workspace, foundry_link_remote_ack_results,
+    foundry_link_remote_get_results, foundry_link_remote_get_workspace, foundry_link_remote_pair,
+    foundry_link_remote_push_workspace, foundry_link_remote_submit_command, foundry_link_rotate_pairing_code,
+    foundry_link_start, foundry_link_status, foundry_link_stop, foundry_link_take_pending_commands, foundry_link_take_pending_workspace,
     FoundryLinkRuntime,
 };
 use managed_files::workbench_store_file;
@@ -66,6 +67,18 @@ fn launch_external_tool(tool_path: String, asset_path: Option<String>) -> Result
 
     let resolved_tool = resolve_tool_path(&tool_path);
     open_with_windows_shell(&resolved_tool, asset_path.as_deref())
+}
+
+#[tauri::command]
+fn launch_trusted_tool(launcher_id: String) -> Result<(), String> {
+    let candidates: &[&str] = match launcher_id.trim() {
+        "blender" => &["C:\\Program Files\\Blender Foundation\\Blender 4.5\\blender.exe", "blender.exe"],
+        "anycubic" => &["C:\\Program Files\\AnycubicSlicerNext\\AnycubicSlicerNext.exe", "AnycubicSlicerNext.exe"],
+        "orca" => &["C:\\Program Files\\OrcaSlicer\\OrcaSlicer.exe", "OrcaSlicer.exe"],
+        _ => return Err("Unknown Launch Bay launcherId.".to_string()),
+    };
+    let target = candidates.iter().find(|candidate| Path::new(candidate).is_file()).copied().unwrap_or(candidates[candidates.len() - 1]);
+    Command::new(target).spawn().map(|_| ()).map_err(|error| format!("Failed to launch trusted target {launcher_id}: {error}"))
 }
 
 #[tauri::command]
@@ -407,6 +420,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_path,
             launch_external_tool,
+            launch_trusted_tool,
             local_http_get,
             watcher_system_snapshot,
             inspect_local_paths,
@@ -439,9 +453,14 @@ pub fn run() {
             foundry_link_rotate_pairing_code,
             foundry_link_publish_workspace,
             foundry_link_take_pending_workspace,
+            foundry_link_take_pending_commands,
+            foundry_link_publish_command_result,
             foundry_link_remote_pair,
             foundry_link_remote_get_workspace,
-            foundry_link_remote_push_workspace
+            foundry_link_remote_push_workspace,
+            foundry_link_remote_submit_command,
+            foundry_link_remote_get_results,
+            foundry_link_remote_ack_results
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

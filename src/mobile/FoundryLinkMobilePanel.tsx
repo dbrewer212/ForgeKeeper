@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { sha256Text } from "../lib/recovery";
 import type { ForgekeeperState } from "../state/useForgekeeperState";
-import { hasPendingRemoteCommands } from "../foundry-link/remoteCommands";
+import {
+  absorbRemoteCommandResults,
+  getPendingRemoteCommands,
+  markRemoteCommandsSubmitted,
+  type FoundryRemoteCommandResult,
+} from "../foundry-link/remoteCommands";
 import {
   canonicalFoundryLinkPayload,
   commitLinkedWorkspace,
@@ -110,6 +115,22 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
 
     busyRef.current = true;
     try {
+      const pendingCommands = getPendingRemoteCommands();
+      const submitted: string[] = [];
+      for (const command of pendingCommands) {
+        await invoke("foundry_link_remote_submit_command", { endpoint: config.endpoint, token: config.token, command });
+        submitted.push(command.id);
+      }
+      if (submitted.length) markRemoteCommandsSubmitted(submitted);
+
+      const commandResults = await invoke<FoundryRemoteCommandResult[]>("foundry_link_remote_get_results", {
+        endpoint: config.endpoint, token: config.token,
+      });
+      const acknowledged = absorbRemoteCommandResults(commandResults);
+      if (acknowledged.length) {
+        await invoke("foundry_link_remote_ack_results", { endpoint: config.endpoint, token: config.token, commandIds: acknowledged });
+      }
+
       const remote = await invoke<FoundryLinkWorkspaceEnvelope>("foundry_link_remote_get_workspace", {
         endpoint: config.endpoint,
         token: config.token,
@@ -165,7 +186,7 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
           return;
         }
 
-        if (localHash !== baselineHash || hasPendingRemoteCommands()) {
+        if (localHash !== baselineHash) {
           const pushed = await invoke<FoundryLinkWorkspaceEnvelope>("foundry_link_remote_push_workspace", {
             endpoint: config.endpoint,
             token: config.token,
@@ -177,9 +198,7 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
           commitConfig({ ...config, revision: pushed.revision, lastSyncedHash: nextHash });
           setLinkState("synced");
           setError("");
-          setMessage(hasPendingRemoteCommands()
-            ? `Remote Bastion request sent as revision ${pushed.revision}.`
-            : `Mobile changes sent as workstation revision ${pushed.revision}.`);
+          setMessage(`Mobile changes sent as workstation revision ${pushed.revision}.`);
           return;
         }
 

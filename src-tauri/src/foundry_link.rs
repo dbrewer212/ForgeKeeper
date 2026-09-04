@@ -2,7 +2,7 @@ use rand::{rngs::OsRng, RngCore};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::sync::{
@@ -16,6 +16,9 @@ use tauri::State;
 const DEFAULT_PORT: u16 = 4717;
 const MAX_REQUEST_BYTES: usize = 16 * 1024 * 1024;
 const IO_TIMEOUT: Duration = Duration::from_secs(8);
+const COMMAND_TTL_LIMIT_MS: u64 = 15 * 60 * 1000;
+const MAX_COMMAND_QUEUE: usize = 256;
+const MAX_RESULTS_PER_DEVICE: usize = 256;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,6 +74,49 @@ struct PushWorkspaceRequest {
     force: Option<bool>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FoundryLinkCommand {
+    pub id: String,
+    pub requesting_device_id: String,
+    pub requested_at_ms: u64,
+    pub expires_at_ms: u64,
+    pub operation: String,
+    pub payload: serde_json::Value,
+    pub correlation_id: String,
+    pub sequence: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FoundryLinkCommandResult {
+    pub command_id: String,
+    pub requesting_device_id: String,
+    pub correlation_id: String,
+    pub completed_at_ms: u64,
+    pub state: String,
+    pub result: Option<serde_json::Value>,
+    pub error: Option<String>,
+    pub approval_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SubmitCommandRequest {
+    id: String,
+    requested_at_ms: u64,
+    expires_at_ms: u64,
+    operation: String,
+    payload: serde_json::Value,
+    correlation_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcknowledgeResultsRequest {
+    command_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone)]
 struct Session {
     token: String,
@@ -86,6 +132,10 @@ struct SharedState {
     workspace: Option<FoundryLinkWorkspaceEnvelope>,
     pending_workspace: Option<FoundryLinkWorkspaceEnvelope>,
     sessions: HashMap<String, Session>,
+    next_command_sequence: u64,
+    commands: VecDeque<FoundryLinkCommand>,
+    command_owners: HashMap<String, String>,
+    results: HashMap<String, VecDeque<FoundryLinkCommandResult>>,
 }
 
 impl Default for SharedState {
@@ -99,6 +149,10 @@ impl Default for SharedState {
             workspace: None,
             pending_workspace: None,
             sessions: HashMap::new(),
+            next_command_sequence: 1,
+            commands: VecDeque::new(),
+            command_owners: HashMap::new(),
+            results: HashMap::new(),
         }
     }
 }
@@ -266,13 +320,55 @@ pub fn foundry_link_take_pending_workspace(
 }
 
 #[tauri::command]
+pub fn foundry_link_take_pending_commands(
+    state: State<'_, FoundryLinkRuntime>,
+) -> Result<Vec<FoundryLinkCommand>, String> {
+    let mut shared = state.shared.lock().map_err(|_| "Foundry Link state is unavailable.".to_string())?;
+    let now = now_ms();
+    let mut pending = Vec::new();
+    while let Some(command) = shared.commands.pop_front() {
+        if command.expires_at_ms <= now {
+            let result = FoundryLinkCommandResult {
+                command_id: command.id.clone(),
+                requesting_device_id: command.requesting_device_id.clone(),
+                correlation_id: command.correlation_id.clone(),
+                completed_at_ms: now,
+                state: "denied".to_string(),
+                result: None,
+                error: Some("Remote command expired before the workstation could execute it.".to_string()),
+                approval_id: None,
+            };
+            store_result(&mut shared, result);
+        } else {
+            pending.push(command);
+        }
+    }
+    Ok(pending)
+}
+
+#[tauri::command]
+pub fn foundry_link_publish_command_result(
+    state: State<'_, FoundryLinkRuntime>,
+    result: FoundryLinkCommandResult,
+) -> Result<(), String> {
+    let mut shared = state.shared.lock().map_err(|_| "Foundry Link state is unavailable.".to_string())?;
+    let owner = shared.command_owners.get(&result.command_id)
+        .ok_or_else(|| "Command is not known to this Foundry Link host.".to_string())?;
+    if owner != &result.requesting_device_id {
+        return Err("Command result device does not match the requesting device.".to_string());
+    }
+    store_result(&mut shared, result);
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn foundry_link_remote_pair(
     endpoint: String,
     code: String,
     device_name: String,
 ) -> Result<FoundryLinkPairResponse, String> {
     let endpoint = validate_private_endpoint(&endpoint)?;
-    let response = reqwest::Client::new()
+    let response = remote_client()?
         .post(format!("{endpoint}/pair"))
         .json(&json!({ "code": code, "deviceName": device_name }))
         .send()
@@ -288,7 +384,7 @@ pub async fn foundry_link_remote_get_workspace(
     token: String,
 ) -> Result<FoundryLinkWorkspaceEnvelope, String> {
     let endpoint = validate_private_endpoint(&endpoint)?;
-    let response = reqwest::Client::new()
+    let response = remote_client()?
         .get(format!("{endpoint}/workspace"))
         .bearer_auth(token)
         .send()
@@ -308,7 +404,7 @@ pub async fn foundry_link_remote_push_workspace(
 ) -> Result<FoundryLinkWorkspaceEnvelope, String> {
     validate_workspace_payload(&payload)?;
     let endpoint = validate_private_endpoint(&endpoint)?;
-    let response = reqwest::Client::new()
+    let response = remote_client()?
         .post(format!("{endpoint}/workspace"))
         .bearer_auth(token)
         .json(&json!({
@@ -320,6 +416,52 @@ pub async fn foundry_link_remote_push_workspace(
         .await
         .map_err(|error| format!("Could not reach Foundry Link: {error}"))?;
 
+    parse_remote_response(response).await
+}
+
+fn remote_client() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(3))
+        .timeout(Duration::from_secs(8))
+        .build()
+        .map_err(|error| format!("Could not configure Foundry Link client: {error}"))
+}
+
+#[tauri::command]
+pub async fn foundry_link_remote_submit_command(
+    endpoint: String,
+    token: String,
+    command: serde_json::Value,
+) -> Result<FoundryLinkCommand, String> {
+    let endpoint = validate_private_endpoint(&endpoint)?;
+    let response = remote_client()?.post(format!("{endpoint}/commands"))
+        .bearer_auth(token).json(&command).send().await
+        .map_err(|error| format!("Could not submit Foundry Link command: {error}"))?;
+    parse_remote_response(response).await
+}
+
+#[tauri::command]
+pub async fn foundry_link_remote_get_results(
+    endpoint: String,
+    token: String,
+) -> Result<Vec<FoundryLinkCommandResult>, String> {
+    let endpoint = validate_private_endpoint(&endpoint)?;
+    let response = remote_client()?.get(format!("{endpoint}/results"))
+        .bearer_auth(token).send().await
+        .map_err(|error| format!("Could not fetch Foundry Link results: {error}"))?;
+    parse_remote_response(response).await
+}
+
+#[tauri::command]
+pub async fn foundry_link_remote_ack_results(
+    endpoint: String,
+    token: String,
+    command_ids: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    let endpoint = validate_private_endpoint(&endpoint)?;
+    let response = remote_client()?.post(format!("{endpoint}/results/ack"))
+        .bearer_auth(token).json(&json!({ "commandIds": command_ids })).send().await
+        .map_err(|error| format!("Could not acknowledge Foundry Link results: {error}"))?;
     parse_remote_response(response).await
 }
 
@@ -525,8 +667,130 @@ fn route_request(request: HttpRequest, _peer: SocketAddr, shared: &Arc<Mutex<Sha
             };
             push_workspace(&request.body, &token, shared)
         }
+        ("POST", "/commands") => {
+            let token = match bearer_token(&request.headers) {
+                Some(token) => token,
+                None => return HttpResponse::json(401, json!({ "error": "Bearer token required." })),
+            };
+            submit_command(&request.body, &token, shared)
+        }
+        ("GET", "/results") => {
+            let token = match bearer_token(&request.headers) {
+                Some(token) => token,
+                None => return HttpResponse::json(401, json!({ "error": "Bearer token required." })),
+            };
+            get_results(&token, shared)
+        }
+        ("POST", "/results/ack") => {
+            let token = match bearer_token(&request.headers) {
+                Some(token) => token,
+                None => return HttpResponse::json(401, json!({ "error": "Bearer token required." })),
+            };
+            acknowledge_results(&request.body, &token, shared)
+        }
         _ => HttpResponse::json(404, json!({ "error": "Foundry Link route not found." })),
     }
+}
+
+fn submit_command(body: &str, token: &str, shared: &Arc<Mutex<SharedState>>) -> HttpResponse {
+    let request: SubmitCommandRequest = match serde_json::from_str(body) {
+        Ok(request) => request,
+        Err(error) => return HttpResponse::json(400, json!({ "error": format!("Invalid command request: {error}") })),
+    };
+    let mut state = match shared.lock() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::json(500, json!({ "error": "Foundry Link state unavailable." })),
+    };
+    if !touch_session(&mut state, token) {
+        return HttpResponse::json(401, json!({ "error": "Unknown Foundry Link device token." }));
+    }
+    let device_id = state.sessions.get(token).map(|session| session.device.id.clone()).unwrap_or_default();
+    if request.id.trim().is_empty() || request.correlation_id.trim().is_empty() || request.operation.trim().is_empty() {
+        return HttpResponse::json(400, json!({ "error": "Command id, correlationId, and operation are required." }));
+    }
+    let now = now_ms();
+    if request.expires_at_ms <= now || request.expires_at_ms <= request.requested_at_ms {
+        return HttpResponse::json(400, json!({ "error": "Command is expired or has an invalid expiry." }));
+    }
+    if request.expires_at_ms.saturating_sub(now) > COMMAND_TTL_LIMIT_MS {
+        return HttpResponse::json(400, json!({ "error": "Command expiry exceeds the host TTL limit." }));
+    }
+    if let Some(owner) = state.command_owners.get(&request.id) {
+        if owner != &device_id {
+            return HttpResponse::json(409, json!({ "error": "Command id already belongs to another device." }));
+        }
+        if let Some(existing) = state.commands.iter().find(|command| command.id == request.id) {
+            return HttpResponse::serializable(200, existing);
+        }
+        if state.results.get(&device_id).and_then(|items| items.iter().find(|item| item.command_id == request.id)).is_some() {
+            return HttpResponse::json(200, json!({
+                "id": request.id, "requestingDeviceId": device_id, "requestedAtMs": request.requested_at_ms,
+                "expiresAtMs": request.expires_at_ms, "operation": request.operation, "payload": request.payload,
+                "correlationId": request.correlation_id, "sequence": 0
+            }));
+        }
+        return HttpResponse::json(200, json!({
+            "id": request.id, "requestingDeviceId": device_id, "requestedAtMs": request.requested_at_ms,
+            "expiresAtMs": request.expires_at_ms, "operation": request.operation, "payload": request.payload,
+            "correlationId": request.correlation_id, "sequence": 0
+        }));
+    }
+    if state.commands.len() >= MAX_COMMAND_QUEUE {
+        return HttpResponse::json(429, json!({ "error": "Foundry Link command queue is full." }));
+    }
+    let sequence = state.next_command_sequence;
+    state.next_command_sequence = state.next_command_sequence.saturating_add(1);
+    let command = FoundryLinkCommand {
+        id: request.id, requesting_device_id: device_id.clone(), requested_at_ms: request.requested_at_ms,
+        expires_at_ms: request.expires_at_ms, operation: request.operation, payload: request.payload,
+        correlation_id: request.correlation_id, sequence,
+    };
+    state.command_owners.insert(command.id.clone(), device_id);
+    state.commands.push_back(command.clone());
+    HttpResponse::serializable(200, &command)
+}
+
+fn get_results(token: &str, shared: &Arc<Mutex<SharedState>>) -> HttpResponse {
+    let mut state = match shared.lock() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::json(500, json!({ "error": "Foundry Link state unavailable." })),
+    };
+    if !touch_session(&mut state, token) {
+        return HttpResponse::json(401, json!({ "error": "Unknown Foundry Link device token." }));
+    }
+    let device_id = state.sessions.get(token).map(|session| session.device.id.clone()).unwrap_or_default();
+    let results = state.results.get(&device_id).cloned().unwrap_or_default();
+    HttpResponse::serializable(200, &results)
+}
+
+fn acknowledge_results(body: &str, token: &str, shared: &Arc<Mutex<SharedState>>) -> HttpResponse {
+    let request: AcknowledgeResultsRequest = match serde_json::from_str(body) {
+        Ok(request) => request,
+        Err(error) => return HttpResponse::json(400, json!({ "error": format!("Invalid result acknowledgement: {error}") })),
+    };
+    let mut state = match shared.lock() {
+        Ok(state) => state,
+        Err(_) => return HttpResponse::json(500, json!({ "error": "Foundry Link state unavailable." })),
+    };
+    if !touch_session(&mut state, token) {
+        return HttpResponse::json(401, json!({ "error": "Unknown Foundry Link device token." }));
+    }
+    let device_id = state.sessions.get(token).map(|session| session.device.id.clone()).unwrap_or_default();
+    let acknowledged: std::collections::HashSet<_> = request.command_ids.iter().collect();
+    if let Some(results) = state.results.get_mut(&device_id) {
+        results.retain(|item| !acknowledged.contains(&item.command_id));
+    }
+    HttpResponse::json(200, json!({ "acknowledged": request.command_ids.len() }))
+}
+
+fn store_result(state: &mut SharedState, result: FoundryLinkCommandResult) {
+    let results = state.results.entry(result.requesting_device_id.clone()).or_default();
+    if let Some(existing) = results.iter_mut().find(|item| item.command_id == result.command_id) {
+        *existing = result;
+        return;
+    }
+    results.push_back(result);
+    while results.len() > MAX_RESULTS_PER_DEVICE { results.pop_front(); }
 }
 
 fn pair_device(body: &str, shared: &Arc<Mutex<SharedState>>) -> HttpResponse {
@@ -767,4 +1031,60 @@ fn now_ms() -> u64 {
 
 fn find_subsequence(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|window| window == needle)
+}
+
+#[cfg(test)]
+mod command_tests {
+    use super::*;
+
+    fn linked_state() -> Arc<Mutex<SharedState>> {
+        let mut state = SharedState::default();
+        let now = now_ms();
+        state.sessions.insert("token-a".into(), Session { token: "token-a".into(), device: FoundryLinkDevice { id: "device-a".into(), name: "A".into(), paired_at_ms: now, last_seen_at_ms: now } });
+        state.sessions.insert("token-b".into(), Session { token: "token-b".into(), device: FoundryLinkDevice { id: "device-b".into(), name: "B".into(), paired_at_ms: now, last_seen_at_ms: now } });
+        Arc::new(Mutex::new(state))
+    }
+
+    fn body(id: &str, expiry_offset: i64) -> String {
+        let now = now_ms();
+        let expires = if expiry_offset < 0 { now.saturating_sub((-expiry_offset) as u64) } else { now + expiry_offset as u64 };
+        json!({ "id": id, "requestedAtMs": now.saturating_sub(1), "expiresAtMs": expires, "operation": "mesh.tool", "payload": { "toolName": "bastion.mobile_snapshot" }, "correlationId": id }).to_string()
+    }
+
+    #[test]
+    fn fifo_and_duplicate_protection_are_independent_of_workspace_revision() {
+        let shared = linked_state();
+        assert_eq!(submit_command(&body("one", 60_000), "token-a", &shared).status, 200);
+        assert_eq!(submit_command(&body("two", 60_000), "token-a", &shared).status, 200);
+        assert_eq!(submit_command(&body("one", 60_000), "token-a", &shared).status, 200);
+        let state = shared.lock().unwrap();
+        assert_eq!(state.commands.len(), 2);
+        assert_eq!(state.commands[0].id, "one");
+        assert_eq!(state.commands[1].id, "two");
+        assert_eq!(state.revision, 0);
+    }
+
+    #[test]
+    fn rejects_expired_commands_and_cross_device_id_reuse() {
+        let shared = linked_state();
+        assert_eq!(submit_command(&body("expired", -1), "token-a", &shared).status, 400);
+        assert_eq!(submit_command(&body("owned", 60_000), "token-a", &shared).status, 200);
+        assert_eq!(submit_command(&body("owned", 60_000), "token-b", &shared).status, 409);
+    }
+
+    #[test]
+    fn results_redeliver_until_ack_and_remain_device_isolated() {
+        let shared = linked_state();
+        assert_eq!(submit_command(&body("result-1", 60_000), "token-a", &shared).status, 200);
+        {
+            let mut state = shared.lock().unwrap();
+            store_result(&mut state, FoundryLinkCommandResult { command_id: "result-1".into(), requesting_device_id: "device-a".into(), correlation_id: "result-1".into(), completed_at_ms: now_ms(), state: "completed".into(), result: None, error: None, approval_id: None });
+        }
+        let first = get_results("token-a", &shared);
+        let again = get_results("token-a", &shared);
+        assert_eq!(first.body, again.body);
+        assert_eq!(get_results("token-b", &shared).body, "[]");
+        assert_eq!(acknowledge_results(&json!({ "commandIds": ["result-1"] }).to_string(), "token-a", &shared).status, 200);
+        assert_eq!(get_results("token-a", &shared).body, "[]");
+    }
 }

@@ -10,7 +10,7 @@ function requirePairedMobile(worker: WorkerIdentity) {
 }
 
 export function registerWorkstationTools(runtime: FoundryMeshRuntime): void {
-  runtime.tools.register<{ toolPath: string; assetPath?: string }, { launched: true }>(
+  runtime.tools.register<{ launcherId: "orca" | "anycubic" | "blender" }, { launched: true }>(
     {
       name: "workstation.launch_tool",
       capabilityId: MeshCapabilities.workstationLaunchTool,
@@ -19,26 +19,20 @@ export function registerWorkstationTools(runtime: FoundryMeshRuntime): void {
       inputSchema: {
         type: "object",
         properties: {
-          toolPath: { type: "string" },
-          assetPath: { type: "string" },
+          launcherId: { type: "string", enum: ["orca", "anycubic", "blender"] },
         },
-        required: ["toolPath"],
+        required: ["launcherId"],
         additionalProperties: false,
       },
     },
-    async ({ toolPath, assetPath }, _request, worker) => {
+    async ({ launcherId }, _request, worker) => {
       requirePairedMobile(worker);
-      const trimmed = toolPath.trim();
-      if (!trimmed) throw new Error("Workstation tool path is not configured.");
-      await invoke("launch_external_tool", {
-        toolPath: trimmed,
-        assetPath: assetPath?.trim() || null,
-      });
+      await invoke("launch_trusted_tool", { launcherId });
       return { launched: true };
     },
   );
 
-  runtime.tools.register<{ path: string }, { opened: true }>(
+  runtime.tools.register<{ locationId: string }, { opened: true }>(
     {
       name: "workstation.open_path",
       capabilityId: MeshCapabilities.workstationOpenPath,
@@ -46,17 +40,14 @@ export function registerWorkstationTools(runtime: FoundryMeshRuntime): void {
       risk: "low",
       inputSchema: {
         type: "object",
-        properties: { path: { type: "string" } },
-        required: ["path"],
+        properties: { locationId: { type: "string" } },
+        required: ["locationId"],
         additionalProperties: false,
       },
     },
-    async ({ path }, _request, worker) => {
+    async ({ locationId }, _request, worker) => {
       requirePairedMobile(worker);
-      const trimmed = path.trim();
-      if (!trimmed) throw new Error("Workstation path is not linked.");
-      await invoke("open_path", { path: trimmed });
-      return { opened: true };
+      throw new Error(`Managed Foundry location '${locationId}' is not registered on this host.`);
     },
   );
 

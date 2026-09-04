@@ -3,19 +3,10 @@ import { saveNativeStoredData } from "../lib/storage";
 import { getFoundryMeshRuntime } from "../mesh";
 import type { FoundryDomainState } from "../mesh/domainState";
 import type { Checkpoint } from "../mesh/types";
-import { isFoundryMobileRuntime } from "../platform/runtime";
 import type { ForgekeeperState } from "../state/useForgekeeperState";
 import type { AppData } from "../types/domain";
 import type { WorkbenchState } from "../workbench/contracts";
 import { getWorkbenchStateForFoundryLink } from "../workbench/useWorkbenchVault";
-import {
-  absorbRemoteCommandResults,
-  getDesktopRemoteCommandResults,
-  getPendingRemoteCommands,
-  processRemoteCommands,
-  type FoundryRemoteCommand,
-  type FoundryRemoteCommandResult,
-} from "./remoteCommands";
 import {
   canonicalFoundryLinkPayload,
   FOUNDRY_LINK_FORMAT,
@@ -34,20 +25,16 @@ export type FoundryLinkWorkspaceEnvelope = {
 
 type FoundryLinkWorkspaceBundle = {
   format: typeof FOUNDRY_LINK_FORMAT;
-  schemaVersion: 2 | 3 | typeof FOUNDRY_LINK_SCHEMA_VERSION;
+  schemaVersion: 2 | 3 | 4;
   appData: AppData;
   meshDomain: FoundryDomainState;
   workbench?: WorkbenchState;
-  remoteCommands?: FoundryRemoteCommand[];
-  remoteCommandResults?: FoundryRemoteCommandResult[];
 };
 
 type ParsedLinkedWorkspace = {
   appData: AppData;
   meshDomain?: FoundryDomainState;
   workbench?: WorkbenchState;
-  remoteCommands?: FoundryRemoteCommand[];
-  remoteCommandResults?: FoundryRemoteCommandResult[];
 };
 
 export function snapshotForgekeeperState(state: ForgekeeperState): AppData {
@@ -85,15 +72,12 @@ export function snapshotForgekeeperState(state: ForgekeeperState): AppData {
 
 export function serializeForgekeeperState(state: ForgekeeperState): string {
   const mesh = getFoundryMeshRuntime();
-  const mobile = isFoundryMobileRuntime();
   const bundle: FoundryLinkWorkspaceBundle = {
     format: FOUNDRY_LINK_FORMAT,
     schemaVersion: FOUNDRY_LINK_SCHEMA_VERSION,
     appData: snapshotForgekeeperState(state),
     meshDomain: mesh.snapshot().domain,
     workbench: getWorkbenchStateForFoundryLink() ?? undefined,
-    remoteCommands: mobile ? getPendingRemoteCommands() : undefined,
-    remoteCommandResults: mobile ? undefined : getDesktopRemoteCommandResults(),
   };
   return JSON.stringify(bundle);
 }
@@ -121,7 +105,7 @@ export function parseLinkedWorkspace(payload: string): ParsedLinkedWorkspace {
   const parsed = JSON.parse(payload) as Partial<FoundryLinkWorkspaceBundle> & Partial<AppData>;
 
   if (parsed.format === FOUNDRY_LINK_FORMAT) {
-    if (parsed.schemaVersion !== 2 && parsed.schemaVersion !== 3 && parsed.schemaVersion !== FOUNDRY_LINK_SCHEMA_VERSION) {
+    if (parsed.schemaVersion !== 2 && parsed.schemaVersion !== 3 && parsed.schemaVersion !== 4) {
       throw new Error(`Unsupported Foundry Link workspace schema ${String(parsed.schemaVersion)}.`);
     }
     if (!parsed.appData || !parsed.meshDomain) {
@@ -131,8 +115,6 @@ export function parseLinkedWorkspace(payload: string): ParsedLinkedWorkspace {
       appData: validateAppData(parsed.appData),
       meshDomain: parsed.meshDomain,
       workbench: parsed.schemaVersion >= 3 ? parsed.workbench : undefined,
-      remoteCommands: parsed.schemaVersion >= 4 ? parsed.remoteCommands : undefined,
-      remoteCommandResults: parsed.schemaVersion >= 4 ? parsed.remoteCommandResults : undefined,
     };
   }
 
@@ -147,16 +129,6 @@ export async function commitLinkedWorkspace(
   sourceLabel: string,
 ): Promise<void> {
   const next = parseLinkedWorkspace(envelope.payload);
-  const mobile = isFoundryMobileRuntime();
-
-  if (mobile) {
-    absorbRemoteCommandResults(next.remoteCommandResults);
-  } else {
-    await processRemoteCommands(next.remoteCommands);
-  }
-
-  // A command or command-result revision is transport state, not a database revision.
-  // Process it without replacing durable state or reloading either platform.
   const incomingDurable = canonicalFoundryLinkPayload(envelope.payload);
   const currentDurable = canonicalFoundryLinkPayload(serializeForgekeeperState(state));
   if (incomingDurable === currentDurable) return;

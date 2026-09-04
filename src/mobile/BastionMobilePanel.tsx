@@ -126,7 +126,7 @@ export function BastionMobilePanel({ state }: { state: ForgekeeperState }) {
   }
 
   function refreshSnapshot() {
-    const alreadyQueued = getPendingRemoteCommands().some((command) => command.toolName === "bastion.mobile_snapshot");
+    const alreadyQueued = getPendingRemoteCommands().some((command) => command.payload.toolName === "bastion.mobile_snapshot");
     if (!alreadyQueued) request("Refresh Bastion state", "bastion.mobile_snapshot");
   }
 
@@ -159,9 +159,9 @@ export function BastionMobilePanel({ state }: { state: ForgekeeperState }) {
   }, []);
 
   const launchTargets = [
-    { label: "Anycubic Slicer", path: state.settings?.anycubicSlicerPath ?? "AnycubicSlicerNext.exe" },
-    { label: "OrcaSlicer", path: state.settings?.orcaSlicerPath ?? "OrcaSlicer.exe" },
-    { label: "Blender", path: state.settings?.blenderPath ?? "blender.exe" },
+    { label: "Anycubic Slicer", launcherId: "anycubic" },
+    { label: "OrcaSlicer", launcherId: "orca" },
+    { label: "Blender", launcherId: "blender" },
   ];
 
   return (
@@ -262,7 +262,7 @@ export function BastionMobilePanel({ state }: { state: ForgekeeperState }) {
                 <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Launch Bay</div>
                 <div className="grid grid-cols-3 gap-2">
                   {launchTargets.map((target) => (
-                    <button key={target.label} type="button" onClick={() => request(`Launch ${target.label}`, "workstation.launch_tool", { toolPath: target.path })} className="min-h-[56px] rounded-xl border border-[#5a4325] bg-[#191713] px-2 text-xs font-semibold text-amber-100 active:scale-[0.97]">
+                    <button key={target.label} type="button" onClick={() => request(`Launch ${target.label}`, "workstation.launch_tool", { launcherId: target.launcherId })} className="min-h-[56px] rounded-xl border border-[#5a4325] bg-[#191713] px-2 text-xs font-semibold text-amber-100 active:scale-[0.97]">
                       {target.label}
                     </button>
                   ))}
