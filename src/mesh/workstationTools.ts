@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getUncertainDesktopRemoteCommands } from "../foundry-link/desktopCommandJournal";
 import { MeshCapabilities } from "./catalog";
 import type { FoundryMeshRuntime } from "./runtime";
 import type { WorkerIdentity } from "./types";
@@ -97,6 +98,13 @@ export function registerWorkstationTools(runtime: FoundryMeshRuntime): void {
         pendingApprovals: runtime.approvals.list("pending").length,
         telemetry,
         telemetryError,
+        uncertainRemoteCommands: getUncertainDesktopRemoteCommands().map((command) => ({
+          id: command.id,
+          correlationId: command.correlationId,
+          requestedAtMs: command.requestedAtMs,
+          operation: command.operation,
+          toolName: command.payload.toolName,
+        })),
       };
     },
   );
