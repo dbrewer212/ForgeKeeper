@@ -44,11 +44,12 @@ describe("Bastion Alert Bus", () => {
       services: [{
         id: "openclaw",
         name: "OpenClaw",
+        kind: "automation",
         description: "Foundry maintenance worker",
         commissioningState: "active",
         runtimeState: "failed",
-        startMode: "manual",
-        managed: true,
+        enabled: true,
+        dependencies: ["foundry-domain"],
       }],
       pendingApprovals: 0,
     });
