@@ -26,6 +26,19 @@ function sampleAlert(overrides: Partial<BastionAlert> = {}): BastionAlert {
   };
 }
 
+function printer(id: string, name: string, status: "Available" | "Printing" | "Maintenance" | "Offline", activeJob = "") {
+  return {
+    id,
+    name,
+    model: name,
+    status,
+    buildVolume: "test",
+    watts: 250,
+    activeJob,
+    notes: "",
+  };
+}
+
 describe("Bastion Alert Bus", () => {
   it("deduplicates the same condition and keeps the highest-severity event", () => {
     const alerts = dedupeBastionAlerts([
@@ -71,5 +84,46 @@ describe("Bastion Alert Bus", () => {
     expect(approval?.severity).toBe("approval");
     expect(approval?.allowedActions).toEqual(["inspect-approval", "approve", "reject"]);
     expect(approval?.evidence).toContain("Pending approvals: 2");
+  });
+
+  it("does not alert when out-of-service printers remain offline", () => {
+    const alerts = buildBastionAlerts({
+      printers: [
+        printer("PR1", "Neptune 4 Max", "Offline"),
+        printer("PR2", "Kobra 3 Combo", "Offline"),
+      ],
+    }, { sampledAt: "2026-09-04T12:00:00.000Z" });
+
+    expect(alerts.filter((item) => item.category === "printer")).toEqual([]);
+  });
+
+  it("flags the always-on S1 Max when it unexpectedly goes offline", () => {
+    const alerts = buildBastionAlerts({
+      printers: [printer("PR-KOBRA-S1-MAX-COMBO", "Kobra S1 Max Combo", "Offline")],
+    }, { sampledAt: "2026-09-04T12:00:00.000Z" });
+
+    const signal = alerts.find((item) => item.affectedEntity === "PR-KOBRA-S1-MAX-COMBO");
+    expect(signal?.severity).toBe("attention");
+    expect(signal?.message).toContain("expected to remain powered");
+  });
+
+  it("escalates an S1 Max disconnect during active production", () => {
+    const alerts = buildBastionAlerts({
+      printers: [printer("PR-KOBRA-S1-MAX-COMBO", "Kobra S1 Max Combo", "Offline", "Foundry production job")],
+    }, { sampledAt: "2026-09-04T12:00:00.000Z" });
+
+    const signal = alerts.find((item) => item.affectedEntity === "PR-KOBRA-S1-MAX-COMBO");
+    expect(signal?.severity).toBe("critical");
+    expect(signal?.evidence).toContain("Active job: Foundry production job");
+  });
+
+  it("flags stale workspace records that incorrectly mark an out-of-service printer available", () => {
+    const alerts = buildBastionAlerts({
+      printers: [printer("PR1", "Neptune 4 Max", "Printing", "Legacy seed job")],
+    }, { sampledAt: "2026-09-04T12:00:00.000Z" });
+
+    const signal = alerts.find((item) => item.affectedEntity === "PR1");
+    expect(signal?.severity).toBe("attention");
+    expect(signal?.message).toContain("expects it to remain out of service");
   });
 });
