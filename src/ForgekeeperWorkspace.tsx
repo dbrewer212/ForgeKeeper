@@ -3,12 +3,20 @@ import { invoke } from "@tauri-apps/api/core";
 import { Sidebar } from "./components/layout/Sidebar";
 import { FoundryStationView } from "./components/layout/FoundryStationView";
 import { DesktopFoundryLinkRuntime } from "./foundry-link/DesktopFoundryLinkRuntime";
+import { configureTrustedWorkstationLocations } from "./mesh/workstationLocations";
 import { useForgekeeperState } from "./state/useForgekeeperState";
 import type { AppData } from "./types/domain";
 import { ensureWorkbenchBootstrap } from "./workbench/bootstrap";
 
 export default function ForgekeeperWorkspace() {
   const state = useForgekeeperState();
+
+  useEffect(() => {
+    configureTrustedWorkstationLocations({
+      "foundry-library": state.settings.forgekeeperLibraryPath,
+      "asset-root": state.settings.assetRootPath,
+    });
+  }, [state.settings.assetRootPath, state.settings.forgekeeperLibraryPath]);
 
   useEffect(() => {
     if (!state.storageReady) return;
