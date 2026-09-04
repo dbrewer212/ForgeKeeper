@@ -1,7 +1,11 @@
 import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ForgekeeperState } from "../state/useForgekeeperState";
-import { processRemoteCommand, type FoundryRemoteCommand } from "./remoteCommands";
+import {
+  processRemoteCommand,
+  sortRemoteCommandsForExecution,
+  type FoundryRemoteCommand,
+} from "./remoteCommands";
 import {
   commitLinkedWorkspace,
   serializeForgekeeperState,
@@ -75,7 +79,7 @@ export function DesktopFoundryLinkRuntime({ state }: { state: ForgekeeperState }
       if (!status) return;
 
       const commands = await invoke<FoundryRemoteCommand[]>("foundry_link_take_pending_commands");
-      for (const command of commands.sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0))) {
+      for (const command of sortRemoteCommandsForExecution(commands)) {
         const result = await processRemoteCommand(command);
         await invoke("foundry_link_publish_command_result", { result });
       }
@@ -104,6 +108,7 @@ export function DesktopFoundryLinkRuntime({ state }: { state: ForgekeeperState }
         console.error("Foundry Link desktop runtime tick failed:", cause);
       }
     } finally {
+      applyingRemote.current = false;
       tickInFlight.current = false;
     }
   }
