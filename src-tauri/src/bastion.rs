@@ -1,12 +1,16 @@
 use serde::Serialize;
 
 #[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+#[cfg(target_os = "windows")]
 use std::process::Command;
 #[cfg(target_os = "windows")]
 use tauri::{Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
 
 const STARTUP_VALUE_NAME: &str = "FenrirForgeworksBastion";
 const STARTUP_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -148,9 +152,16 @@ pub async fn bastion_close_window(_app: tauri::AppHandle) -> Result<(), String> 
 }
 
 #[cfg(target_os = "windows")]
+fn hidden_windows_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+}
+
+#[cfg(target_os = "windows")]
 #[tauri::command]
 pub fn bastion_startup_status() -> Result<BastionStartupStatus, String> {
-    let output = Command::new("reg")
+    let output = hidden_windows_command("reg")
         .args(["query", STARTUP_KEY, "/v", STARTUP_VALUE_NAME])
         .output()
         .map_err(|error| format!("Failed to inspect Bastion startup registration: {error}"))?;
@@ -193,7 +204,7 @@ pub fn bastion_set_startup(enabled: bool) -> Result<BastionStartupStatus, String
         let executable = std::env::current_exe()
             .map_err(|error| format!("Failed to resolve ForgeKeeper executable: {error}"))?;
         let command = format!("\"{}\" --bastion", executable.display());
-        let output = Command::new("reg")
+        let output = hidden_windows_command("reg")
             .args([
                 "add",
                 STARTUP_KEY,
@@ -215,7 +226,7 @@ pub fn bastion_set_startup(enabled: bool) -> Result<BastionStartupStatus, String
             ));
         }
     } else {
-        let output = Command::new("reg")
+        let output = hidden_windows_command("reg")
             .args(["delete", STARTUP_KEY, "/v", STARTUP_VALUE_NAME, "/f"])
             .output()
             .map_err(|error| format!("Failed to remove Bastion startup registration: {error}"))?;
