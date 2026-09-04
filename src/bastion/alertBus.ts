@@ -35,6 +35,14 @@ export type BastionAlertSnapshot = {
   safeMode?: boolean;
   services?: ServiceDescriptor[];
   pendingApprovals?: number;
+  telemetryError?: string;
+  uncertainRemoteCommands?: Array<{
+    id: string;
+    correlationId?: string;
+    requestedAtMs?: number;
+    operation?: string;
+    toolName?: string;
+  }>;
 };
 
 type AlertSeed = Omit<BastionAlert, "eventId" | "timestamp" | "summary" | "evidence" | "allowedActions" | "dedupeKey" | "state"> & Partial<Pick<BastionAlert,
@@ -151,6 +159,46 @@ export function buildBastionAlerts(state: any, snapshot?: BastionAlertSnapshot):
       relatedRecordId: printer.id,
       correlationId: `printer:${printer.id}`,
       dedupeKey: `printer:${printer.id}:expected-state`,
+    }, sampledAt));
+  }
+
+  if (snapshot?.telemetryError) {
+    alerts.push(alert({
+      id: "bastion-telemetry-provider-fault",
+      source: "Watcher",
+      category: "system",
+      severity: "attention",
+      delivery: "notify",
+      affectedEntity: "watcher-telemetry",
+      title: "Workstation telemetry unavailable",
+      message: "Bastion could not read the workstation telemetry provider during the latest supervisory snapshot.",
+      evidence: [snapshot.telemetryError],
+      recommendedAction: "Inspect Watcher/native telemetry before relying on CPU, memory, disk, or GPU status for recovery decisions.",
+      allowedActions: ["inspect-watcher", "probe-service"],
+      correlationId: "watcher-telemetry",
+      dedupeKey: "watcher-telemetry-provider-fault",
+    }, sampledAt));
+  }
+
+  for (const command of snapshot?.uncertainRemoteCommands ?? []) {
+    alerts.push(alert({
+      id: `remote-command-uncertain:${command.id}`,
+      source: "Foundry Link",
+      category: "system",
+      severity: "critical",
+      delivery: "urgent",
+      affectedEntity: command.id,
+      title: "Remote command outcome requires reconciliation",
+      message: "Bastion recorded that this remote command began execution, but no durable result is available. Automatic re-execution is blocked to prevent a duplicate side effect.",
+      evidence: [
+        `Command: ${command.id}`,
+        command.toolName ? `Tool: ${command.toolName}` : `Operation: ${command.operation ?? "unknown"}`,
+        command.requestedAtMs ? `Requested: ${new Date(command.requestedAtMs).toISOString()}` : "Requested time unavailable",
+      ],
+      recommendedAction: "Inspect the affected workstation/service state and reconcile the command manually before clearing or retrying it.",
+      allowedActions: ["inspect-remote-command", "enter-safe-mode"],
+      correlationId: command.correlationId ?? command.id,
+      dedupeKey: `remote-command-uncertain:${command.id}`,
     }, sampledAt));
   }
 
