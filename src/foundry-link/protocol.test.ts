@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { canonicalFoundryLinkPayload, FOUNDRY_LINK_FORMAT } from "./protocol";
+import {
+  canonicalFoundryLinkPayload,
+  FOUNDRY_LINK_FORMAT,
+  FOUNDRY_LINK_SCHEMA_VERSION,
+} from "./protocol";
 
 function bundle(overrides: Record<string, unknown> = {}) {
   return JSON.stringify({
     format: FOUNDRY_LINK_FORMAT,
-    schemaVersion: 4,
+    schemaVersion: FOUNDRY_LINK_SCHEMA_VERSION,
     appData: { products: [], stls: [], concepts: [], orders: [], filament: [], printers: [] },
     meshDomain: { projects: [] },
     workbench: { assets: [] },
