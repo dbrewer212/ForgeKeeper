@@ -10,8 +10,8 @@ mod workbench_files;
 mod workbench_migrations;
 
 use bastion::{
-    bastion_close_window, bastion_launch_mode, bastion_open_window, bastion_set_startup,
-    bastion_startup_status, open_bastion_window,
+    bastion_close_window, bastion_launch_mode, bastion_open_window, bastion_return_to_forgekeeper,
+    bastion_set_startup, bastion_startup_status, foundry_host_exit, open_bastion_window,
 };
 use forgepack::{workbench_export_forgepack, workbench_import_forgepack};
 use foundry_link::{
@@ -427,6 +427,21 @@ pub fn run() {
             }
             Ok(())
         })
+        .on_window_event(|window, event| {
+            #[cfg(target_os = "windows")]
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    if let Some(bastion_window) = window.app_handle().get_webview_window("bastion") {
+                        if bastion_window.is_visible().unwrap_or(false) {
+                            api.prevent_close();
+                            let _ = window.hide();
+                            let _ = bastion_window.show();
+                            let _ = bastion_window.set_focus();
+                        }
+                    }
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             open_path,
             launch_external_tool,
@@ -447,9 +462,11 @@ pub fn run() {
             download_generation_asset,
             bastion_launch_mode,
             bastion_open_window,
+            bastion_return_to_forgekeeper,
             bastion_close_window,
             bastion_startup_status,
             bastion_set_startup,
+            foundry_host_exit,
             managed_service_start,
             managed_service_stop,
             managed_service_status,
