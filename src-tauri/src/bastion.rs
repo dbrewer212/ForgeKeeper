@@ -125,12 +125,6 @@ pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarge
         .set_focus()
         .map_err(|error| format!("Failed to focus Bastion: {error}"))?;
 
-    if let Some(main_window) = app.get_webview_window("main") {
-        main_window
-            .hide()
-            .map_err(|error| format!("Failed to hide Forgekeeper while Bastion is resident: {error}"))?;
-    }
-
     Ok(target)
 }
 
@@ -157,12 +151,6 @@ pub async fn bastion_return_to_forgekeeper(app: tauri::AppHandle) -> Result<(), 
     let main_window = app
         .get_webview_window("main")
         .ok_or_else(|| "Forgekeeper main window is unavailable.".to_string())?;
-
-    if let Some(bastion_window) = app.get_webview_window("bastion") {
-        bastion_window
-            .hide()
-            .map_err(|error| format!("Failed to hide Bastion while opening Forgekeeper: {error}"))?;
-    }
 
     main_window
         .show()
