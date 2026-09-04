@@ -1,5 +1,8 @@
 use serde::Serialize;
+
+#[cfg(target_os = "windows")]
 use std::process::Command;
+#[cfg(target_os = "windows")]
 use tauri::{Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
 
 const STARTUP_VALUE_NAME: &str = "FenrirForgeworksBastion";
@@ -28,6 +31,7 @@ pub fn bastion_launch_mode() -> bool {
     std::env::args().any(|arg| arg.eq_ignore_ascii_case("--bastion"))
 }
 
+#[cfg(target_os = "windows")]
 fn select_bastion_display(app: &tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
     let source = app
         .get_webview_window("main")
@@ -69,6 +73,7 @@ fn select_bastion_display(app: &tauri::AppHandle) -> Result<BastionDisplayTarget
     })
 }
 
+#[cfg(target_os = "windows")]
 pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
     let target = select_bastion_display(app)?;
 
@@ -108,11 +113,24 @@ pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarge
     Ok(target)
 }
 
+#[cfg(not(target_os = "windows"))]
+pub fn open_bastion_window(_app: &tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
+    Err("Bastion workstation display control is only available on Windows Foundry hosts.".to_string())
+}
+
+#[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn bastion_open_window(app: tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
     open_bastion_window(&app)
 }
 
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub async fn bastion_open_window(_app: tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
+    Err("Bastion workstation display control is only available on Windows Foundry hosts.".to_string())
+}
+
+#[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn bastion_close_window(app: tauri::AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("bastion") {
@@ -121,6 +139,12 @@ pub async fn bastion_close_window(app: tauri::AppHandle) -> Result<(), String> {
             .map_err(|error| format!("Failed to close Bastion: {error}"))?;
     }
     Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub async fn bastion_close_window(_app: tauri::AppHandle) -> Result<(), String> {
+    Err("Bastion workstation display control is only available on Windows Foundry hosts.".to_string())
 }
 
 #[cfg(target_os = "windows")]
