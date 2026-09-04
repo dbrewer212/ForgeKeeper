@@ -2,9 +2,17 @@ import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ForgekeeperState } from "../state/useForgekeeperState";
 import {
+  completeDesktopRemoteCommand,
+  getJournaledDesktopRemoteCommandResult,
+  getStagedDesktopRemoteCommands,
+  rememberDesktopRemoteCommandResult,
+  stageDesktopRemoteCommands,
+} from "./desktopCommandJournal";
+import {
   processRemoteCommand,
   sortRemoteCommandsForExecution,
   type FoundryRemoteCommand,
+  type FoundryRemoteCommandResult,
 } from "./remoteCommands";
 import {
   commitLinkedWorkspace,
@@ -40,6 +48,17 @@ export function setDesktopFoundryLinkEnabled(enabled: boolean) {
   window.dispatchEvent(new CustomEvent(DESKTOP_LINK_SETTING_EVENT, { detail: { enabled } }));
 }
 
+function journalFailureResult(command: FoundryRemoteCommand): FoundryRemoteCommandResult {
+  return {
+    commandId: command.id,
+    requestingDeviceId: command.requestingDeviceId ?? "unknown-device",
+    correlationId: command.correlationId,
+    completedAtMs: Date.now(),
+    state: "failed",
+    error: "Bastion Host could not persist the remote command journal, so the command was not executed.",
+  };
+}
+
 export function DesktopFoundryLinkRuntime({ state }: { state: ForgekeeperState }) {
   const stateRef = useRef(state);
   const knownRevision = useRef(0);
@@ -71,6 +90,48 @@ export function DesktopFoundryLinkRuntime({ state }: { state: ForgekeeperState }
     return status;
   }
 
+  async function publishJournalFailure(commands: FoundryRemoteCommand[]) {
+    for (const command of commands) {
+      try {
+        await invoke("foundry_link_publish_command_result", { result: journalFailureResult(command) });
+      } catch (cause) {
+        console.error(`Foundry Link could not publish the journal failure for ${command.id}:`, cause);
+      }
+    }
+  }
+
+  async function serviceRemoteCommands() {
+    const fetched = await invoke<FoundryRemoteCommand[]>("foundry_link_take_pending_commands");
+    if (fetched.length && !stageDesktopRemoteCommands(fetched)) {
+      // The Rust queue has already handed these commands to the host renderer. If the
+      // recovery journal cannot be written, fail closed rather than execute an action
+      // that could become untraceable if the renderer is interrupted mid-flight.
+      await publishJournalFailure(fetched);
+      return;
+    }
+
+    for (const command of sortRemoteCommandsForExecution(getStagedDesktopRemoteCommands())) {
+      try {
+        let result = getJournaledDesktopRemoteCommandResult(command.id);
+        if (!result) {
+          result = await processRemoteCommand(command);
+          if (!rememberDesktopRemoteCommandResult(result)) {
+            console.error(`Foundry Link executed ${command.id} but could not persist its result journal before publication.`);
+          }
+        }
+
+        await invoke("foundry_link_publish_command_result", { result });
+        if (!completeDesktopRemoteCommand(command.id)) {
+          console.error(`Foundry Link published ${command.id} but could not clear its desktop command journal entry.`);
+        }
+      } catch (cause) {
+        // Leave the staged command and any saved result in the journal. A later tick can
+        // retry publication without re-running a side effect when a result was persisted.
+        console.error(`Foundry Link command ${command.id} remains journaled for retry:`, cause);
+      }
+    }
+  }
+
   async function serviceTick() {
     if (tickInFlight.current || applyingRemote.current || !stateRef.current.storageReady) return;
     tickInFlight.current = true;
@@ -78,11 +139,7 @@ export function DesktopFoundryLinkRuntime({ state }: { state: ForgekeeperState }
       const status = await ensureRunning();
       if (!status) return;
 
-      const commands = await invoke<FoundryRemoteCommand[]>("foundry_link_take_pending_commands");
-      for (const command of sortRemoteCommandsForExecution(commands)) {
-        const result = await processRemoteCommand(command);
-        await invoke("foundry_link_publish_command_result", { result });
-      }
+      await serviceRemoteCommands();
 
       const pending = await invoke<FoundryLinkWorkspaceEnvelope | null>("foundry_link_take_pending_workspace");
       if (pending) {
