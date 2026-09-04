@@ -71,3 +71,7 @@ jobs:
       - name: Check Tauri core
         working-directory: src-tauri
         run: cargo check
+
+      - name: Run Rust transport tests
+        working-directory: src-tauri
+        run: cargo test foundry_link::command_tests
