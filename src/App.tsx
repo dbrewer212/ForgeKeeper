@@ -29,6 +29,17 @@ export default function App() {
           onExit={() => void invoke("bastion_return_to_forgekeeper")}
         />
         <BastionProductionQueue />
+        <button
+          type="button"
+          onClick={() => {
+            if (window.confirm("Shut down the Foundry host? Bastion, Foundry Link, and workstation sync will stop until Forgekeeper is started again.")) {
+              void invoke("foundry_host_exit");
+            }
+          }}
+          className="fixed bottom-3 right-3 z-50 min-h-[48px] rounded-xl border border-red-900/80 bg-red-950/90 px-4 text-xs font-semibold uppercase tracking-[0.12em] text-red-200 shadow-2xl active:scale-[0.98]"
+        >
+          Shut Down Foundry Host
+        </button>
       </>
     );
   }
