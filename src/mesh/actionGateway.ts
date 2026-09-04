@@ -6,6 +6,8 @@ import type {
 } from "./types";
 import type { PermissionService } from "./permissionService";
 
+export const DEFAULT_APPROVAL_TTL_MS = 10 * 60 * 1000;
+
 export interface ActionEvaluation<TPayload = unknown> {
   request: ActionRequest<TPayload>;
   permission: PermissionDecision;
@@ -33,17 +35,19 @@ export class ActionGateway {
     }
 
     if (permission.effect === "approval-required") {
+      const requestedAt = Date.now();
       return {
         request,
         permission,
         approval: {
           id: crypto.randomUUID(),
           actionRequestId: request.id,
-          requestedAt: new Date().toISOString(),
+          requestedAt: new Date(requestedAt).toISOString(),
           requestedByWorkerId: worker.id,
           capabilityId: request.capabilityId,
           summary: request.reason ?? `${worker.name} requests ${request.capabilityId}.`,
           payload: request.payload,
+          expiresAt: new Date(requestedAt + DEFAULT_APPROVAL_TTL_MS).toISOString(),
         },
       };
     }

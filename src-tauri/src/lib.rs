@@ -1,5 +1,6 @@
 mod bastion;
 mod forgepack;
+mod foundry_link;
 mod managed_files;
 mod managed_services;
 mod provider_staging;
@@ -9,10 +10,18 @@ mod workbench_files;
 mod workbench_migrations;
 
 use bastion::{
-    bastion_close_window, bastion_launch_mode, bastion_open_window, bastion_set_startup,
-    bastion_startup_status, open_bastion_window,
+    bastion_close_window, bastion_launch_mode, bastion_open_window, bastion_return_to_forgekeeper,
+    bastion_set_startup, bastion_startup_status, foundry_host_exit, open_bastion_window,
 };
 use forgepack::{workbench_export_forgepack, workbench_import_forgepack};
+use foundry_link::{
+    foundry_link_publish_command_result, foundry_link_publish_workspace, foundry_link_remote_ack_results,
+    foundry_link_remote_get_results, foundry_link_remote_get_workspace, foundry_link_remote_pair,
+    foundry_link_remote_push_workspace, foundry_link_remote_revoke_session, foundry_link_remote_rotate_session,
+    foundry_link_remote_submit_command, foundry_link_revoke_device, foundry_link_rotate_pairing_code,
+    foundry_link_start, foundry_link_status, foundry_link_stop, foundry_link_take_pending_commands,
+    foundry_link_take_pending_workspace, FoundryLinkRuntime,
+};
 use managed_files::workbench_store_file;
 use managed_services::{
     managed_service_start, managed_service_status, managed_service_stop, ManagedProcesses,
@@ -32,9 +41,15 @@ use std::process::Command;
 use std::time::Duration;
 use tauri::Manager;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 const MESH_DIR: &str = "mesh";
 const SNAPSHOT_FILE: &str = "snapshot.json";
 const EVENT_JOURNAL_FILE: &str = "events.jsonl";
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Serialize)]
 struct LocalHttpResponse {
@@ -59,6 +74,18 @@ fn launch_external_tool(tool_path: String, asset_path: Option<String>) -> Result
 
     let resolved_tool = resolve_tool_path(&tool_path);
     open_with_windows_shell(&resolved_tool, asset_path.as_deref())
+}
+
+#[tauri::command]
+fn launch_trusted_tool(launcher_id: String) -> Result<(), String> {
+    let candidates: &[&str] = match launcher_id.trim() {
+        "blender" => &["C:\\Program Files\\Blender Foundation\\Blender 4.5\\blender.exe", "blender.exe"],
+        "anycubic" => &["C:\\Program Files\\AnycubicSlicerNext\\AnycubicSlicerNext.exe", "AnycubicSlicerNext.exe"],
+        "orca" => &["C:\\Program Files\\OrcaSlicer\\OrcaSlicer.exe", "OrcaSlicer.exe"],
+        _ => return Err("Unknown Launch Bay launcherId.".to_string()),
+    };
+    let target = candidates.iter().find(|candidate| Path::new(candidate).is_file()).copied().unwrap_or(candidates[candidates.len() - 1]);
+    Command::new(target).spawn().map(|_| ()).map_err(|error| format!("Failed to launch trusted target {launcher_id}: {error}"))
 }
 
 #[tauri::command]
@@ -125,8 +152,10 @@ if ($null -ne $gpu) {
 } | ConvertTo-Json -Depth 6 -Compress
 "#;
 
-    let output = Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+    let mut command = Command::new("powershell");
+    command.args(["-NoProfile", "-NonInteractive", "-Command", script]);
+    command.creation_flags(CREATE_NO_WINDOW);
+    let output = command
         .output()
         .map_err(|error| format!("Failed to launch Windows telemetry provider: {error}"))?;
 
@@ -344,6 +373,7 @@ fn open_with_windows_shell(target: &str, asset_path: Option<&str>) -> Result<(),
         }
     }
 
+    command.creation_flags(CREATE_NO_WINDOW);
     command
         .spawn()
         .map(|_| ())
@@ -371,6 +401,7 @@ fn open_with_windows_shell(target: &str, asset_path: Option<&str>) -> Result<(),
 pub fn run() {
     tauri::Builder::default()
         .manage(ManagedProcesses::default())
+        .manage(FoundryLinkRuntime::default())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:forgekeeper-workbench.db", workbench_migrations::migrations())
@@ -378,14 +409,41 @@ pub fn run() {
         )
         .setup(|app| {
             if bastion_launch_mode() {
+                if let Some(main_window) = app.get_webview_window("main") {
+                    main_window
+                        .hide()
+                        .map_err(|error| -> Box<dyn std::error::Error> {
+                            format!("Failed to hide Forgekeeper host window for Bastion startup: {error}").into()
+                        })?;
+                }
+
+                let link_state = app.state::<FoundryLinkRuntime>();
+                if let Err(error) = foundry_link_start(app.handle().clone(), link_state, Some(4717)) {
+                    eprintln!("Foundry Link host could not auto-start with Bastion: {error}");
+                }
+
                 open_bastion_window(app.handle())
                     .map_err(|error| -> Box<dyn std::error::Error> { error.into() })?;
             }
             Ok(())
         })
+        .on_window_event(|window, event| {
+            #[cfg(target_os = "windows")]
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    if let Some(bastion_window) = window.app_handle().get_webview_window("bastion") {
+                        api.prevent_close();
+                        let _ = window.hide();
+                        let _ = bastion_window.show();
+                        let _ = bastion_window.set_focus();
+                    }
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             open_path,
             launch_external_tool,
+            launch_trusted_tool,
             local_http_get,
             watcher_system_snapshot,
             inspect_local_paths,
@@ -402,16 +460,35 @@ pub fn run() {
             download_generation_asset,
             bastion_launch_mode,
             bastion_open_window,
+            bastion_return_to_forgekeeper,
             bastion_close_window,
             bastion_startup_status,
             bastion_set_startup,
+            foundry_host_exit,
             managed_service_start,
             managed_service_stop,
             managed_service_status,
             mesh_load_snapshot,
             mesh_save_snapshot,
             mesh_append_event,
-            mesh_read_events
+            mesh_read_events,
+            foundry_link_start,
+            foundry_link_stop,
+            foundry_link_status,
+            foundry_link_rotate_pairing_code,
+            foundry_link_revoke_device,
+            foundry_link_publish_workspace,
+            foundry_link_take_pending_workspace,
+            foundry_link_take_pending_commands,
+            foundry_link_publish_command_result,
+            foundry_link_remote_pair,
+            foundry_link_remote_rotate_session,
+            foundry_link_remote_revoke_session,
+            foundry_link_remote_get_workspace,
+            foundry_link_remote_push_workspace,
+            foundry_link_remote_submit_command,
+            foundry_link_remote_get_results,
+            foundry_link_remote_ack_results
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

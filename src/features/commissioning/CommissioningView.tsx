@@ -204,16 +204,25 @@ export function CommissioningView() {
       onSuccess(`${label.toUpperCase()} COMMISSIONED — worker active, service online, health probe passed.`);
       await refreshReadiness();
     } catch (cause) {
+      const failures = [errorText(cause)];
       const worker = runtime.workers.get(workerId);
       if (worker?.identity.commissioningState === "commissioning") {
-        try { await runtime.commissioning.transition(workerId, "failed", `${label} commissioning failed.`); } catch { /* preserve original */ }
+        try {
+          await runtime.commissioning.transition(workerId, "failed", `${label} commissioning failed.`);
+        } catch (transitionCause) {
+          failures.push(`Could not record ${label} worker failure state: ${errorText(transitionCause)}`);
+        }
       }
       const service = runtime.services.get(serviceId);
       if (service?.commissioningState === "commissioning") {
         runtime.services.update(serviceId, { commissioningState: "failed", enabled: false });
-        await runtime.save().catch(() => undefined);
+        try {
+          await runtime.save();
+        } catch (saveCause) {
+          failures.push(`Could not persist ${label} service failure state: ${errorText(saveCause)}`);
+        }
       }
-      setError(errorText(cause));
+      setError(failures.join(" "));
     } finally {
       setBusy(false);
     }

@@ -112,3 +112,41 @@ button:focus-visible {
     -webkit-tap-highlight-color: transparent;
   }
 }
+
+@media (max-width: 767px) {
+  html,
+  body,
+  #root {
+    min-height: 100dvh;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
+  .mobile-foundry {
+    min-height: 100dvh;
+    overscroll-behavior-y: none;
+  }
+
+  .mobile-foundry input,
+  .mobile-foundry textarea,
+  .mobile-foundry select {
+    font-size: 16px;
+  }
+
+  .mobile-station-viewport {
+    width: 100%;
+    min-width: 0;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-station-viewport > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .mobile-station-viewport table {
+    font-size: 0.75rem;
+  }
+}

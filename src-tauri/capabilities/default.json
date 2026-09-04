@@ -3,6 +3,7 @@
   "identifier": "default",
   "description": "Default Forgekeeper desktop permissions",
   "windows": ["main", "bastion"],
+  "platforms": ["windows", "macOS", "linux"],
   "permissions": [
     "core:default",
     "sql:default",

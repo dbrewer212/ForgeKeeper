@@ -1,9 +1,16 @@
 use serde::Serialize;
+
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+#[cfg(target_os = "windows")]
 use std::process::Command;
+#[cfg(target_os = "windows")]
 use tauri::{Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
 
 const STARTUP_VALUE_NAME: &str = "FenrirForgeworksBastion";
 const STARTUP_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +35,7 @@ pub fn bastion_launch_mode() -> bool {
     std::env::args().any(|arg| arg.eq_ignore_ascii_case("--bastion"))
 }
 
+#[cfg(target_os = "windows")]
 fn select_bastion_display(app: &tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
     let source = app
         .get_webview_window("main")
@@ -69,7 +77,8 @@ fn select_bastion_display(app: &tauri::AppHandle) -> Result<BastionDisplayTarget
     })
 }
 
-pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
+#[cfg(target_os = "windows")]
+fn prepare_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
     let target = select_bastion_display(app)?;
 
     let window = if let Some(existing) = app.get_webview_window("bastion") {
@@ -98,6 +107,17 @@ pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarge
     window
         .set_size(PhysicalSize::new(target.width, target.height))
         .map_err(|error| format!("Failed to size Bastion to the touch display: {error}"))?;
+
+    Ok(target)
+}
+
+#[cfg(target_os = "windows")]
+pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
+    let target = prepare_bastion_window(app)?;
+    let window = app
+        .get_webview_window("bastion")
+        .ok_or_else(|| "Bastion window could not be prepared.".to_string())?;
+
     window
         .show()
         .map_err(|error| format!("Failed to show Bastion: {error}"))?;
@@ -108,25 +128,81 @@ pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarge
     Ok(target)
 }
 
+#[cfg(not(target_os = "windows"))]
+pub fn open_bastion_window(_app: &tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
+    Err("Bastion workstation display control is only available on Windows Foundry hosts.".to_string())
+}
+
+#[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn bastion_open_window(app: tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
     open_bastion_window(&app)
 }
 
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub async fn bastion_open_window(_app: tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
+    Err("Bastion workstation display control is only available on Windows Foundry hosts.".to_string())
+}
+
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub async fn bastion_return_to_forgekeeper(app: tauri::AppHandle) -> Result<(), String> {
+    let main_window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Forgekeeper main window is unavailable.".to_string())?;
+
+    main_window
+        .show()
+        .map_err(|error| format!("Failed to show Forgekeeper: {error}"))?;
+    main_window
+        .set_focus()
+        .map_err(|error| format!("Failed to focus Forgekeeper: {error}"))
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub async fn bastion_return_to_forgekeeper(_app: tauri::AppHandle) -> Result<(), String> {
+    Err("Forgekeeper workstation window control is only available on Windows Foundry hosts.".to_string())
+}
+
+#[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn bastion_close_window(app: tauri::AppHandle) -> Result<(), String> {
+    if app.get_webview_window("bastion").is_none() {
+        prepare_bastion_window(&app)?;
+    }
+
     if let Some(window) = app.get_webview_window("bastion") {
         window
-            .close()
-            .map_err(|error| format!("Failed to close Bastion: {error}"))?;
+            .hide()
+            .map_err(|error| format!("Failed to hide Bastion: {error}"))?;
     }
     Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+pub async fn bastion_close_window(_app: tauri::AppHandle) -> Result<(), String> {
+    Err("Bastion workstation display control is only available on Windows Foundry hosts.".to_string())
+}
+
+#[tauri::command]
+pub fn foundry_host_exit(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
+#[cfg(target_os = "windows")]
+fn hidden_windows_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
 }
 
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub fn bastion_startup_status() -> Result<BastionStartupStatus, String> {
-    let output = Command::new("reg")
+    let output = hidden_windows_command("reg")
         .args(["query", STARTUP_KEY, "/v", STARTUP_VALUE_NAME])
         .output()
         .map_err(|error| format!("Failed to inspect Bastion startup registration: {error}"))?;
@@ -169,7 +245,7 @@ pub fn bastion_set_startup(enabled: bool) -> Result<BastionStartupStatus, String
         let executable = std::env::current_exe()
             .map_err(|error| format!("Failed to resolve ForgeKeeper executable: {error}"))?;
         let command = format!("\"{}\" --bastion", executable.display());
-        let output = Command::new("reg")
+        let output = hidden_windows_command("reg")
             .args([
                 "add",
                 STARTUP_KEY,
@@ -191,7 +267,7 @@ pub fn bastion_set_startup(enabled: bool) -> Result<BastionStartupStatus, String
             ));
         }
     } else {
-        let output = Command::new("reg")
+        let output = hidden_windows_command("reg")
             .args(["delete", STARTUP_KEY, "/v", STARTUP_VALUE_NAME, "/f"])
             .output()
             .map_err(|error| format!("Failed to remove Bastion startup registration: {error}"))?;
