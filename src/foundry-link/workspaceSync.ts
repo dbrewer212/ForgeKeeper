@@ -37,6 +37,28 @@ type ParsedLinkedWorkspace = {
   workbench?: WorkbenchState;
 };
 
+function sharedSettings(settings: AppData["settings"]): AppData["settings"] {
+  const shared = { ...settings } as Partial<AppData["settings"]>;
+  delete shared.assetRootPath;
+  delete shared.forgekeeperLibraryPath;
+  delete shared.apiCredentialFilePath;
+  delete shared.orcaSlicerPath;
+  delete shared.anycubicSlicerPath;
+  delete shared.blenderPath;
+  return shared as AppData["settings"];
+}
+
+function deviceLocalSettings(settings: AppData["settings"]): Partial<AppData["settings"] {
+  return {
+    assetRootPath: settings.assetRootPath,
+    forgekeeperLibraryPath: settings.forgekeeperLibraryPath,
+    apiCredentialFilePath: settings.apiCredentialFilePath,
+    orcaSlicerPath: settings.orcaSlicerPath,
+    anycubicSlicerPath: settings.anycubicSlicerPath,
+    blenderPath: settings.blenderPath,
+  };
+}
+
 export function snapshotForgekeeperState(state: ForgekeeperState): AppData {
   return {
     products: state.products,
@@ -62,7 +84,7 @@ export function snapshotForgekeeperState(state: ForgekeeperState): AppData {
     canonRecords: state.canonRecords,
     libraryAssets: state.libraryAssets,
     recovery: state.recovery,
-    settings: state.settings,
+    settings: sharedSettings(state.settings),
     prototypes: state.prototypes,
     plannedFilament: state.plannedFilament,
     productPlanning: state.productPlanning,
@@ -165,6 +187,14 @@ export async function commitLinkedWorkspace(
     });
   }
 
-  await saveNativeStoredData(next.appData);
+  const incomingWithLocalSettings: AppData = {
+    ...next.appData,
+    settings: {
+      ...state.settings,
+      ...(next.appData.settings ?? {}),
+      ...deviceLocalSettings(state.settings),
+    },
+  };
+  await saveNativeStoredData(incomingWithLocalSettings);
   window.location.reload();
 }
