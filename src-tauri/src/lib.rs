@@ -432,12 +432,10 @@ pub fn run() {
             if window.label() == "main" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     if let Some(bastion_window) = window.app_handle().get_webview_window("bastion") {
-                        if bastion_window.is_visible().unwrap_or(false) {
-                            api.prevent_close();
-                            let _ = window.hide();
-                            let _ = bastion_window.show();
-                            let _ = bastion_window.set_focus();
-                        }
+                        api.prevent_close();
+                        let _ = window.hide();
+                        let _ = bastion_window.show();
+                        let _ = bastion_window.set_focus();
                     }
                 }
             }
