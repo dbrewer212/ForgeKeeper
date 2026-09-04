@@ -17,9 +17,10 @@ use forgepack::{workbench_export_forgepack, workbench_import_forgepack};
 use foundry_link::{
     foundry_link_publish_command_result, foundry_link_publish_workspace, foundry_link_remote_ack_results,
     foundry_link_remote_get_results, foundry_link_remote_get_workspace, foundry_link_remote_pair,
-    foundry_link_remote_push_workspace, foundry_link_remote_submit_command, foundry_link_rotate_pairing_code,
-    foundry_link_start, foundry_link_status, foundry_link_stop, foundry_link_take_pending_commands, foundry_link_take_pending_workspace,
-    FoundryLinkRuntime,
+    foundry_link_remote_push_workspace, foundry_link_remote_revoke_session, foundry_link_remote_rotate_session,
+    foundry_link_remote_submit_command, foundry_link_revoke_device, foundry_link_rotate_pairing_code,
+    foundry_link_start, foundry_link_status, foundry_link_stop, foundry_link_take_pending_commands,
+    foundry_link_take_pending_workspace, FoundryLinkRuntime,
 };
 use managed_files::workbench_store_file;
 use managed_services::{
@@ -408,7 +409,7 @@ pub fn run() {
                 }
 
                 let link_state = app.state::<FoundryLinkRuntime>();
-                if let Err(error) = foundry_link_start(link_state, Some(4717)) {
+                if let Err(error) = foundry_link_start(app.handle().clone(), link_state, Some(4717)) {
                     eprintln!("Foundry Link host could not auto-start with Bastion: {error}");
                 }
 
@@ -451,11 +452,14 @@ pub fn run() {
             foundry_link_stop,
             foundry_link_status,
             foundry_link_rotate_pairing_code,
+            foundry_link_revoke_device,
             foundry_link_publish_workspace,
             foundry_link_take_pending_workspace,
             foundry_link_take_pending_commands,
             foundry_link_publish_command_result,
             foundry_link_remote_pair,
+            foundry_link_remote_rotate_session,
+            foundry_link_remote_revoke_session,
             foundry_link_remote_get_workspace,
             foundry_link_remote_push_workspace,
             foundry_link_remote_submit_command,
