@@ -26,7 +26,7 @@ export default function App() {
       <>
         <BastionView
           state={bastionLauncherDefaults}
-          onExit={() => void invoke("bastion_close_window")}
+          onExit={() => void invoke("bastion_return_to_forgekeeper")}
         />
         <BastionProductionQueue />
       </>
