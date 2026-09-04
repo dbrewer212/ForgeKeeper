@@ -73,6 +73,27 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
     saveConfig(config);
   }
 
+  async function applyRemoteWorkspace(
+    remote: FoundryLinkWorkspaceEnvelope,
+    currentConfig: LinkConfig,
+    remoteHash: string,
+    sourceLabel: string,
+    progressMessage: string,
+  ) {
+    const next = { ...currentConfig, revision: remote.revision, lastSyncedHash: remoteHash };
+    // Persist the incoming baseline before the storage commit so a successful reload
+    // resumes from the accepted revision. If the storage commit fails, roll this back
+    // immediately so stale local state can never masquerade as a new phone edit.
+    commitConfig(next);
+    setMessage(progressMessage);
+    try {
+      await commitLinkedWorkspace(stateRef.current, remote, sourceLabel);
+    } catch (cause) {
+      commitConfig(currentConfig);
+      throw cause;
+    }
+  }
+
   async function pair() {
     if (!endpoint.trim() || pairingCode.trim().length !== 6) {
       setError("Enter the workstation Foundry Link address and six-digit pairing code.");
@@ -152,10 +173,13 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
           return;
         }
 
-        const next = { ...config, revision: remote.revision, lastSyncedHash: remoteHash };
-        commitConfig(next);
-        setMessage("Using the workstation as the initial Foundry authority…");
-        await commitLinkedWorkspace(stateRef.current, remote, "workstation initial sync");
+        await applyRemoteWorkspace(
+          remote,
+          config,
+          remoteHash,
+          "workstation initial sync",
+          "Using the workstation as the initial Foundry authority…",
+        );
         return;
       }
 
@@ -168,12 +192,13 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
           return;
         }
 
-        const next = { ...config, revision: remote.revision, lastSyncedHash: remoteHash };
-        commitConfig(next);
-        setMessage(`Applying workstation revision ${remote.revision}…`);
-        await commitLinkedWorkspace(stateRef.current, remote, "workstation sync");
-        setLinkState("synced");
-        setError("");
+        await applyRemoteWorkspace(
+          remote,
+          config,
+          remoteHash,
+          "workstation sync",
+          `Applying workstation revision ${remote.revision}…`,
+        );
         return;
       }
 
@@ -203,12 +228,13 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
         }
 
         if (remoteHash !== baselineHash) {
-          const next = { ...config, revision: remote.revision, lastSyncedHash: remoteHash };
-          commitConfig(next);
-          setMessage("Applying workstation content update…");
-          await commitLinkedWorkspace(stateRef.current, remote, "workstation sync");
-          setLinkState("synced");
-          setError("");
+          await applyRemoteWorkspace(
+            remote,
+            config,
+            remoteHash,
+            "workstation sync",
+            "Applying workstation content update…",
+          );
           return;
         }
 
@@ -277,9 +303,13 @@ export function FoundryLinkMobilePanel({ state }: { state: ForgekeeperState }) {
     busyRef.current = true;
     try {
       const remoteHash = await hashDurablePayload(conflictRemote.payload);
-      commitConfig({ ...config, revision: conflictRemote.revision, lastSyncedHash: remoteHash });
-      setMessage(`Accepting workstation revision ${conflictRemote.revision}…`);
-      await commitLinkedWorkspace(stateRef.current, conflictRemote, "explicit conflict resolution: workstation copy");
+      await applyRemoteWorkspace(
+        conflictRemote,
+        config,
+        remoteHash,
+        "explicit conflict resolution: workstation copy",
+        `Accepting workstation revision ${conflictRemote.revision}…`,
+      );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
