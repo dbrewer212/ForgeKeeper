@@ -92,7 +92,10 @@ function queue(operation: FoundryRemoteCommandAction, payload: FoundryRemoteComm
     payload,
     correlationId: id,
   };
-  writeJson(MOBILE_QUEUE_KEY, [...getPendingRemoteCommands(), command].slice(-MAX_COMMANDS));
+  const queued = [...getPendingRemoteCommands(), command].slice(-MAX_COMMANDS);
+  if (!writeJson(MOBILE_QUEUE_KEY, queued)) {
+    throw new Error("Mobile Foundry could not persist the remote command queue. The command was not queued or sent.");
+  }
   return command;
 }
 
