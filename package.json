@@ -10,6 +10,7 @@
     "audit:operational": "node scripts/audit-operational.mjs",
     "audit:integration": "node scripts/audit-foundry-link.mjs",
     "preview": "vite preview",
+    "tauri": "tauri",
     "desktop": "tauri dev",
     "desktop:build": "tauri build",
     "android:init": "tauri android init",
