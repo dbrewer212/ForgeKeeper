@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearDesktopRemoteCommandJournalForTests,
   completeDesktopRemoteCommand,
+  desktopRemoteCommandExecutionStarted,
   getJournaledDesktopRemoteCommandResult,
   getStagedDesktopRemoteCommands,
+  getUncertainDesktopRemoteCommands,
+  markDesktopRemoteCommandExecutionStarted,
   rememberDesktopRemoteCommandResult,
   stageDesktopRemoteCommands,
 } from "./desktopCommandJournal";
@@ -59,21 +62,33 @@ describe("desktop Foundry Link command journal", () => {
     expect(getStagedDesktopRemoteCommands().map((item) => item.id)).toEqual(["one", "two"]);
   });
 
+  it("persists an execution-start tombstone before side effects may run", () => {
+    stageDesktopRemoteCommands([command("one", 1)]);
+    expect(markDesktopRemoteCommandExecutionStarted("one", 1_500)).toBe(true);
+
+    expect(desktopRemoteCommandExecutionStarted("one")).toBe(true);
+    expect(getUncertainDesktopRemoteCommands().map((item) => item.id)).toEqual(["one"]);
+  });
+
   it("persists the execution result so publication can retry without executing again", () => {
     stageDesktopRemoteCommands([command("one", 1)]);
+    markDesktopRemoteCommandExecutionStarted("one", 1_500);
     expect(rememberDesktopRemoteCommandResult(result("one"))).toBe(true);
 
     expect(getJournaledDesktopRemoteCommandResult("one")?.state).toBe("completed");
+    expect(getUncertainDesktopRemoteCommands()).toEqual([]);
     expect(getStagedDesktopRemoteCommands()).toHaveLength(1);
   });
 
-  it("clears the command and cached result only after publication succeeds", () => {
+  it("clears command, cached result, and execution tombstone only after publication succeeds", () => {
     stageDesktopRemoteCommands([command("one", 1)]);
+    markDesktopRemoteCommandExecutionStarted("one", 1_500);
     rememberDesktopRemoteCommandResult(result("one"));
 
     expect(completeDesktopRemoteCommand("one")).toBe(true);
     expect(getStagedDesktopRemoteCommands()).toEqual([]);
     expect(getJournaledDesktopRemoteCommandResult("one")).toBeUndefined();
+    expect(desktopRemoteCommandExecutionStarted("one")).toBe(false);
   });
 
   it("fails closed when the recovery journal cannot be persisted", () => {
