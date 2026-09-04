@@ -11,6 +11,11 @@ import {
   stageDesktopRemoteCommands,
 } from "./desktopCommandJournal";
 import {
+  completeDesktopPendingWorkspace,
+  getStagedDesktopPendingWorkspace,
+  stageDesktopPendingWorkspace,
+} from "./desktopWorkspaceJournal";
+import {
   processRemoteCommand,
   sortRemoteCommandsForExecution,
   type FoundryRemoteCommand,
@@ -105,9 +110,6 @@ export function DesktopFoundryLinkRuntime({ state }: { state: ForgekeeperState }
   async function serviceRemoteCommands() {
     const fetched = await invoke<FoundryRemoteCommand[]>("foundry_link_take_pending_commands");
     if (fetched.length && !stageDesktopRemoteCommands(fetched)) {
-      // The Rust queue has already handed these commands to the host renderer. If the
-      // recovery journal cannot be written, fail closed rather than execute an action
-      // that could become untraceable if the renderer is interrupted mid-flight.
       await publishJournalFailure(fetched);
       return;
     }
@@ -117,9 +119,6 @@ export function DesktopFoundryLinkRuntime({ state }: { state: ForgekeeperState }
         let result = getJournaledDesktopRemoteCommandResult(command.id);
         if (!result) {
           if (desktopRemoteCommandExecutionStarted(command.id)) {
-            // A durable execution-start tombstone without a durable result means the
-            // renderer may have been interrupted after the side effect began. Never
-            // guess by running the action again; leave it staged for operator review.
             console.error(`Foundry Link command ${command.id} has an uncertain prior execution outcome and will not be re-executed automatically.`);
             continue;
           }
@@ -130,8 +129,6 @@ export function DesktopFoundryLinkRuntime({ state }: { state: ForgekeeperState }
 
           result = await processRemoteCommand(command);
           if (!rememberDesktopRemoteCommandResult(result)) {
-            // The execution-start tombstone remains durable. Publication may still
-            // succeed this tick, but a later retry will never repeat the side effect.
             console.error(`Foundry Link executed ${command.id} but could not persist its result journal before publication.`);
           }
         }
@@ -141,10 +138,41 @@ export function DesktopFoundryLinkRuntime({ state }: { state: ForgekeeperState }
           console.error(`Foundry Link published ${command.id} but could not clear its desktop command journal entry.`);
         }
       } catch (cause) {
-        // Leave the staged command, execution tombstone, and any saved result in the
-        // journal. A later tick can retry publication but cannot repeat a started action.
         console.error(`Foundry Link command ${command.id} remains journaled for retry:`, cause);
       }
+    }
+  }
+
+  async function servicePendingWorkspace(): Promise<boolean> {
+    let pending = getStagedDesktopPendingWorkspace();
+    if (!pending) {
+      const fetched = await invoke<FoundryLinkWorkspaceEnvelope | null>("foundry_link_take_pending_workspace");
+      if (!fetched) return false;
+      if (!stageDesktopPendingWorkspace(fetched)) {
+        console.error(`Foundry Link accepted workspace revision ${fetched.revision} but could not stage it for durable desktop apply. Local workspace publication is paused until the journal is writable.`);
+        throw new Error(`Foundry Link could not persist pending workspace revision ${fetched.revision}; stale local state will not be published over it.`);
+      }
+      pending = fetched;
+    }
+
+    applyingRemote.current = true;
+    knownRevision.current = pending.revision;
+    try {
+      await commitLinkedWorkspace(
+        stateRef.current,
+        pending,
+        pending.sourceDeviceId ? `paired device ${pending.sourceDeviceId}` : "paired mobile device",
+      );
+      lastPublishedPayload.current = pending.payload;
+      if (!completeDesktopPendingWorkspace(pending.revision)) {
+        console.error(`Foundry Link applied workspace revision ${pending.revision} but could not clear its pending workspace journal entry.`);
+      }
+      return true;
+    } catch (cause) {
+      // Keep the durable pending workspace staged. The next tick retries this exact
+      // revision before any local workspace publication is allowed.
+      console.error(`Foundry Link workspace revision ${pending.revision} remains staged for apply retry:`, cause);
+      throw cause;
     }
   }
 
@@ -156,19 +184,7 @@ export function DesktopFoundryLinkRuntime({ state }: { state: ForgekeeperState }
       if (!status) return;
 
       await serviceRemoteCommands();
-
-      const pending = await invoke<FoundryLinkWorkspaceEnvelope | null>("foundry_link_take_pending_workspace");
-      if (pending) {
-        applyingRemote.current = true;
-        knownRevision.current = pending.revision;
-        lastPublishedPayload.current = pending.payload;
-        await commitLinkedWorkspace(
-          stateRef.current,
-          pending,
-          pending.sourceDeviceId ? `paired device ${pending.sourceDeviceId}` : "paired mobile device",
-        );
-        return;
-      }
+      if (await servicePendingWorkspace()) return;
 
       if (!lastPublishedPayload.current && status.hasWorkspace) {
         knownRevision.current = status.revision;
