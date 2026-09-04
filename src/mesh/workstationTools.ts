@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { MeshCapabilities } from "./catalog";
 import type { FoundryMeshRuntime } from "./runtime";
 import type { WorkerIdentity } from "./types";
+import { resolveTrustedWorkstationLocation } from "./workstationLocations";
 
 function requirePairedMobile(worker: WorkerIdentity) {
   if (worker.id !== "forgekeeper-mobile") {
@@ -14,7 +15,7 @@ export function registerWorkstationTools(runtime: FoundryMeshRuntime): void {
     {
       name: "workstation.launch_tool",
       capabilityId: MeshCapabilities.workstationLaunchTool,
-      description: "Launch a configured application on the Windows Foundry workstation, optionally with a linked asset path.",
+      description: "Launch a configured application on the Windows Foundry workstation through a trusted host-side launcher id.",
       risk: "moderate",
       inputSchema: {
         type: "object",
@@ -32,22 +33,24 @@ export function registerWorkstationTools(runtime: FoundryMeshRuntime): void {
     },
   );
 
-  runtime.tools.register<{ locationId: string }, { opened: true }>(
+  runtime.tools.register<{ locationId: "foundry-library" | "asset-root" }, { opened: true }>(
     {
       name: "workstation.open_path",
       capabilityId: MeshCapabilities.workstationOpenPath,
-      description: "Ask the desktop Foundry workstation to open a linked local file or folder.",
+      description: "Open a host-configured Foundry location by trusted id; remote clients never supply a filesystem path.",
       risk: "low",
       inputSchema: {
         type: "object",
-        properties: { locationId: { type: "string" } },
+        properties: { locationId: { type: "string", enum: ["foundry-library", "asset-root"] } },
         required: ["locationId"],
         additionalProperties: false,
       },
     },
     async ({ locationId }, _request, worker) => {
       requirePairedMobile(worker);
-      throw new Error(`Managed Foundry location '${locationId}' is not registered on this host.`);
+      const path = resolveTrustedWorkstationLocation(locationId);
+      await invoke("open_path", { path });
+      return { opened: true };
     },
   );
 
@@ -77,7 +80,13 @@ export function registerWorkstationTools(runtime: FoundryMeshRuntime): void {
     },
     async (_payload, _request, worker) => {
       requirePairedMobile(worker);
-      const telemetry = await invoke("watcher_system_snapshot").catch(() => undefined);
+      let telemetry: unknown;
+      let telemetryError: string | undefined;
+      try {
+        telemetry = await invoke("watcher_system_snapshot");
+      } catch (cause) {
+        telemetryError = cause instanceof Error ? cause.message : String(cause);
+      }
       return {
         sampledAt: new Date().toISOString(),
         health: runtime.getSystemHealth(),
@@ -87,6 +96,7 @@ export function registerWorkstationTools(runtime: FoundryMeshRuntime): void {
         resources: runtime.resources.listStates(),
         pendingApprovals: runtime.approvals.list("pending").length,
         telemetry,
+        telemetryError,
       };
     },
   );
