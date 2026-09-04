@@ -59,6 +59,8 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
       MeshCapabilities.systemServiceRestart,
       MeshCapabilities.workstationLaunchTool,
       MeshCapabilities.workstationOpenPath,
+      MeshCapabilities.meshEnterSafeMode,
+      MeshCapabilities.meshExitSafeMode,
     ],
     enabled: true,
     commissioningState: "active",
