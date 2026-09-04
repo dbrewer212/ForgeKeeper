@@ -1,6 +1,7 @@
 import { getKeeperAlerts } from "../lib/keeper/keeperAlerts";
 import type { ServiceDescriptor } from "../mesh/serviceRegistry";
 import type { SystemHealth } from "../mesh/types";
+import { evaluatePrinterExpectedState } from "./printerExpectations";
 
 export type BastionAlertSeverity = "routine" | "info" | "attention" | "approval" | "critical" | "emergency";
 export type BastionAlertDelivery = "in-app" | "notify" | "urgent" | "approval";
@@ -129,6 +130,27 @@ export function buildBastionAlerts(state: any, snapshot?: BastionAlertSnapshot):
       relatedRecordId: keeperAlert.relatedRecordId,
       correlationId: keeperAlert.relatedRecordId,
       dedupeKey: `keeper:${keeperAlert.id}`,
+    }, sampledAt));
+  }
+
+  for (const printer of Array.isArray(state?.printers) ? state.printers : []) {
+    const signal = evaluatePrinterExpectedState(printer);
+    if (!signal) continue;
+    alerts.push(alert({
+      id: `printer:${printer.id}:expected-state`,
+      source: "Bastion",
+      category: "printer",
+      severity: signal.severity,
+      delivery: signal.severity === "critical" ? "urgent" : signal.severity === "attention" ? "notify" : "in-app",
+      affectedEntity: printer.id,
+      title: signal.title,
+      message: signal.summary,
+      evidence: signal.evidence,
+      recommendedAction: signal.recommendedAction,
+      allowedActions: ["inspect-printer"],
+      relatedRecordId: printer.id,
+      correlationId: `printer:${printer.id}`,
+      dedupeKey: `printer:${printer.id}:expected-state`,
     }, sampledAt));
   }
 
