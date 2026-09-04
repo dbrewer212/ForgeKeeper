@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { BastionView } from "./features/bastion/BastionView";
@@ -43,6 +43,16 @@ export default function App() {
       </>
     );
   }
+
+  return <ForgekeeperDesktop />;
+}
+
+function ForgekeeperDesktop() {
+  useEffect(() => {
+    void invoke("bastion_close_window").catch((cause) => {
+      console.error("Failed to prepare resident Bastion window:", cause);
+    });
+  }, []);
 
   return (
     <Suspense fallback={<WorkspaceLoading />}>
