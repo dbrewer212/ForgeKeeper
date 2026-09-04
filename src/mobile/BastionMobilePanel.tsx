@@ -82,6 +82,17 @@ function toneForAlert(severity: string): string {
   return "border-slate-800 bg-black/20 text-slate-300";
 }
 
+function approvalExpired(result: FoundryRemoteCommandResult): boolean {
+  const expiresAt = result.approval?.expiresAt;
+  return Boolean(expiresAt && Date.parse(expiresAt) <= Date.now());
+}
+
+function readableTime(value?: string): string | undefined {
+  if (!value) return undefined;
+  const time = Date.parse(value);
+  return Number.isFinite(time) ? new Date(time).toLocaleString() : value;
+}
+
 export function BastionMobilePanel({ state }: { state: ForgekeeperState }) {
   const [expanded, setExpanded] = useState(false);
   const [paired, setPaired] = useState(Boolean(loadLinkConfig()?.token));
@@ -97,9 +108,21 @@ export function BastionMobilePanel({ state }: { state: ForgekeeperState }) {
     return undefined;
   }, [results]);
 
+  const resolvedApprovalIds = useMemo(() => new Set(
+    results
+      .filter((result) => result.approvalId && result.state !== "approval-required")
+      .map((result) => result.approvalId!),
+  ), [results]);
+
   const approvalResults = useMemo(
-    () => results.filter((result) => result.state === "approval-required" && result.approvalId && !handledApprovals.has(result.approvalId)),
-    [handledApprovals, results],
+    () => results.filter((result) => (
+      result.state === "approval-required"
+      && Boolean(result.approvalId)
+      && !handledApprovals.has(result.approvalId!)
+      && !resolvedApprovalIds.has(result.approvalId!)
+      && !approvalExpired(result)
+    )),
+    [handledApprovals, resolvedApprovalIds, results],
   );
 
   const alerts = useMemo(() => buildBastionAlerts(state, snapshot), [state, snapshot]);
@@ -196,7 +219,7 @@ export function BastionMobilePanel({ state }: { state: ForgekeeperState }) {
                 <Metric label="CPU" value={typeof telemetry?.cpuUsagePercent === "number" ? `${telemetry.cpuUsagePercent.toFixed(0)}%` : "—"} />
                 <Metric label="RAM" value={memoryPercent !== undefined ? `${memoryPercent.toFixed(0)}%` : "—"} />
                 <Metric label="Services" value={snapshot ? `${snapshot.services.filter((service) => service.runtimeState === "online").length}/${snapshot.services.length}` : "—"} />
-                <Metric label="Approvals" value={String(snapshot?.pendingApprovals ?? approvalResults.length)} />
+                <Metric label="Approvals" value={String(approvalResults.length || snapshot?.pendingApprovals || 0)} />
               </div>
 
               {snapshot ? (
@@ -224,6 +247,12 @@ export function BastionMobilePanel({ state }: { state: ForgekeeperState }) {
                           <span className="shrink-0 rounded-full border border-current/20 px-2 py-0.5 text-[8px] font-semibold uppercase tracking-[0.12em] opacity-70">{alert.delivery}</span>
                         </div>
                         <div className="mt-1 text-[11px] leading-5 opacity-70">{alert.message}</div>
+                        {alert.evidence.length > 0 ? (
+                          <div className="mt-2 space-y-1 border-t border-current/10 pt-2 text-[10px] leading-4 opacity-60">
+                            {alert.evidence.slice(0, 2).map((item) => <div key={item}>• {item}</div>)}
+                          </div>
+                        ) : null}
+                        {alert.recommendedAction ? <div className="mt-2 text-[10px] font-medium leading-4 opacity-80">Next: {alert.recommendedAction}</div> : null}
                       </div>
                     ))}
                   </div>
@@ -234,16 +263,32 @@ export function BastionMobilePanel({ state }: { state: ForgekeeperState }) {
                 <div>
                   <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-rose-300">Approval required</div>
                   <div className="space-y-2">
-                    {approvalResults.slice(0, 4).map((result) => (
-                      <div key={result.commandId} className="rounded-xl border border-rose-800/45 bg-rose-950/20 p-3">
-                        <div className="text-sm font-semibold text-rose-100">{labels[result.commandId] ?? "Governed workstation action"}</div>
-                        <div className="mt-1 text-[11px] leading-5 text-rose-200/65">Bastion requires explicit operator authority before this action can execute.</div>
-                        <div className="mt-3 grid grid-cols-2 gap-2">
-                          <button type="button" onClick={() => decideApproval(result.approvalId!, false)} className="min-h-[46px] rounded-xl border border-slate-700 bg-slate-900/80 text-sm font-semibold text-slate-300">Reject</button>
-                          <button type="button" onClick={() => decideApproval(result.approvalId!, true)} className="min-h-[46px] rounded-xl border border-amber-700/55 bg-amber-950/35 text-sm font-semibold text-amber-100">Approve</button>
+                    {approvalResults.slice(0, 4).map((result) => {
+                      const detail = result.approval;
+                      return (
+                        <div key={result.commandId} className="rounded-xl border border-rose-800/45 bg-rose-950/20 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-rose-100">{labels[result.commandId] ?? detail?.summary ?? "Governed workstation action"}</div>
+                              <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-rose-200/50">
+                                {detail?.requestedByWorkerId ?? "forgekeeper-mobile"} · {detail?.risk ?? "governed"}
+                              </div>
+                            </div>
+                            {detail?.risk ? <span className="shrink-0 rounded-full border border-rose-700/40 px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.12em] text-rose-200/80">{detail.risk}</span> : null}
+                          </div>
+                          <div className="mt-2 text-[11px] leading-5 text-rose-200/75">{detail?.summary ?? "Bastion requires explicit operator authority before this action can execute."}</div>
+                          <div className="mt-2 grid grid-cols-1 gap-1 text-[10px] leading-4 text-rose-200/55">
+                            {detail?.operationId || detail?.capabilityId ? <div><span className="font-semibold text-rose-200/70">Operation:</span> {detail.operationId ?? detail.capabilityId}</div> : null}
+                            {detail?.reason ? <div><span className="font-semibold text-rose-200/70">Reason:</span> {detail.reason}</div> : null}
+                            {detail?.expiresAt ? <div><span className="font-semibold text-rose-200/70">Expires:</span> {readableTime(detail.expiresAt)}</div> : null}
+                          </div>
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            <button type="button" onClick={() => decideApproval(result.approvalId!, false)} className="min-h-[46px] rounded-xl border border-slate-700 bg-slate-900/80 text-sm font-semibold text-slate-300">Reject</button>
+                            <button type="button" onClick={() => decideApproval(result.approvalId!, true)} className="min-h-[46px] rounded-xl border border-amber-700/55 bg-amber-950/35 text-sm font-semibold text-amber-100">Approve</button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}
