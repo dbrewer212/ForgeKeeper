@@ -16,6 +16,7 @@ const files = {
   actionGateway: read("src/mesh/actionGateway.ts"),
   app: read("src/App.tsx"),
   workstationTools: read("src/mesh/workstationTools.ts"),
+  workstationLocations: read("src/mesh/workstationLocations.ts"),
   policies: read("src/mesh/defaultPolicies.ts"),
   workers: read("src/mesh/workers.ts"),
   desktopRuntime: read("src/foundry-link/DesktopFoundryLinkRuntime.tsx"),
@@ -36,10 +37,14 @@ const checks = [
   ["command-expiration", files.commands.includes("DEFAULT_COMMAND_TTL_MS = 5 * 60 * 1000") && files.commands.includes("expiresAtMs")],
   ["expired-commands-denied", files.commands.includes("Remote command expired before the workstation could execute it")],
   ["command-fifo-helper", files.commands.includes("sortRemoteCommandsForExecution") && files.desktopRuntime.includes("sortRemoteCommandsForExecution(getStagedDesktopRemoteCommands())")],
+  ["mobile-command-queue-fails-closed", files.commands.includes("if (!writeJson(MOBILE_QUEUE_KEY, queued))") && files.commands.includes("was not queued or sent")],
   ["result-ack-after-mobile-persist", files.commands.includes("if (!writeJson(MOBILE_RESULTS_KEY, merged)) return []")],
   ["desktop-command-journal-before-execution", files.desktopRuntime.includes("stageDesktopRemoteCommands(fetched)") && files.desktopRuntime.indexOf("stageDesktopRemoteCommands(fetched)") < files.desktopRuntime.indexOf("processRemoteCommand(command)")],
+  ["desktop-execution-tombstone-before-side-effect", files.commandJournal.includes("executionStartedAt") && files.desktopRuntime.includes("markDesktopRemoteCommandExecutionStarted(command.id)") && files.desktopRuntime.indexOf("markDesktopRemoteCommandExecutionStarted(command.id)") < files.desktopRuntime.indexOf("processRemoteCommand(command)")],
+  ["desktop-uncertain-command-never-auto-reexecutes", files.desktopRuntime.includes("desktopRemoteCommandExecutionStarted(command.id)") && files.desktopRuntime.includes("will not be re-executed automatically")],
   ["desktop-result-journal-before-publication", files.desktopRuntime.includes("rememberDesktopRemoteCommandResult(result)") && files.desktopRuntime.includes('await invoke("foundry_link_publish_command_result", { result });')],
   ["desktop-command-journal-retry", files.commandJournal.includes("getJournaledDesktopRemoteCommandResult") && files.desktopRuntime.includes("getJournaledDesktopRemoteCommandResult(command.id)")],
+  ["uncertain-command-surfaces-in-bastion", files.workstationTools.includes("uncertainRemoteCommands") && files.alertBus.includes("Automatic re-execution is blocked")],
   ["mesh-governed-execution", files.commands.includes("runtime.tools.invoke") && files.commands.includes('requesterWorkerId: "forgekeeper-mobile"')],
   ["approval-round-trip", files.commands.includes("runtime.coordinator.approve") && files.commands.includes("runtime.coordinator.deny")],
   ["approval-context-on-result-channel", files.commands.includes("FoundryRemoteApprovalDetail") && files.commands.includes("requestedByWorkerId") && files.commands.includes("risk: request.risk")],
@@ -47,8 +52,10 @@ const checks = [
   ["mobile-approval-inspection-detail", files.mobileBastion.includes("detail?.requestedByWorkerId") && files.mobileBastion.includes("detail?.reason") && files.mobileBastion.includes("detail?.expiresAt")],
   ["resolved-approval-suppression", files.mobileBastion.includes("resolvedApprovalIds") && files.mobileBastion.includes("approvalExpired")],
   ["mobile-worker-registered", files.workers.includes('id: "forgekeeper-mobile"')],
+  ["mobile-safe-mode-capabilities-advertised", files.workers.includes("MeshCapabilities.meshEnterSafeMode") && files.workers.includes("MeshCapabilities.meshExitSafeMode")],
   ["workstation-requester-guard", files.workstationTools.includes('worker.id !== "forgekeeper-mobile"')],
   ["consolidated-bastion-snapshot", files.workstationTools.includes('name: "bastion.mobile_snapshot"')],
+  ["telemetry-provider-failure-surfaces", files.workstationTools.includes("telemetryError") && files.alertBus.includes("bastion-telemetry-provider-fault")],
   ["protective-safe-mode-mobile-allow", files.policies.includes('id: "mobile-console-enter-safe-mode"') && files.policies.includes("effect: \"allow\"")],
   ["safe-mode-exit-still-governed", !files.policies.includes('workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.meshExitSafeMode, effect: "allow"')],
   ["service-lifecycle-not-unconditionally-allowed", !files.policies.includes('workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.systemServiceStart, effect: "allow"') && !files.policies.includes('workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.systemServiceStop, effect: "allow"')],
@@ -57,6 +64,8 @@ const checks = [
   ["alert-bus-lifecycle-contract", files.alertBus.includes("BastionAlertState") && files.alertBus.includes("dedupeKey") && files.alertBus.includes("allowedActions") && files.alertBus.includes("recommendedAction") && files.alertBus.includes('seed.state ?? "active"')],
   ["printer-expected-state-awareness", files.printerExpectations.includes('operationalDisposition: "out-of-service"') && files.printerExpectations.includes('expectedPower: "always-on"') && files.alertBus.includes("evaluatePrinterExpectedState")],
   ["printer-native-control-paths-preserved", files.printerExpectations.includes('controlPath: "Fluidd"') && files.printerExpectations.includes('controlPath: "Anycubic Next"')],
+  ["trusted-open-path-registry", files.workstationTools.includes("resolveTrustedWorkstationLocation") && files.workstationLocations.includes('"foundry-library"') && files.workstationLocations.includes('"asset-root"') && files.desktopWorkspace.includes("configureTrustedWorkstationLocations")],
+  ["remote-open-path-never-accepts-filesystem-path", files.workstationTools.includes("locationId") && files.workstationTools.includes('enum: ["foundry-library", "asset-root"]') && !files.workstationTools.includes("toolPath")],
   ["desktop-link-runtime-mounted", files.desktopWorkspace.includes("<DesktopFoundryLinkRuntime")],
   ["desktop-command-processor", files.desktopRuntime.includes("foundry_link_take_pending_commands") && files.desktopRuntime.includes("foundry_link_publish_command_result")],
   ["desktop-pending-mobile-commit", files.desktopRuntime.includes("foundry_link_take_pending_workspace") && files.desktopRuntime.includes("commitLinkedWorkspace")],
@@ -80,9 +89,13 @@ const external = [
   ["android-notification-bridge", files.mobileCapabilities.includes("notification:")],
   ["android-deep-link-bridge", files.mobileCapabilities.includes("deep-link:")],
   ["mobile-biometric-bridge", files.mobileCapabilities.includes("biometric:")],
+  ["persistent-host-control-plane", files.rustLink.includes("persist_control_plane")],
+  ["device-revocation-api", files.rustLink.includes("revoke_device")],
+  ["device-local-settings-separation", files.workspace.includes("deviceLocalSettings")],
+  ["foundry-asset-service", fs.existsSync("src/foundry-link/assetService.ts")],
 ];
 for (const [name, commissioned] of external) {
-  console.log(`${commissioned ? "COMMISSIONED" : "EXTERNAL-PENDING"}|${name}`);
+  console.log(`${commissioned ? "COMMISSIONED" : "EXPANSION-PENDING"}|${name}`);
 }
 
 console.log(`Foundry Link integration audit: ${checks.length - failures}/${checks.length} structural invariants passed.`);
