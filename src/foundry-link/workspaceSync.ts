@@ -48,7 +48,7 @@ function sharedSettings(settings: AppData["settings"]): AppData["settings"] {
   return shared as AppData["settings"];
 }
 
-function deviceLocalSettings(settings: AppData["settings"]): Partial<AppData["settings"] {
+function deviceLocalSettings(settings: AppData["settings"]): Partial<AppData["settings"]> {
   return {
     assetRootPath: settings.assetRootPath,
     forgekeeperLibraryPath: settings.forgekeeperLibraryPath,
