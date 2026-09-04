@@ -12,6 +12,7 @@ const files = {
   mobileLink: read("src/mobile/FoundryLinkMobilePanel.tsx"),
   mobileBastion: read("src/mobile/BastionMobilePanel.tsx"),
   alertBus: read("src/bastion/alertBus.ts"),
+  printerExpectations: read("src/bastion/printerExpectations.ts"),
   actionGateway: read("src/mesh/actionGateway.ts"),
   app: read("src/App.tsx"),
   workstationTools: read("src/mesh/workstationTools.ts"),
@@ -21,6 +22,7 @@ const files = {
   desktopWorkspace: read("src/ForgekeeperWorkspace.tsx"),
   rustHost: read("src-tauri/src/lib.rs"),
   rustLink: read("src-tauri/src/foundry_link.rs"),
+  tauriConfig: read("src-tauri/tauri.conf.json"),
   mobileCapabilities: read("src-tauri/capabilities/mobile.json"),
 };
 
@@ -36,7 +38,7 @@ const checks = [
   ["command-fifo-helper", files.commands.includes("sortRemoteCommandsForExecution") && files.desktopRuntime.includes("sortRemoteCommandsForExecution(getStagedDesktopRemoteCommands())")],
   ["result-ack-after-mobile-persist", files.commands.includes("if (!writeJson(MOBILE_RESULTS_KEY, merged)) return []")],
   ["desktop-command-journal-before-execution", files.desktopRuntime.includes("stageDesktopRemoteCommands(fetched)") && files.desktopRuntime.indexOf("stageDesktopRemoteCommands(fetched)") < files.desktopRuntime.indexOf("processRemoteCommand(command)")],
-  ["desktop-result-journal-before-publication", files.desktopRuntime.includes("rememberDesktopRemoteCommandResult(result)") && files.desktopRuntime.indexOf("rememberDesktopRemoteCommandResult(result)") < files.desktopRuntime.indexOf('invoke("foundry_link_publish_command_result"')],
+  ["desktop-result-journal-before-publication", files.desktopRuntime.includes("rememberDesktopRemoteCommandResult(result)") && files.desktopRuntime.includes('await invoke("foundry_link_publish_command_result", { result });')],
   ["desktop-command-journal-retry", files.commandJournal.includes("getJournaledDesktopRemoteCommandResult") && files.desktopRuntime.includes("getJournaledDesktopRemoteCommandResult(command.id)")],
   ["mesh-governed-execution", files.commands.includes("runtime.tools.invoke") && files.commands.includes('requesterWorkerId: "forgekeeper-mobile"')],
   ["approval-round-trip", files.commands.includes("runtime.coordinator.approve") && files.commands.includes("runtime.coordinator.deny")],
@@ -53,6 +55,8 @@ const checks = [
   ["bastion-mobile-mounted", files.app.includes("<BastionMobileOverlay />")],
   ["mobile-bastion-controls-use-queue", files.mobileBastion.includes("queueRemoteTool") && files.mobileBastion.includes("queueRemoteApproval")],
   ["alert-bus-lifecycle-contract", files.alertBus.includes("BastionAlertState") && files.alertBus.includes("dedupeKey") && files.alertBus.includes("allowedActions") && files.alertBus.includes("recommendedAction") && files.alertBus.includes('seed.state ?? "active"')],
+  ["printer-expected-state-awareness", files.printerExpectations.includes('operationalDisposition: "out-of-service"') && files.printerExpectations.includes('expectedPower: "always-on"') && files.alertBus.includes("evaluatePrinterExpectedState")],
+  ["printer-native-control-paths-preserved", files.printerExpectations.includes('controlPath: "Fluidd"') && files.printerExpectations.includes('controlPath: "Anycubic Next"')],
   ["desktop-link-runtime-mounted", files.desktopWorkspace.includes("<DesktopFoundryLinkRuntime")],
   ["desktop-command-processor", files.desktopRuntime.includes("foundry_link_take_pending_commands") && files.desktopRuntime.includes("foundry_link_publish_command_result")],
   ["desktop-pending-mobile-commit", files.desktopRuntime.includes("foundry_link_take_pending_workspace") && files.desktopRuntime.includes("commitLinkedWorkspace")],
@@ -62,6 +66,7 @@ const checks = [
   ["private-link-address-policy", files.rustLink.includes("is_private_link_ip") && files.rustLink.includes("is_cgnat")],
   ["link-request-size-bounded", files.rustLink.includes("MAX_REQUEST_BYTES")],
   ["trusted-launcher-boundary", files.workstationTools.includes("launcherId") && !files.workstationTools.includes("toolPath") && files.rustHost.includes("launch_trusted_tool")],
+  ["tauri-csp-enabled", !files.tauriConfig.includes('"csp": null') && files.tauriConfig.includes("default-src 'self'") && files.tauriConfig.includes("script-src 'self'")],
   ["mobile-native-sql-capability", files.mobileCapabilities.includes('"sql:default"')],
 ];
 
