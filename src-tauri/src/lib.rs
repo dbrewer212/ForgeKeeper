@@ -41,9 +41,15 @@ use std::process::Command;
 use std::time::Duration;
 use tauri::Manager;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 const MESH_DIR: &str = "mesh";
 const SNAPSHOT_FILE: &str = "snapshot.json";
 const EVENT_JOURNAL_FILE: &str = "events.jsonl";
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Serialize)]
 struct LocalHttpResponse {
@@ -146,8 +152,10 @@ if ($null -ne $gpu) {
 } | ConvertTo-Json -Depth 6 -Compress
 "#;
 
-    let output = Command::new("powershell")
-        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+    let mut command = Command::new("powershell");
+    command.args(["-NoProfile", "-NonInteractive", "-Command", script]);
+    command.creation_flags(CREATE_NO_WINDOW);
+    let output = command
         .output()
         .map_err(|error| format!("Failed to launch Windows telemetry provider: {error}"))?;
 
@@ -365,6 +373,7 @@ fn open_with_windows_shell(target: &str, asset_path: Option<&str>) -> Result<(),
         }
     }
 
+    command.creation_flags(CREATE_NO_WINDOW);
     command
         .spawn()
         .map(|_| ())
