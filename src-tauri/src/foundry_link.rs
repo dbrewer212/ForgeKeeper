@@ -951,6 +951,7 @@ fn pair_device(
             Err(_) => return HttpResponse::json(500, json!({ "error": "Foundry Link state unavailable." })),
         };
         prune_state(&mut state);
+        let pairing_code_matches = request.code.trim() == state.pairing_code;
         let attempt = state.pair_attempts.entry(peer_key.clone()).or_insert_with(|| PairAttempt {
             window_started_ms: now,
             failures: 0,
@@ -965,7 +966,7 @@ fn pair_device(
         if now.saturating_sub(attempt.window_started_ms) > PAIR_WINDOW_MS {
             *attempt = PairAttempt { window_started_ms: now, failures: 0, locked_until_ms: 0 };
         }
-        if request.code.trim() != state.pairing_code {
+        if !pairing_code_matches {
             attempt.failures = attempt.failures.saturating_add(1);
             if attempt.failures >= MAX_PAIR_FAILURES {
                 attempt.locked_until_ms = now.saturating_add(PAIR_LOCKOUT_MS);
