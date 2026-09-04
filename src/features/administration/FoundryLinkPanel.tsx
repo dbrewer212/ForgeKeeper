@@ -53,12 +53,13 @@ export function FoundryLinkPanel({ state: _state }: { state: ForgekeeperState })
     setError("");
     setMessage("");
     try {
+      const next = await invoke<LinkStatus>("foundry_link_start", { port: DEFAULT_PORT });
       setDesktopFoundryLinkEnabled(true);
       setEnabled(true);
-      const next = await invoke<LinkStatus>("foundry_link_start", { port: DEFAULT_PORT });
       setStatus(next);
       setMessage(`Foundry Link is listening on ${next.endpoint}. Workspace synchronization continues across every desktop station.`);
     } catch (cause) {
+      setEnabled(desktopFoundryLinkEnabled());
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(false);
@@ -69,12 +70,13 @@ export function FoundryLinkPanel({ state: _state }: { state: ForgekeeperState })
     setBusy(true);
     setError("");
     try {
+      const next = await invoke<LinkStatus>("foundry_link_stop");
       setDesktopFoundryLinkEnabled(false);
       setEnabled(false);
-      const next = await invoke<LinkStatus>("foundry_link_stop");
       setStatus(next);
       setMessage("Foundry Link stopped and automatic desktop synchronization is disabled until you start it again.");
     } catch (cause) {
+      setEnabled(desktopFoundryLinkEnabled());
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(false);
