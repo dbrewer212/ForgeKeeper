@@ -3,8 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 import type { ForgekeeperState } from "../state/useForgekeeperState";
 import {
   completeDesktopRemoteCommand,
+  desktopRemoteCommandExecutionStarted,
   getJournaledDesktopRemoteCommandResult,
   getStagedDesktopRemoteCommands,
+  markDesktopRemoteCommandExecutionStarted,
   rememberDesktopRemoteCommandResult,
   stageDesktopRemoteCommands,
 } from "./desktopCommandJournal";
@@ -114,8 +116,22 @@ export function DesktopFoundryLinkRuntime({ state }: { state: ForgekeeperState }
       try {
         let result = getJournaledDesktopRemoteCommandResult(command.id);
         if (!result) {
+          if (desktopRemoteCommandExecutionStarted(command.id)) {
+            // A durable execution-start tombstone without a durable result means the
+            // renderer may have been interrupted after the side effect began. Never
+            // guess by running the action again; leave it staged for operator review.
+            console.error(`Foundry Link command ${command.id} has an uncertain prior execution outcome and will not be re-executed automatically.`);
+            continue;
+          }
+          if (!markDesktopRemoteCommandExecutionStarted(command.id)) {
+            console.error(`Foundry Link could not persist the execution-start tombstone for ${command.id}; command was not executed.`);
+            continue;
+          }
+
           result = await processRemoteCommand(command);
           if (!rememberDesktopRemoteCommandResult(result)) {
+            // The execution-start tombstone remains durable. Publication may still
+            // succeed this tick, but a later retry will never repeat the side effect.
             console.error(`Foundry Link executed ${command.id} but could not persist its result journal before publication.`);
           }
         }
@@ -125,8 +141,8 @@ export function DesktopFoundryLinkRuntime({ state }: { state: ForgekeeperState }
           console.error(`Foundry Link published ${command.id} but could not clear its desktop command journal entry.`);
         }
       } catch (cause) {
-        // Leave the staged command and any saved result in the journal. A later tick can
-        // retry publication without re-running a side effect when a result was persisted.
+        // Leave the staged command, execution tombstone, and any saved result in the
+        // journal. A later tick can retry publication but cannot repeat a started action.
         console.error(`Foundry Link command ${command.id} remains journaled for retry:`, cause);
       }
     }
