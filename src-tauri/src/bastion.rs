@@ -78,7 +78,7 @@ fn select_bastion_display(app: &tauri::AppHandle) -> Result<BastionDisplayTarget
 }
 
 #[cfg(target_os = "windows")]
-pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
+fn prepare_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
     let target = select_bastion_display(app)?;
 
     let window = if let Some(existing) = app.get_webview_window("bastion") {
@@ -107,6 +107,17 @@ pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarge
     window
         .set_size(PhysicalSize::new(target.width, target.height))
         .map_err(|error| format!("Failed to size Bastion to the touch display: {error}"))?;
+
+    Ok(target)
+}
+
+#[cfg(target_os = "windows")]
+pub fn open_bastion_window(app: &tauri::AppHandle) -> Result<BastionDisplayTarget, String> {
+    let target = prepare_bastion_window(app)?;
+    let window = app
+        .get_webview_window("bastion")
+        .ok_or_else(|| "Bastion window could not be prepared.".to_string())?;
+
     window
         .show()
         .map_err(|error| format!("Failed to show Bastion: {error}"))?;
@@ -170,6 +181,10 @@ pub async fn bastion_return_to_forgekeeper(_app: tauri::AppHandle) -> Result<(),
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub async fn bastion_close_window(app: tauri::AppHandle) -> Result<(), String> {
+    if app.get_webview_window("bastion").is_none() {
+        prepare_bastion_window(&app)?;
+    }
+
     if let Some(window) = app.get_webview_window("bastion") {
         window
             .hide()
