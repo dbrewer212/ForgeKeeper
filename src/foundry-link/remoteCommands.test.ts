@@ -3,6 +3,7 @@ import {
   absorbRemoteCommandResults,
   isRemoteCommandExpired,
   mergeRemoteCommandResults,
+  queueRemoteTool,
   sortRemoteCommandsForExecution,
   type FoundryRemoteCommand,
   type FoundryRemoteCommandResult,
@@ -81,6 +82,21 @@ describe("Foundry Link command semantics", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     expect(absorbRemoteCommandResults([result("one", 100)])).toEqual([]);
+    expect(errorSpy).toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("refuses to claim a remote command is queued when mobile persistence fails", () => {
+    vi.stubGlobal("crypto", { randomUUID: () => "command-one" });
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: () => null,
+        setItem: () => { throw new Error("storage unavailable"); },
+      },
+    });
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    expect(() => queueRemoteTool("bastion.mobile_snapshot")).toThrow(/was not queued or sent/);
     expect(errorSpy).toHaveBeenCalled();
     errorSpy.mockRestore();
   });
