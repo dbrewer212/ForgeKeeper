@@ -12,6 +12,10 @@ on:
       - ".github/workflows/package-foundry.yml"
   workflow_dispatch:
 
+concurrency:
+  group: package-foundry-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows-installer:
     name: Windows installer
