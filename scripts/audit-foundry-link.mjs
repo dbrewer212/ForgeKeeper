@@ -78,12 +78,19 @@ const checks = [
   ["desktop-pending-mobile-commit", files.desktopRuntime.includes("foundry_link_take_pending_workspace") && files.desktopRuntime.includes("commitLinkedWorkspace")],
   ["desktop-runtime-releases-remote-apply-lock", files.desktopRuntime.includes("applyingRemote.current = false")],
   ["bastion-startup-hides-main-host", files.rustHost.includes('get_webview_window("main")') && files.rustHost.includes("main_window") && files.rustHost.includes(".hide()")],
-  ["bastion-startup-autostarts-link", files.rustHost.includes("foundry_link_start(link_state, Some(4717))")],
-  ["private-link-address-policy", files.rustLink.includes("is_private_link_ip") && files.rustLink.includes("is_cgnat")],
+  ["bastion-startup-autostarts-link", files.rustHost.includes("foundry_link_start(app.handle().clone(), link_state, Some(4717))")],
+  ["private-link-address-policy", files.rustLink.includes("is_private_link_ip") && files.rustLink.includes("is_cgnat") && files.rustLink.includes("if !is_private_link_ip(peer.ip())")],
   ["link-request-size-bounded", files.rustLink.includes("MAX_REQUEST_BYTES")],
   ["trusted-launcher-boundary", files.workstationTools.includes("launcherId") && !files.workstationTools.includes("toolPath") && files.rustHost.includes("launch_trusted_tool")],
   ["tauri-csp-enabled", !files.tauriConfig.includes('"csp": null') && files.tauriConfig.includes("default-src 'self'") && files.tauriConfig.includes("script-src 'self'")],
   ["mobile-native-sql-capability", files.mobileCapabilities.includes('"sql:default"')],
+  ["persistent-host-ledger", files.rustLink.includes('const PERSISTENCE_FILE: &str = "state.json"') && files.rustLink.includes("fn persist_state(") && files.rustLink.includes("fn ensure_hydrated(")],
+  ["persisted-token-hashing", files.rustLink.includes("fn hash_token(") && files.rustLink.includes("state.sessions.insert(token_hash")],
+  ["device-session-expiration", files.rustLink.includes("SESSION_TTL_MS") && files.rustLink.includes("expires_at_ms")],
+  ["device-session-rotation-revocation", files.rustLink.includes('("POST", "/session/rotate")') && files.rustLink.includes('("POST", "/session/revoke")') && files.rustHost.includes("foundry_link_revoke_device")],
+  ["pairing-rate-limit", files.rustLink.includes("MAX_PAIR_FAILURES") && files.rustLink.includes("PAIR_LOCKOUT_MS") && files.rustLink.includes("locked_until_ms")],
+  ["bounded-command-owner-ledger", files.rustLink.includes("MAX_COMMAND_OWNERS") && files.rustLink.includes("COMMAND_OWNER_RETENTION_MS")],
+  ["health-metadata-minimized", files.rustLink.includes('json!({ "service": "foundry-link", "running": true })')],
 ];
 
 let failures = 0;
@@ -96,8 +103,8 @@ const external = [
   ["android-notification-bridge", files.mobileCapabilities.includes("notification:")],
   ["android-deep-link-bridge", files.mobileCapabilities.includes("deep-link:")],
   ["mobile-biometric-bridge", files.mobileCapabilities.includes("biometric:")],
-  ["persistent-host-control-plane", files.rustLink.includes("persist_control_plane")],
-  ["device-revocation-api", files.rustLink.includes("revoke_device")],
+  ["persistent-host-control-plane", files.rustLink.includes("fn persist_state(") && files.rustLink.includes("fn ensure_hydrated(")],
+  ["device-revocation-api", files.rustLink.includes("foundry_link_revoke_device") && files.rustLink.includes("revoke_session")],
   ["device-local-settings-separation", files.workspace.includes("deviceLocalSettings")],
   ["foundry-asset-service", fs.existsSync("src/foundry-link/assetService.ts")],
 ];
