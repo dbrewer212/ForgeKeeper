@@ -1,10 +1,10 @@
 [package]
 name = "app"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+version = "0.2.0"
+description = "Forgekeeper host for the Fenrir Forgeworks Foundry ecosystem"
+authors = ["Fenrir Forgeworks"]
 license = ""
-repository = ""
+repository = "https://github.com/dbrewer212/ForgeKeeper"
 edition = "2021"
 rust-version = "1.77.2"
 
