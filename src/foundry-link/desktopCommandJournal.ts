@@ -1,26 +1,28 @@
 import type { FoundryRemoteCommand, FoundryRemoteCommandResult } from "./remoteCommands";
 
-const DESKTOP_COMMAND_JOURNAL_KEY = "forgekeeper.foundry-link.desktop-command-journal.v1";
+const DESKTOP_COMMAND_JOURNAL_KEY = "forgekeeper.foundry-link.desktop-command-journal.v2";
 const MAX_JOURNALED_COMMANDS = 256;
 
 type DesktopCommandJournal = {
   commands: FoundryRemoteCommand[];
   results: Record<string, FoundryRemoteCommandResult>;
+  executionStartedAt: Record<string, number>;
 };
 
-const EMPTY_JOURNAL: DesktopCommandJournal = { commands: [], results: {} };
+const EMPTY_JOURNAL: DesktopCommandJournal = { commands: [], results: {}, executionStartedAt: {} };
 
 function readJournal(): DesktopCommandJournal {
   try {
     const raw = window.localStorage.getItem(DESKTOP_COMMAND_JOURNAL_KEY);
-    if (!raw) return { ...EMPTY_JOURNAL, results: {} };
+    if (!raw) return { ...EMPTY_JOURNAL, results: {}, executionStartedAt: {} };
     const parsed = JSON.parse(raw) as Partial<DesktopCommandJournal>;
     return {
       commands: Array.isArray(parsed.commands) ? parsed.commands : [],
       results: parsed.results && typeof parsed.results === "object" ? parsed.results : {},
+      executionStartedAt: parsed.executionStartedAt && typeof parsed.executionStartedAt === "object" ? parsed.executionStartedAt : {},
     };
   } catch {
-    return { ...EMPTY_JOURNAL, results: {} };
+    return { ...EMPTY_JOURNAL, results: {}, executionStartedAt: {} };
   }
 }
 
@@ -49,6 +51,25 @@ export function getStagedDesktopRemoteCommands(): FoundryRemoteCommand[] {
   return readJournal().commands;
 }
 
+export function markDesktopRemoteCommandExecutionStarted(commandId: string, startedAt = Date.now()): boolean {
+  const journal = readJournal();
+  if (!journal.commands.some((command) => command.id === commandId)) return false;
+  if (journal.executionStartedAt[commandId]) return true;
+  journal.executionStartedAt[commandId] = startedAt;
+  return writeJournal(journal);
+}
+
+export function desktopRemoteCommandExecutionStarted(commandId: string): boolean {
+  return Boolean(readJournal().executionStartedAt[commandId]);
+}
+
+export function getUncertainDesktopRemoteCommands(): FoundryRemoteCommand[] {
+  const journal = readJournal();
+  return journal.commands.filter((command) => (
+    Boolean(journal.executionStartedAt[command.id]) && !journal.results[command.id]
+  ));
+}
+
 export function getJournaledDesktopRemoteCommandResult(commandId: string): FoundryRemoteCommandResult | undefined {
   return readJournal().results[commandId];
 }
@@ -63,6 +84,7 @@ export function completeDesktopRemoteCommand(commandId: string): boolean {
   const journal = readJournal();
   journal.commands = journal.commands.filter((command) => command.id !== commandId);
   delete journal.results[commandId];
+  delete journal.executionStartedAt[commandId];
   return writeJournal(journal);
 }
 
