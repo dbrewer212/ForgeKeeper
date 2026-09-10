@@ -13,6 +13,13 @@ export const defaultPermissionRules: PermissionRule[] = [
   { id: "global-enter-safe-mode", capabilityId: MeshCapabilities.meshEnterSafeMode, effect: "approval-required", reason: "Safe Mode changes system-wide behavior and defaults to human approval." },
   { id: "global-exit-safe-mode", capabilityId: MeshCapabilities.meshExitSafeMode, effect: "approval-required", reason: "Returning autonomous execution after Safe Mode requires explicit human authority." },
 
+  { id: "foundry-core-world-model-read", workerKind: "foundry-core", capabilityId: MeshCapabilities.worldModelRead, effect: "allow", reason: "Foundry Core may inspect the derived World Model it supplies authority data to." },
+  { id: "foundry-intelligence-world-model-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.worldModelRead, effect: "allow", reason: "Commissioned Foundry Intelligence may read the derived situational World Model for context assembly and planning." },
+  { id: "forgekeeper-world-model-read", workerKind: "forgekeeper", capabilityId: MeshCapabilities.worldModelRead, effect: "allow", reason: "Forgekeeper surfaces may read the World Model for human coordination and mobile situational awareness." },
+  { id: "production-steward-world-model-read", workerKind: "production-steward", capabilityId: MeshCapabilities.worldModelRead, effect: "allow", reason: "Production Steward may read situational context while preserving deterministic production authority boundaries." },
+  { id: "bastion-world-model-read", workerKind: "bastion", capabilityId: MeshCapabilities.worldModelRead, effect: "allow", reason: "Bastion may display the derived World Model to the human supervisory surface." },
+  { id: "odysseus-world-model-read", workerKind: "odysseus", capabilityId: MeshCapabilities.worldModelRead, effect: "allow", reason: "Commissioned Odysseus may read situational context for conversational continuity." },
+
   { id: "foundry-intelligence-project-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.foundryProjectRead, effect: "allow", reason: "Commissioned Foundry Intelligence may read project context for reasoning and planning." },
   { id: "foundry-intelligence-canon-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.foundryCanonRead, effect: "allow", reason: "Commissioned Foundry Intelligence may read canon but receives no canon-write capability." },
   { id: "foundry-intelligence-production-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.productionRead, effect: "allow", reason: "Commissioned Foundry Intelligence may inspect production state without directly mutating it." },
