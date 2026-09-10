@@ -65,8 +65,8 @@ export class WatcherFindingEngine {
     const transitions: WatcherFindingTransition[] = [];
 
     for (const [key, candidate] of candidates) {
-      const next: WatcherFinding = { ...candidate, id: findingId(key) };
-      delete (next as WatcherFinding & { key?: string }).key;
+      const { key: _candidateKey, ...finding } = candidate;
+      const next: WatcherFinding = { ...finding, id: findingId(key) };
       const previous = this.active.get(key);
       if (!previous) {
         this.active.set(key, next);
@@ -187,10 +187,10 @@ export class WatcherFindingEngine {
   }
 
   private latestObservedAt(observations: WatcherObservation[], domain: WatcherObservationDomain): string {
-    return observations
+    const timestamps = observations
       .filter((observation) => observation.domain === domain)
       .map((observation) => observation.observedAt)
-      .sort()
-      .at(-1) ?? new Date().toISOString();
+      .sort();
+    return timestamps.length > 0 ? timestamps[timestamps.length - 1] : new Date().toISOString();
   }
 }
