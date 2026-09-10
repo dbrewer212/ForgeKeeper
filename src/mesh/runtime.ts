@@ -233,12 +233,20 @@ export class FoundryMeshRuntime {
         continue;
       }
 
-      if (service.id === "foundry-domain") {
-        this.services.update(service.id, {
-          ...service,
-          metadata: { ...existing.metadata, ...service.metadata },
-        });
-      }
+      this.services.update(service.id, {
+        name: service.name,
+        kind: service.kind,
+        description: service.description,
+        workerId: service.workerId,
+        endpoint: service.endpoint,
+        dependencies: [...service.dependencies],
+        healthPath: service.healthPath,
+        adapterRequired: service.adapterRequired,
+        metadata: { ...service.metadata, ...existing.metadata },
+        commissioningState: existing.commissioningState,
+        runtimeState: existing.runtimeState,
+        enabled: existing.enabled,
+      });
     }
   }
 }
