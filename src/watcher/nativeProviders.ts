@@ -10,6 +10,14 @@ import type {
 import { createNativeWatcherHostSampler, type WatcherHostSampleSource } from "./hostSampler";
 import { WatcherProviderRegistry } from "./providerRegistry";
 
+export const DEFAULT_WATCHER_OBSERVATION_PROVIDER_IDS = [
+  "windows-cpu",
+  "windows-memory",
+  "windows-storage",
+  "windows-process",
+  "windows-gpu",
+] as const;
+
 export function createWindowsHostWatcherProvider(source: WatcherHostSampleSource): WatcherProvider<WatcherSystemSnapshot> {
   return {
     id: "windows-host",
