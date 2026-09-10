@@ -20,6 +20,11 @@ export const defaultPermissionRules: PermissionRule[] = [
   { id: "bastion-world-model-read", workerKind: "bastion", capabilityId: MeshCapabilities.worldModelRead, effect: "allow", reason: "Bastion may display the derived World Model to the human supervisory surface." },
   { id: "odysseus-world-model-read", workerKind: "odysseus", capabilityId: MeshCapabilities.worldModelRead, effect: "allow", reason: "Commissioned Odysseus may read situational context for conversational continuity." },
 
+  { id: "foundry-core-skill-catalog-read", workerKind: "foundry-core", capabilityId: MeshCapabilities.skillCatalogRead, effect: "allow", reason: "Foundry Core may inspect the governed capability catalog it hosts." },
+  { id: "foundry-intelligence-skill-catalog-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.skillCatalogRead, effect: "allow", reason: "Commissioned Foundry Intelligence may inspect governed skills for planning; execution remains separately permissioned." },
+  { id: "bastion-skill-catalog-read", workerKind: "bastion", capabilityId: MeshCapabilities.skillCatalogRead, effect: "allow", reason: "Bastion may show the human operator what capabilities exist and their risk metadata." },
+  { id: "mobile-console-skill-catalog-read", workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.skillCatalogRead, effect: "allow", reason: "A paired human-operated Mobile Foundry console may inspect available governed skills without gaining new execution authority." },
+
   { id: "foundry-intelligence-project-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.foundryProjectRead, effect: "allow", reason: "Commissioned Foundry Intelligence may read project context for reasoning and planning." },
   { id: "foundry-intelligence-canon-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.foundryCanonRead, effect: "allow", reason: "Commissioned Foundry Intelligence may read canon but receives no canon-write capability." },
   { id: "foundry-intelligence-production-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.productionRead, effect: "allow", reason: "Commissioned Foundry Intelligence may inspect production state without directly mutating it." },
