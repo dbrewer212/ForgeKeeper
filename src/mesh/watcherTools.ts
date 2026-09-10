@@ -21,7 +21,7 @@ export function registerWatcherTools(runtime: FoundryMeshRuntime): void {
     {
       name: "watcher.get_telemetry",
       capabilityId: MeshCapabilities.watcherReadTelemetry,
-      description: "Read Watcher's current normalized observations. Raw polling remains owned by Watcher and missing providers remain explicitly unavailable.",
+      description: "Read Watcher's current normalized observations and active deterministic findings. Raw polling remains owned by Watcher and missing providers remain explicitly unavailable.",
       risk: "read",
       audit: false,
       inputSchema: {
@@ -36,6 +36,7 @@ export function registerWatcherTools(runtime: FoundryMeshRuntime): void {
       running: runtime.watcher.isRunning(),
       updatedAt: runtime.watcher.updatedAt(),
       observations: runtime.watcher.getCurrent(domain),
+      activeFindings: runtime.watcher.getActiveFindings(domain),
     }),
   );
 
@@ -43,7 +44,7 @@ export function registerWatcherTools(runtime: FoundryMeshRuntime): void {
     {
       name: "watcher.refresh",
       capabilityId: MeshCapabilities.watcherReadTelemetry,
-      description: "Request a fresh Watcher observation cycle and return the current normalized telemetry. This is a read-only native sensing operation.",
+      description: "Request a fresh Watcher observation cycle and return the current normalized telemetry and active deterministic findings. This is a read-only native sensing operation.",
       risk: "read",
       audit: false,
       inputSchema: {
@@ -60,6 +61,7 @@ export function registerWatcherTools(runtime: FoundryMeshRuntime): void {
         running: runtime.watcher.isRunning(),
         updatedAt: runtime.watcher.updatedAt(),
         observations: runtime.watcher.getCurrent(domain),
+        activeFindings: runtime.watcher.getActiveFindings(domain),
       };
     },
   );
