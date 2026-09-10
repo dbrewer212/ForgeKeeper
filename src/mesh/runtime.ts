@@ -1,10 +1,12 @@
 import { FoundryContextAssembler } from "../intelligence/contextAssembler";
 import { FoundryIntelligenceEngine } from "../intelligence/engine";
 import { FoundryExperienceMemory } from "../intelligence/experienceMemory";
+import { FoundryModelCommissioning } from "../intelligence/modelCommissioning";
 import { FoundryModelRouter } from "../intelligence/modelProvider";
 import { FoundryPlanValidator } from "../intelligence/planValidator";
 import { FoundryIntelligenceRequestAssembler } from "../intelligence/requestAssembler";
 import { FoundrySkillCatalog } from "../intelligence/skillCatalog";
+import { TauriOllamaTransport } from "../intelligence/tauriOllamaTransport";
 import { FoundryWorldModel } from "../intelligence/worldModel";
 import { WatcherRuntime } from "../watcher/runtime";
 import { MeshActionCoordinator } from "./actionCoordinator";
@@ -61,6 +63,7 @@ export class FoundryMeshRuntime {
   readonly experience: FoundryExperienceMemory;
   readonly requestAssembler: FoundryIntelligenceRequestAssembler;
   readonly modelRouter: FoundryModelRouter;
+  readonly modelCommissioning: FoundryModelCommissioning;
   readonly intelligence: FoundryIntelligenceEngine;
   readonly coordinator: MeshActionCoordinator;
   readonly operations: MeshOperations;
@@ -102,6 +105,15 @@ export class FoundryMeshRuntime {
     this.planValidator = new FoundryPlanValidator(this.skillCatalog);
     this.requestAssembler = new FoundryIntelligenceRequestAssembler(this.contextAssembler, this.experience, this.skillCatalog);
     this.modelRouter = new FoundryModelRouter();
+    this.modelCommissioning = new FoundryModelCommissioning(
+      this.modelRouter,
+      new TauriOllamaTransport(),
+      {
+        getService: (serviceId) => this.services.get(serviceId),
+        updateService: (serviceId, patch) => this.services.update(serviceId, patch),
+        persist: () => this.save(),
+      },
+    );
     this.intelligence = new FoundryIntelligenceEngine(this.requestAssembler, this.modelRouter, this.planValidator);
     this.commissioning = new CommissioningController(this);
     this.serviceLifecycle = new ServiceLifecycleManager(this);
@@ -125,6 +137,7 @@ export class FoundryMeshRuntime {
 
     this.ensureDefaultWorkers();
     this.ensureDefaultServices();
+    this.modelCommissioning.restoreConfiguredProvider();
     registerStagedServiceAdapters(this);
     this.initialized = true;
   }
