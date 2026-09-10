@@ -2,6 +2,7 @@ import type { CommissioningState } from "./types";
 
 export type ServiceKind =
   | "inference"
+  | "intelligence"
   | "automation"
   | "workspace"
   | "supervisory"
@@ -74,6 +75,23 @@ export const defaultFoundryServices: ServiceDescriptor[] = [
     dependencies: [],
     adapterRequired: false,
     metadata: { executionModel: "foundry-core-internal" },
+  },
+  {
+    id: "foundry-intelligence-service",
+    name: "Foundry Intelligence",
+    kind: "intelligence",
+    description: "Governed intent interpretation, context assembly, planning, skill selection, experience retrieval, and outcome evaluation. Execution remains behind Mesh tools and policies.",
+    commissioningState: "dormant",
+    runtimeState: "offline",
+    enabled: false,
+    workerId: "foundry-intelligence",
+    dependencies: ["foundry-domain"],
+    adapterRequired: true,
+    metadata: {
+      executionModel: "governed-intelligence",
+      authorityBoundary: "mesh-tool-gateway",
+      modelProviderRequired: true,
+    },
   },
   {
     id: "ollama-service",
