@@ -1,3 +1,4 @@
+import { WatcherRuntime } from "../watcher/runtime";
 import { MeshActionCoordinator } from "./actionCoordinator";
 import { ActionGateway } from "./actionGateway";
 import { InMemoryApprovalStore } from "./approvalStore";
@@ -24,8 +25,9 @@ import { ServiceLifecycleManager } from "./serviceLifecycle";
 import { defaultFoundryServices, ServiceRegistry } from "./serviceRegistry";
 import { registerServiceTools } from "./serviceTools";
 import { FoundryToolGateway } from "./toolGateway";
-import { InMemoryWorkerRegistry } from "./workerRegistry";
 import type { SystemHealth } from "./types";
+import { registerWatcherTools } from "./watcherTools";
+import { InMemoryWorkerRegistry } from "./workerRegistry";
 import { registerWorkstationTools } from "./workstationTools";
 import { defaultFoundryWorkers } from "./workers";
 
@@ -40,6 +42,7 @@ export class FoundryMeshRuntime {
   readonly health = new DefaultHealthAggregator(this.workers, this.resources);
   readonly actions = new ActionGateway(this.permissions);
   readonly events: DurableEventBus;
+  readonly watcher: WatcherRuntime;
   readonly coordinator: MeshActionCoordinator;
   readonly operations: MeshOperations;
   readonly tools: FoundryToolGateway;
@@ -54,6 +57,7 @@ export class FoundryMeshRuntime {
 
   constructor(readonly persistence: MeshPersistence = createDefaultMeshPersistence()) {
     this.events = new DurableEventBus(new InMemoryEventBus(), persistence);
+    this.watcher = new WatcherRuntime(this.events);
     this.domainState = new FoundryDomainStateStore({
       publish: (event) => this.events.publish(event),
       persist: () => this.save(),
@@ -70,6 +74,7 @@ export class FoundryMeshRuntime {
     registerServiceTools(this);
     registerDiagnosticTools(this);
     registerDomainTools(this);
+    registerWatcherTools(this);
     registerWorkstationTools(this);
   }
 
