@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { createDefaultWatcherProviderRegistry } from "../watcher/nativeProviders";
 import type { WatcherSystemSnapshot } from "../watcher/contracts";
 export type { WatcherSystemSnapshot } from "../watcher/contracts";
 import { isTauriRuntime } from "./persistence";
@@ -27,8 +26,6 @@ export interface LocalServiceControlConfig {
   externallyManaged?: boolean;
   owner?: string;
 }
-
-const watcherProviders = createDefaultWatcherProviderRegistry();
 
 export class ProductionStewardNativeAdapter implements ManagedServiceAdapter {
   constructor(private readonly runtime: FoundryMeshRuntime) {}
@@ -74,6 +71,8 @@ export class ProductionStewardNativeAdapter implements ManagedServiceAdapter {
 }
 
 export class WatcherNativeAdapter implements ManagedServiceAdapter {
+  constructor(private readonly runtime: FoundryMeshRuntime) {}
+
   validate(): string[] {
     return isTauriRuntime()
       ? []
@@ -83,14 +82,15 @@ export class WatcherNativeAdapter implements ManagedServiceAdapter {
   async start(_service: ServiceDescriptor): Promise<void> {
     const result = await this.probe();
     if (!result.online) throw new Error(result.detail ?? "Watcher host telemetry probe failed.");
+    await this.runtime.watcher.start();
   }
 
   async stop(): Promise<void> {
-    // Watcher is an in-process Foundry telemetry provider. Lifecycle state controls polling/consumption,
-    // not a separately spawned process.
+    this.runtime.watcher.stop();
   }
 
   async restart(service: ServiceDescriptor): Promise<void> {
+    await this.stop();
     await this.start(service);
   }
 
@@ -99,8 +99,8 @@ export class WatcherNativeAdapter implements ManagedServiceAdapter {
       return { online: false, detail: "Tauri desktop runtime is unavailable." };
     }
 
-    const providerResult = await watcherProviders.collect<WatcherSystemSnapshot>("windows-host");
-    const snapshot = providerResult.snapshot;
+    const providerResult = await this.runtime.watcher.collectHostSnapshot();
+    const snapshot: WatcherSystemSnapshot | undefined = providerResult.snapshot;
     if (!snapshot) {
       return {
         online: false,
@@ -252,7 +252,7 @@ export function registerStagedServiceAdapters(runtime: FoundryMeshRuntime): void
     if (service.adapterRequired === false || service.id === "foundry-domain") continue;
 
     if (service.id === "watcher-service") {
-      runtime.serviceLifecycle.registerAdapter(service.id, new WatcherNativeAdapter());
+      runtime.serviceLifecycle.registerAdapter(service.id, new WatcherNativeAdapter(runtime));
       continue;
     }
 
