@@ -1,4 +1,8 @@
-import type { WatcherProvider, WatcherProviderResult } from "./contracts";
+import type {
+  WatcherObservation,
+  WatcherProvider,
+  WatcherProviderResult,
+} from "./contracts";
 
 export class WatcherProviderRegistry {
   private readonly providers = new Map<string, WatcherProvider>();
@@ -44,7 +48,25 @@ export class WatcherProviderRegistry {
     }
   }
 
+  async observe<TSnapshot = unknown>(providerId: string): Promise<WatcherObservation<TSnapshot>[]> {
+    const result = await this.collect<TSnapshot>(providerId);
+    return result.domains.map((domain) => ({
+      id: `${result.providerId}:${domain}:${result.collectedAt}`,
+      providerId: result.providerId,
+      observedAt: result.collectedAt,
+      domain,
+      availability: result.snapshot === undefined ? "unavailable" : "available",
+      value: result.snapshot,
+      detail: result.error,
+    }));
+  }
+
   async collectAll(): Promise<WatcherProviderResult[]> {
     return Promise.all(this.list().map((provider) => this.collect(provider.id)));
+  }
+
+  async observeAll(): Promise<WatcherObservation[]> {
+    const batches = await Promise.all(this.list().map((provider) => this.observe(provider.id)));
+    return batches.flat();
   }
 }
