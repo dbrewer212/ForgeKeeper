@@ -1,6 +1,7 @@
 import { MeshEvents } from "../mesh/events";
 import { createFoundryEvent, type EventBus } from "../mesh/eventBus";
 import type { WatcherObservation, WatcherObservationDomain, WatcherSystemSnapshot } from "./contracts";
+import { WatcherFindingEngine, type WatcherFinding } from "./findingEngine";
 import {
   createDefaultWatcherProviderRegistry,
   DEFAULT_WATCHER_OBSERVATION_PROVIDER_IDS,
@@ -15,6 +16,7 @@ export interface WatcherRuntimeOptions {
 
 export class WatcherRuntime {
   readonly observations = new WatcherObservationStore();
+  readonly findings = new WatcherFindingEngine();
   readonly providers: WatcherProviderRegistry;
 
   private readonly events: EventBus;
@@ -60,6 +62,10 @@ export class WatcherRuntime {
     return this.observations.list(domain);
   }
 
+  getActiveFindings(domain?: WatcherObservationDomain): WatcherFinding[] {
+    return this.findings.listActive().filter((finding) => !domain || finding.domain === domain);
+  }
+
   updatedAt(): string | undefined {
     return this.observations.updatedAt();
   }
@@ -95,6 +101,26 @@ export class WatcherRuntime {
           sourceWorkerId: "watcher",
           subjectId: transition.current.providerId,
           payload: transition.current,
+        }));
+      }
+    }
+
+    for (const transition of this.findings.evaluate(observations)) {
+      await this.events.publish(createFoundryEvent({
+        type: MeshEvents.watcherFindingPublished,
+        sourceWorkerId: "watcher",
+        subjectId: transition.finding.subjectId ?? transition.finding.providerId,
+        payload: transition,
+      }));
+
+      if (transition.kind !== "resolved") {
+        await this.events.publish(createFoundryEvent({
+          type: transition.finding.severity === "critical"
+            ? MeshEvents.watcherDegradationDetected
+            : MeshEvents.watcherAnomalyDetected,
+          sourceWorkerId: "watcher",
+          subjectId: transition.finding.subjectId ?? transition.finding.providerId,
+          payload: transition.finding,
         }));
       }
     }
