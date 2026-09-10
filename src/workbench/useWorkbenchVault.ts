@@ -46,6 +46,11 @@ function publish(next: SharedWorkbenchSnapshot) {
   listeners.forEach((listener) => listener());
 }
 
+export function getWorkbenchStateForFoundryLink(): WorkbenchState | null {
+  if (!sharedSnapshot.ready || sharedSnapshot.error) return null;
+  return structuredClone(sharedSnapshot.workbench);
+}
+
 async function loadWorkbench(state: ForgekeeperState, force: boolean): Promise<void> {
   if (!state.storageReady || state.storageStatus !== "SQLite") return;
   if (!force && sharedSnapshot.ready && !sharedSnapshot.error) return;

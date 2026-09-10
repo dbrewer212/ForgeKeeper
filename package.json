@@ -7,9 +7,16 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test": "vitest run",
+    "audit:operational": "node scripts/audit-operational.mjs",
+    "audit:integration": "node scripts/audit-foundry-link.mjs",
     "preview": "vite preview",
+    "tauri": "tauri",
     "desktop": "tauri dev",
-    "desktop:build": "tauri build"
+    "desktop:build": "tauri build",
+    "android:init": "tauri android init",
+    "android:dev": "tauri android dev",
+    "android:build": "tauri android build --apk",
+    "android:open": "tauri android open"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.0",

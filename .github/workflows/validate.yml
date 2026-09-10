@@ -24,8 +24,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Capture npm security audit
+        shell: bash
+        run: npm audit --json > npm-audit.json || true
+
+      - name: Upload npm audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-${{ github.sha }}
+          path: npm-audit.json
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Run tests
         run: npm test
+
+      - name: Audit operational surfaces
+        run: npm run audit:operational
+
+      - name: Audit Foundry Link integration
+        run: npm run audit:integration
 
       - name: Build frontend
         run: npm run build
@@ -53,3 +71,7 @@ jobs:
       - name: Check Tauri core
         working-directory: src-tauri
         run: cargo check
+
+      - name: Run Rust transport tests
+        working-directory: src-tauri
+        run: cargo test foundry_link::command_tests

@@ -7,7 +7,7 @@ export function registerCoreMeshTools(runtime: FoundryMeshRuntime): void {
     {
       name: "mesh.get_status",
       capabilityId: MeshCapabilities.meshReadState,
-      description: "Read the current health, worker status, resource pressure, and pending approval count for the Foundry mesh.",
+      description: "Read the current health, worker status, service state, resource pressure, and pending approval count for the Foundry mesh.",
       risk: "read",
       audit: false,
       inputSchema: { type: "object", additionalProperties: false },
@@ -15,6 +15,7 @@ export function registerCoreMeshTools(runtime: FoundryMeshRuntime): void {
     () => ({
       health: runtime.getSystemHealth(),
       workers: runtime.workers.list(),
+      services: runtime.services.list(),
       resources: runtime.resources.listStates(),
       pendingApprovals: runtime.approvals.list("pending").length,
       safeMode: runtime.isSafeMode(),

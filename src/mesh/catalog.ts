@@ -27,6 +27,8 @@ export const MeshCapabilities = {
   systemServiceStart: "system.service.start",
   systemServiceStop: "system.service.stop",
   systemServiceRestart: "system.service.restart",
+  workstationLaunchTool: "workstation.tool.launch",
+  workstationOpenPath: "workstation.path.open",
 } as const;
 
 export type MeshCapabilityId = (typeof MeshCapabilities)[keyof typeof MeshCapabilities];
@@ -58,4 +60,6 @@ export const defaultCapabilityCatalog: WorkerCapability[] = [
   { id: MeshCapabilities.systemServiceStart, name: "Start Managed Service", risk: "moderate" },
   { id: MeshCapabilities.systemServiceStop, name: "Stop Managed Service", risk: "high" },
   { id: MeshCapabilities.systemServiceRestart, name: "Restart Managed Service", risk: "high" },
+  { id: MeshCapabilities.workstationLaunchTool, name: "Launch Workstation Tool", risk: "moderate" },
+  { id: MeshCapabilities.workstationOpenPath, name: "Open Workstation Path", risk: "low" },
 ];

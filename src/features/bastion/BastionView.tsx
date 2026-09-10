@@ -80,6 +80,10 @@ function healthTone(state: string) {
   return "border-emerald-800/70 bg-emerald-950/30 text-emerald-200";
 }
 
+function failureMessage(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
+}
+
 export function BastionView({ state, onExit }: { state: any; onExit: () => void }) {
   const [snapshot, setSnapshot] = useState<BastionSnapshot>();
   const [startup, setStartup] = useState<StartupStatus>({ enabled: false });
@@ -105,11 +109,21 @@ export function BastionView({ state, onExit }: { state: any; onExit: () => void 
         }
       }
 
-      const [steward, telemetry, startupStatus] = await Promise.all([
-        runtime.productionSteward.inspect().catch(() => undefined),
-        invoke<WatcherSystemSnapshot>("watcher_system_snapshot").catch(() => undefined),
-        invoke<StartupStatus>("bastion_startup_status").catch(() => ({ enabled: false })),
+      const [stewardResult, telemetryResult, startupResult] = await Promise.allSettled([
+        runtime.productionSteward.inspect(),
+        invoke<WatcherSystemSnapshot>("watcher_system_snapshot"),
+        invoke<StartupStatus>("bastion_startup_status"),
       ]);
+      const refreshFailures: string[] = [];
+      const steward = stewardResult.status === "fulfilled" ? stewardResult.value : undefined;
+      const telemetry = telemetryResult.status === "fulfilled" ? telemetryResult.value : undefined;
+      if (stewardResult.status === "rejected") refreshFailures.push(`Production Steward: ${failureMessage(stewardResult.reason)}`);
+      if (telemetryResult.status === "rejected") refreshFailures.push(`Watcher telemetry: ${failureMessage(telemetryResult.reason)}`);
+      if (startupResult.status === "fulfilled") {
+        setStartup(startupResult.value);
+      } else {
+        refreshFailures.push(`Bastion startup status: ${failureMessage(startupResult.reason)}`);
+      }
 
       const health = runtime.getSystemHealth();
       setSnapshot({
@@ -120,13 +134,13 @@ export function BastionView({ state, onExit }: { state: any; onExit: () => void 
         workers: runtime.workers.list(),
         steward,
         telemetry,
-        approvals: runtime.approvals.list().length,
+        approvals: runtime.approvals.list("pending").length,
         bastionCommissioningState: service?.commissioningState,
         bastionRuntimeState: service?.runtimeState,
       });
-      setStartup(startupStatus);
+      if (refreshFailures.length > 0) setError(refreshFailures.join(" · "));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(failureMessage(cause));
     }
   }
 
