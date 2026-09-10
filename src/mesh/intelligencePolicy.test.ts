@@ -19,6 +19,7 @@ describe("Foundry Intelligence policy", () => {
     const intelligence = commissionedIntelligence();
 
     expect(permissions.evaluate(intelligence, MeshCapabilities.meshReadState).effect).toBe("allow");
+    expect(permissions.evaluate(intelligence, MeshCapabilities.worldModelRead).effect).toBe("allow");
     expect(permissions.evaluate(intelligence, MeshCapabilities.foundryProjectRead).effect).toBe("allow");
     expect(permissions.evaluate(intelligence, MeshCapabilities.foundryCanonRead).effect).toBe("allow");
     expect(permissions.evaluate(intelligence, MeshCapabilities.productionRead).effect).toBe("allow");
