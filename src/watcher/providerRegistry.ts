@@ -1,9 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
-import type {
-  WatcherProvider,
-  WatcherProviderResult,
-  WatcherSystemSnapshot,
-} from "./contracts";
+import type { WatcherProvider, WatcherProviderResult } from "./contracts";
 
 export class WatcherProviderRegistry {
   private readonly providers = new Map<string, WatcherProvider>();
@@ -52,17 +47,4 @@ export class WatcherProviderRegistry {
   async collectAll(): Promise<WatcherProviderResult[]> {
     return Promise.all(this.list().map((provider) => this.collect(provider.id)));
   }
-}
-
-export const WindowsHostWatcherProvider: WatcherProvider<WatcherSystemSnapshot> = {
-  id: "windows-host",
-  name: "Windows Host Telemetry",
-  domains: ["host", "cpu", "gpu", "memory", "storage", "process"],
-  collect: () => invoke<WatcherSystemSnapshot>("watcher_system_snapshot"),
-};
-
-export function createDefaultWatcherProviderRegistry(): WatcherProviderRegistry {
-  const registry = new WatcherProviderRegistry();
-  registry.register(WindowsHostWatcherProvider);
-  return registry;
 }
