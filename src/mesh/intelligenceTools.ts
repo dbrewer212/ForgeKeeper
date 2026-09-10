@@ -1,3 +1,4 @@
+import type { FoundryPlan } from "../intelligence/planValidator";
 import { MeshCapabilities } from "./catalog";
 import type { FoundryMeshRuntime } from "./runtime";
 
@@ -73,5 +74,53 @@ export function registerIntelligenceTools(runtime: FoundryMeshRuntime): void {
       },
     },
     ({ id }) => runtime.skillCatalog.get(id.trim()),
+  );
+
+  runtime.tools.register<{ plan: FoundryPlan }, unknown>(
+    {
+      name: "intelligence.validate_plan",
+      capabilityId: MeshCapabilities.skillCatalogRead,
+      description: "Validate a proposed structured plan against the currently registered governed skill catalog without executing any step.",
+      risk: "read",
+      audit: false,
+      operational: {
+        owner: "foundry-intelligence",
+        reversibility: "reversible",
+        verification: ["Returns structural and safety-metadata validation results only; no plan step is executed."],
+        notes: ["Actual execution always performs a fresh Mesh permission/approval evaluation."],
+      },
+      inputSchema: {
+        type: "object",
+        properties: {
+          plan: {
+            type: "object",
+            properties: {
+              schemaVersion: { type: "number", enum: [1] },
+              goal: { type: "string" },
+              steps: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    skillId: { type: "string" },
+                    arguments: { type: "object" },
+                    rationale: { type: "string" },
+                    expectedOutcome: { type: "string" },
+                  },
+                  required: ["id", "skillId", "arguments", "rationale", "expectedOutcome"],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ["schemaVersion", "goal", "steps"],
+            additionalProperties: false,
+          },
+        },
+        required: ["plan"],
+        additionalProperties: false,
+      },
+    },
+    ({ plan }) => runtime.planValidator.validate(plan),
   );
 }
