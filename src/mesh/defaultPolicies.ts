@@ -25,6 +25,12 @@ export const defaultPermissionRules: PermissionRule[] = [
   { id: "bastion-skill-catalog-read", workerKind: "bastion", capabilityId: MeshCapabilities.skillCatalogRead, effect: "allow", reason: "Bastion may show the human operator what capabilities exist and their risk metadata." },
   { id: "mobile-console-skill-catalog-read", workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.skillCatalogRead, effect: "allow", reason: "A paired human-operated Mobile Foundry console may inspect available governed skills without gaining new execution authority." },
 
+  { id: "foundry-core-experience-read", workerKind: "foundry-core", capabilityId: MeshCapabilities.experienceRead, effect: "allow", reason: "Foundry Core may inspect the derived projection of its durable event journal." },
+  { id: "foundry-intelligence-experience-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.experienceRead, effect: "allow", reason: "Commissioned Foundry Intelligence may retrieve bounded operational experience for reasoning without mutating historical events." },
+  { id: "forgekeeper-experience-read", workerKind: "forgekeeper", capabilityId: MeshCapabilities.experienceRead, effect: "allow", reason: "Forgekeeper human surfaces may inspect operational history and recovery context." },
+  { id: "bastion-experience-read", workerKind: "bastion", capabilityId: MeshCapabilities.experienceRead, effect: "allow", reason: "Bastion may surface relevant operational history to the human supervisor." },
+  { id: "odysseus-experience-read", workerKind: "odysseus", capabilityId: MeshCapabilities.experienceRead, effect: "allow", reason: "Commissioned Odysseus may retrieve bounded experience for conversational continuity." },
+
   { id: "foundry-intelligence-project-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.foundryProjectRead, effect: "allow", reason: "Commissioned Foundry Intelligence may read project context for reasoning and planning." },
   { id: "foundry-intelligence-canon-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.foundryCanonRead, effect: "allow", reason: "Commissioned Foundry Intelligence may read canon but receives no canon-write capability." },
   { id: "foundry-intelligence-production-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.productionRead, effect: "allow", reason: "Commissioned Foundry Intelligence may inspect production state without directly mutating it." },
