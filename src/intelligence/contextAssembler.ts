@@ -29,6 +29,7 @@ export class FoundryContextAssembler {
   assemble(request: FoundryContextRequest): FoundryContextPacket {
     const snapshot = this.getWorldSnapshot();
     const maxEntities = Math.max(5, Math.min(100, request.maxEntities ?? 30));
+    const normalizedRequest = request.text.toLowerCase();
     const tokens = tokenize(request.text);
     const selected = new Map<string, { entity: WorldEntity; score: number }>();
 
@@ -45,7 +46,7 @@ export class FoundryContextAssembler {
     if (snapshot.activeContext.productionItemId) add(byId.get(`production-item:${snapshot.activeContext.productionItemId}`), 950);
     if (snapshot.activeContext.sessionId) add(byId.get(`session:${snapshot.activeContext.sessionId}`), 950);
 
-    for (const id of request.focusEntityIds ?? []) add(byId.get(id), 1000);
+    for (const id of request.focusEntityIds ?? []) add(byId.get(id), 1200);
 
     for (const entity of snapshot.entities) {
       if (entity.kind === "watcher-finding") add(entity, 900);
@@ -53,7 +54,14 @@ export class FoundryContextAssembler {
 
       const searchable = `${entity.id} ${entity.label} ${entity.status ?? ""}`.toLowerCase();
       const matches = tokens.filter((token) => searchable.includes(token)).length;
-      if (matches > 0) add(entity, 500 + matches * 25);
+      if (matches > 0) {
+        const label = entity.label.toLowerCase();
+        const idTail = entity.id.split(":").pop()?.toLowerCase() ?? "";
+        const explicitReference =
+          (label.length >= 3 && normalizedRequest.includes(label)) ||
+          (idTail.length >= 3 && normalizedRequest.includes(idTail));
+        add(entity, explicitReference ? 1100 + matches * 25 : 500 + matches * 25);
+      }
     }
 
     const firstPass = [...selected.values()].sort((a, b) => b.score - a.score || a.entity.id.localeCompare(b.entity.id));
