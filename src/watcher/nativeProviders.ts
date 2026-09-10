@@ -1,14 +1,13 @@
 import type {
   WatcherCpuSnapshot,
   WatcherGpuIdentitySnapshot,
-  WatcherHostSampleSource,
   WatcherMemorySnapshot,
   WatcherProcessSnapshot,
   WatcherProvider,
   WatcherStorageSnapshot,
   WatcherSystemSnapshot,
 } from "./contracts";
-import { createNativeWatcherHostSampler } from "./hostSampler";
+import { createNativeWatcherHostSampler, type WatcherHostSampleSource } from "./hostSampler";
 import { WatcherProviderRegistry } from "./providerRegistry";
 
 export function createWindowsHostWatcherProvider(source: WatcherHostSampleSource): WatcherProvider<WatcherSystemSnapshot> {
