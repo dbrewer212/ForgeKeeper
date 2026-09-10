@@ -16,6 +16,7 @@ import { registerDomainTools } from "./domainTools";
 import { DurableEventBus } from "./durableEventBus";
 import { InMemoryEventBus } from "./eventBus";
 import { DefaultHealthAggregator } from "./healthAggregator";
+import { registerIntelligenceTools } from "./intelligenceTools";
 import { registerStagedServiceAdapters } from "./localServiceAdapters";
 import { MeshOperations } from "./operations";
 import { InMemoryPermissionService } from "./permissionService";
@@ -92,6 +93,7 @@ export class FoundryMeshRuntime {
     registerDomainTools(this);
     registerWatcherTools(this);
     registerWorldModelTools(this);
+    registerIntelligenceTools(this);
     registerWorkstationTools(this);
   }
 
