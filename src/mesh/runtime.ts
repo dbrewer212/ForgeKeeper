@@ -1,4 +1,5 @@
 import { FoundryContextAssembler } from "../intelligence/contextAssembler";
+import { FoundryExperienceMemory } from "../intelligence/experienceMemory";
 import { FoundryPlanValidator } from "../intelligence/planValidator";
 import { FoundrySkillCatalog } from "../intelligence/skillCatalog";
 import { FoundryWorldModel } from "../intelligence/worldModel";
@@ -17,6 +18,7 @@ import { FoundryDomainStateStore } from "./domainState";
 import { registerDomainTools } from "./domainTools";
 import { DurableEventBus } from "./durableEventBus";
 import { InMemoryEventBus } from "./eventBus";
+import { registerExperienceTools } from "./experienceTools";
 import { DefaultHealthAggregator } from "./healthAggregator";
 import { registerIntelligenceTools } from "./intelligenceTools";
 import { registerStagedServiceAdapters } from "./localServiceAdapters";
@@ -53,6 +55,7 @@ export class FoundryMeshRuntime {
   readonly contextAssembler: FoundryContextAssembler;
   readonly skillCatalog: FoundrySkillCatalog;
   readonly planValidator: FoundryPlanValidator;
+  readonly experience: FoundryExperienceMemory;
   readonly coordinator: MeshActionCoordinator;
   readonly operations: MeshOperations;
   readonly tools: FoundryToolGateway;
@@ -67,6 +70,7 @@ export class FoundryMeshRuntime {
 
   constructor(readonly persistence: MeshPersistence = createDefaultMeshPersistence()) {
     this.events = new DurableEventBus(new InMemoryEventBus(), persistence);
+    this.experience = new FoundryExperienceMemory(persistence);
     this.watcher = new WatcherRuntime(this.events);
     this.domainState = new FoundryDomainStateStore({
       publish: (event) => this.events.publish(event),
@@ -99,6 +103,7 @@ export class FoundryMeshRuntime {
     registerDomainTools(this);
     registerWatcherTools(this);
     registerWorldModelTools(this);
+    registerExperienceTools(this);
     registerIntelligenceTools(this);
     registerWorkstationTools(this);
   }
