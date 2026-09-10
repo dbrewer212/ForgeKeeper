@@ -1,5 +1,7 @@
 import { FoundryContextAssembler } from "../intelligence/contextAssembler";
+import { FoundryIntelligenceEngine } from "../intelligence/engine";
 import { FoundryExperienceMemory } from "../intelligence/experienceMemory";
+import { FoundryModelRouter } from "../intelligence/modelProvider";
 import { FoundryPlanValidator } from "../intelligence/planValidator";
 import { FoundryIntelligenceRequestAssembler } from "../intelligence/requestAssembler";
 import { FoundrySkillCatalog } from "../intelligence/skillCatalog";
@@ -58,6 +60,8 @@ export class FoundryMeshRuntime {
   readonly planValidator: FoundryPlanValidator;
   readonly experience: FoundryExperienceMemory;
   readonly requestAssembler: FoundryIntelligenceRequestAssembler;
+  readonly modelRouter: FoundryModelRouter;
+  readonly intelligence: FoundryIntelligenceEngine;
   readonly coordinator: MeshActionCoordinator;
   readonly operations: MeshOperations;
   readonly tools: FoundryToolGateway;
@@ -97,6 +101,8 @@ export class FoundryMeshRuntime {
     this.skillCatalog = new FoundrySkillCatalog(() => this.tools.list());
     this.planValidator = new FoundryPlanValidator(this.skillCatalog);
     this.requestAssembler = new FoundryIntelligenceRequestAssembler(this.contextAssembler, this.experience, this.skillCatalog);
+    this.modelRouter = new FoundryModelRouter();
+    this.intelligence = new FoundryIntelligenceEngine(this.requestAssembler, this.modelRouter, this.planValidator);
     this.commissioning = new CommissioningController(this);
     this.serviceLifecycle = new ServiceLifecycleManager(this);
     this.diagnostics = new CommissioningDiagnostics(this);
