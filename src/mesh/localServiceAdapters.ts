@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { createDefaultWatcherProviderRegistry } from "../watcher/providerRegistry";
+import { createDefaultWatcherProviderRegistry } from "../watcher/nativeProviders";
 import type { WatcherSystemSnapshot } from "../watcher/contracts";
 import { isTauriRuntime } from "./persistence";
 import type { FoundryMeshRuntime } from "./runtime";
