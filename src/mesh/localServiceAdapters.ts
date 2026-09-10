@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { createDefaultWatcherProviderRegistry } from "../watcher/providerRegistry";
+import type { WatcherSystemSnapshot } from "../watcher/contracts";
 import { isTauriRuntime } from "./persistence";
 import type { FoundryMeshRuntime } from "./runtime";
 import type { ManagedServiceAdapter } from "./serviceLifecycle";
@@ -15,24 +17,6 @@ interface ManagedProcessStatus {
   pid?: number;
 }
 
-export interface WatcherSystemSnapshot {
-  sampledAt: string;
-  cpuUsagePercent?: number;
-  totalMemoryBytes?: number;
-  availableMemoryBytes?: number;
-  usedMemoryBytes?: number;
-  processCount?: number;
-  disks: Array<{ name: string; totalBytes: number; freeBytes: number }>;
-  gpu?: {
-    name?: string;
-    adapterRamBytes?: number;
-    utilizationPercent?: number;
-    temperatureC?: number;
-    provider: string;
-    detail?: string;
-  };
-}
-
 export interface LocalServiceControlConfig {
   executable?: string;
   args?: string[];
@@ -42,6 +26,8 @@ export interface LocalServiceControlConfig {
   externallyManaged?: boolean;
   owner?: string;
 }
+
+const watcherProviders = createDefaultWatcherProviderRegistry();
 
 export class ProductionStewardNativeAdapter implements ManagedServiceAdapter {
   constructor(private readonly runtime: FoundryMeshRuntime) {}
@@ -112,19 +98,26 @@ export class WatcherNativeAdapter implements ManagedServiceAdapter {
       return { online: false, detail: "Tauri desktop runtime is unavailable." };
     }
 
-    try {
-      const snapshot = await invoke<WatcherSystemSnapshot>("watcher_system_snapshot");
-      const cpu = typeof snapshot.cpuUsagePercent === "number" ? `${snapshot.cpuUsagePercent.toFixed(1)}% CPU` : "CPU sampled";
-      const memory = snapshot.usedMemoryBytes && snapshot.totalMemoryBytes
-        ? `${(snapshot.usedMemoryBytes / 1073741824).toFixed(1)}/${(snapshot.totalMemoryBytes / 1073741824).toFixed(1)} GiB RAM`
-        : "memory sampled";
-      const gpu = snapshot.gpu?.name
-        ? `${snapshot.gpu.name} (${snapshot.gpu.provider})`
-        : "GPU provider pending";
-      return { online: true, detail: `Host telemetry online: ${cpu}, ${memory}; ${gpu}.` };
-    } catch (error) {
-      return { online: false, detail: error instanceof Error ? error.message : String(error) };
+    const providerResult = await watcherProviders.collect<WatcherSystemSnapshot>("windows-host");
+    const snapshot = providerResult.snapshot;
+    if (!snapshot) {
+      return {
+        online: false,
+        detail: providerResult.error ?? "Windows host Watcher provider returned no snapshot.",
+      };
     }
+
+    const cpu = typeof snapshot.cpuUsagePercent === "number" ? `${snapshot.cpuUsagePercent.toFixed(1)}% CPU` : "CPU sampled";
+    const memory = snapshot.usedMemoryBytes && snapshot.totalMemoryBytes
+      ? `${(snapshot.usedMemoryBytes / 1073741824).toFixed(1)}/${(snapshot.totalMemoryBytes / 1073741824).toFixed(1)} GiB RAM`
+      : "memory sampled";
+    const gpu = snapshot.gpu?.name
+      ? `${snapshot.gpu.name} (${snapshot.gpu.provider})`
+      : "GPU provider pending";
+    return {
+      online: true,
+      detail: `Watcher provider ${providerResult.providerId} online: ${cpu}, ${memory}; ${gpu}.`,
+    };
   }
 }
 
