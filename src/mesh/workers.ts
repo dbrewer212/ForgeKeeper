@@ -10,6 +10,7 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
     capabilities: [
       MeshCapabilities.meshReadState,
       MeshCapabilities.meshPublishEvent,
+      MeshCapabilities.worldModelRead,
       MeshCapabilities.foundryProjectRead,
       MeshCapabilities.foundryProjectWrite,
       MeshCapabilities.foundryCanonRead,
@@ -34,6 +35,7 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
       MeshCapabilities.meshReadState,
       MeshCapabilities.meshPublishEvent,
       MeshCapabilities.meshRequestResource,
+      MeshCapabilities.worldModelRead,
       MeshCapabilities.foundryProjectRead,
       MeshCapabilities.foundryCanonRead,
       MeshCapabilities.productionRead,
@@ -52,6 +54,7 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
     capabilities: [
       MeshCapabilities.meshReadState,
       MeshCapabilities.meshPublishEvent,
+      MeshCapabilities.worldModelRead,
       MeshCapabilities.foundryProjectRead,
       MeshCapabilities.productionRead,
       MeshCapabilities.foundrySessionRead,
@@ -68,6 +71,7 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
     capabilities: [
       MeshCapabilities.meshReadState,
       MeshCapabilities.meshPublishEvent,
+      MeshCapabilities.worldModelRead,
       MeshCapabilities.productionRead,
       MeshCapabilities.foundryProjectRead,
       MeshCapabilities.foundrySessionRead,
@@ -93,6 +97,7 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
       MeshCapabilities.meshReadState,
       MeshCapabilities.meshPublishEvent,
       MeshCapabilities.meshRequestResource,
+      MeshCapabilities.worldModelRead,
       MeshCapabilities.productionRead,
       MeshCapabilities.productionWrite,
       MeshCapabilities.productionCheckpointCreate,
@@ -129,6 +134,7 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
     capabilities: [
       MeshCapabilities.meshReadState,
       MeshCapabilities.meshPublishEvent,
+      MeshCapabilities.worldModelRead,
       MeshCapabilities.meshManageWorker,
       MeshCapabilities.meshEnterSafeMode,
       MeshCapabilities.meshExitSafeMode,
@@ -168,6 +174,7 @@ export const FoundryWorkers: Record<string, WorkerIdentity> = {
       MeshCapabilities.meshReadState,
       MeshCapabilities.meshPublishEvent,
       MeshCapabilities.meshRequestResource,
+      MeshCapabilities.worldModelRead,
       MeshCapabilities.foundryProjectRead,
       MeshCapabilities.foundryCanonRead,
       MeshCapabilities.productionRead,
