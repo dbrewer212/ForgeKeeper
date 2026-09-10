@@ -1,4 +1,5 @@
 import { FoundryContextAssembler } from "../intelligence/contextAssembler";
+import { FoundryPlanValidator } from "../intelligence/planValidator";
 import { FoundrySkillCatalog } from "../intelligence/skillCatalog";
 import { FoundryWorldModel } from "../intelligence/worldModel";
 import { WatcherRuntime } from "../watcher/runtime";
@@ -51,6 +52,7 @@ export class FoundryMeshRuntime {
   readonly worldModel: FoundryWorldModel;
   readonly contextAssembler: FoundryContextAssembler;
   readonly skillCatalog: FoundrySkillCatalog;
+  readonly planValidator: FoundryPlanValidator;
   readonly coordinator: MeshActionCoordinator;
   readonly operations: MeshOperations;
   readonly tools: FoundryToolGateway;
@@ -87,6 +89,7 @@ export class FoundryMeshRuntime {
     this.operations = new MeshOperations(this);
     this.tools = new FoundryToolGateway(this);
     this.skillCatalog = new FoundrySkillCatalog(() => this.tools.list());
+    this.planValidator = new FoundryPlanValidator(this.skillCatalog);
     this.commissioning = new CommissioningController(this);
     this.serviceLifecycle = new ServiceLifecycleManager(this);
     this.diagnostics = new CommissioningDiagnostics(this);
