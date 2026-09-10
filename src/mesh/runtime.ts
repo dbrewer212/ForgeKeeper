@@ -1,3 +1,4 @@
+import { FoundryContextAssembler } from "../intelligence/contextAssembler";
 import { FoundryWorldModel } from "../intelligence/worldModel";
 import { WatcherRuntime } from "../watcher/runtime";
 import { MeshActionCoordinator } from "./actionCoordinator";
@@ -46,6 +47,7 @@ export class FoundryMeshRuntime {
   readonly events: DurableEventBus;
   readonly watcher: WatcherRuntime;
   readonly worldModel: FoundryWorldModel;
+  readonly contextAssembler: FoundryContextAssembler;
   readonly coordinator: MeshActionCoordinator;
   readonly operations: MeshOperations;
   readonly tools: FoundryToolGateway;
@@ -76,6 +78,7 @@ export class FoundryMeshRuntime {
       watcherObservations: () => this.watcher.getCurrent(),
       watcherFindings: () => this.watcher.getActiveFindings(),
     });
+    this.contextAssembler = new FoundryContextAssembler(() => this.worldModel.snapshot());
     this.productionSteward = new ProductionSteward(this);
     this.coordinator = new MeshActionCoordinator(this);
     this.operations = new MeshOperations(this);
