@@ -14,13 +14,14 @@ function commissionedIntelligence(): WorkerIdentity {
 }
 
 describe("Foundry Intelligence policy", () => {
-  it("allows context and governed skill discovery once the worker is commissioned", () => {
+  it("allows context, experience, and governed skill discovery once the worker is commissioned", () => {
     const permissions = new InMemoryPermissionService(defaultPermissionRules);
     const intelligence = commissionedIntelligence();
 
     expect(permissions.evaluate(intelligence, MeshCapabilities.meshReadState).effect).toBe("allow");
     expect(permissions.evaluate(intelligence, MeshCapabilities.worldModelRead).effect).toBe("allow");
     expect(permissions.evaluate(intelligence, MeshCapabilities.skillCatalogRead).effect).toBe("allow");
+    expect(permissions.evaluate(intelligence, MeshCapabilities.experienceRead).effect).toBe("allow");
     expect(permissions.evaluate(intelligence, MeshCapabilities.foundryProjectRead).effect).toBe("allow");
     expect(permissions.evaluate(intelligence, MeshCapabilities.foundryCanonRead).effect).toBe("allow");
     expect(permissions.evaluate(intelligence, MeshCapabilities.productionRead).effect).toBe("allow");
