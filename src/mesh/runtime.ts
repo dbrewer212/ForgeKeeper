@@ -1,3 +1,4 @@
+import { FoundryWorldModel } from "../intelligence/worldModel";
 import { WatcherRuntime } from "../watcher/runtime";
 import { MeshActionCoordinator } from "./actionCoordinator";
 import { ActionGateway } from "./actionGateway";
@@ -30,6 +31,7 @@ import { registerWatcherTools } from "./watcherTools";
 import { InMemoryWorkerRegistry } from "./workerRegistry";
 import { registerWorkstationTools } from "./workstationTools";
 import { defaultFoundryWorkers } from "./workers";
+import { registerWorldModelTools } from "./worldModelTools";
 
 export class FoundryMeshRuntime {
   readonly workers = new InMemoryWorkerRegistry();
@@ -43,6 +45,7 @@ export class FoundryMeshRuntime {
   readonly actions = new ActionGateway(this.permissions);
   readonly events: DurableEventBus;
   readonly watcher: WatcherRuntime;
+  readonly worldModel: FoundryWorldModel;
   readonly coordinator: MeshActionCoordinator;
   readonly operations: MeshOperations;
   readonly tools: FoundryToolGateway;
@@ -63,6 +66,16 @@ export class FoundryMeshRuntime {
       persist: () => this.save(),
     });
     this.domain.register(this.domainState.services);
+    this.worldModel = new FoundryWorldModel({
+      domain: () => this.domainState.snapshot(),
+      services: () => this.services.list(),
+      workers: () => this.workers.list(),
+      resources: () => this.resources.listStates(),
+      health: () => this.getSystemHealth(),
+      safeMode: () => this.isSafeMode(),
+      watcherObservations: () => this.watcher.getCurrent(),
+      watcherFindings: () => this.watcher.getActiveFindings(),
+    });
     this.productionSteward = new ProductionSteward(this);
     this.coordinator = new MeshActionCoordinator(this);
     this.operations = new MeshOperations(this);
@@ -75,6 +88,7 @@ export class FoundryMeshRuntime {
     registerDiagnosticTools(this);
     registerDomainTools(this);
     registerWatcherTools(this);
+    registerWorldModelTools(this);
     registerWorkstationTools(this);
   }
 
