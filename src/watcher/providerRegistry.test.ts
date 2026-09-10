@@ -47,4 +47,41 @@ describe("WatcherProviderRegistry", () => {
     expect(result.domains).toEqual([]);
     expect(result.error).toContain("not registered");
   });
+
+  it("normalizes a successful provider sample into attributable observations", async () => {
+    const registry = new WatcherProviderRegistry();
+    registry.register({
+      id: "cpu-provider",
+      name: "CPU Provider",
+      domains: ["cpu"],
+      collect: async () => ({ usagePercent: 33 }),
+    });
+
+    const observations = await registry.observe<{ usagePercent: number }>("cpu-provider");
+
+    expect(observations).toHaveLength(1);
+    expect(observations[0]?.providerId).toBe("cpu-provider");
+    expect(observations[0]?.domain).toBe("cpu");
+    expect(observations[0]?.availability).toBe("available");
+    expect(observations[0]?.value).toEqual({ usagePercent: 33 });
+  });
+
+  it("marks failed provider domains unavailable instead of manufacturing values", async () => {
+    const registry = new WatcherProviderRegistry();
+    registry.register({
+      id: "network-provider",
+      name: "Network Provider",
+      domains: ["network"],
+      collect: async () => {
+        throw new Error("network probe unavailable");
+      },
+    });
+
+    const observations = await registry.observe("network-provider");
+
+    expect(observations).toHaveLength(1);
+    expect(observations[0]?.availability).toBe("unavailable");
+    expect(observations[0]?.value).toBeUndefined();
+    expect(observations[0]?.detail).toBe("network probe unavailable");
+  });
 });
