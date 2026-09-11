@@ -5,6 +5,7 @@ export type EventType = string;
 
 export type WorkerKind =
   | "foundry-core"
+  | "foundry-intelligence"
   | "forgekeeper"
   | "production-steward"
   | "watcher"

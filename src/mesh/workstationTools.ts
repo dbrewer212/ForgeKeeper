@@ -18,6 +18,13 @@ export function registerWorkstationTools(runtime: FoundryMeshRuntime): void {
       capabilityId: MeshCapabilities.workstationLaunchTool,
       description: "Launch a configured application on the Windows Foundry workstation through a trusted host-side launcher id.",
       risk: "moderate",
+      operational: {
+        owner: "foundry-core",
+        reversibility: "conditionally-reversible",
+        preconditions: ["Requester is the paired Mobile Foundry console.", "Launcher id is registered as a trusted workstation target."],
+        sideEffects: ["Starts a workstation application and may consume CPU, memory, GPU, and disk resources."],
+        verification: ["Trusted native launcher returns success; later application-state verification may enrich this contract."],
+      },
       inputSchema: {
         type: "object",
         properties: {
@@ -40,6 +47,13 @@ export function registerWorkstationTools(runtime: FoundryMeshRuntime): void {
       capabilityId: MeshCapabilities.workstationOpenPath,
       description: "Open a host-configured Foundry location by trusted id; remote clients never supply a filesystem path.",
       risk: "low",
+      operational: {
+        owner: "foundry-core",
+        reversibility: "reversible",
+        preconditions: ["Requester is the paired Mobile Foundry console.", "Location id resolves through the trusted workstation registry."],
+        sideEffects: ["Opens a local folder/location in the workstation user session."],
+        verification: ["Trusted path resolution succeeds and native open command returns success."],
+      },
       inputSchema: {
         type: "object",
         properties: { locationId: { type: "string", enum: ["foundry-library", "asset-root"] } },
@@ -59,14 +73,26 @@ export function registerWorkstationTools(runtime: FoundryMeshRuntime): void {
     {
       name: "workstation.telemetry",
       capabilityId: MeshCapabilities.watcherReadTelemetry,
-      description: "Read current Windows host telemetry through Watcher's native provider.",
+      description: "Read current Windows host telemetry through Watcher, which remains the workstation sensing authority.",
       risk: "read",
       inputSchema: { type: "object", additionalProperties: false },
       audit: false,
+      operational: {
+        owner: "watcher",
+        reversibility: "reversible",
+        verification: ["Returns Watcher's current observation set and active findings."],
+        notes: ["Does not invoke an independent native telemetry path."],
+      },
     },
     async (_payload, _request, worker) => {
       requirePairedMobile(worker);
-      return invoke("watcher_system_snapshot");
+      if (runtime.watcher.getCurrent().length === 0) await runtime.watcher.pollNow();
+      return {
+        running: runtime.watcher.isRunning(),
+        updatedAt: runtime.watcher.updatedAt(),
+        observations: runtime.watcher.getCurrent(),
+        findings: runtime.watcher.getActiveFindings(),
+      };
     },
   );
 
@@ -78,13 +104,24 @@ export function registerWorkstationTools(runtime: FoundryMeshRuntime): void {
       risk: "read",
       inputSchema: { type: "object", additionalProperties: false },
       audit: false,
+      operational: {
+        owner: "bastion",
+        reversibility: "reversible",
+        verification: ["Returns a read-only projection of Mesh, Watcher, approval, and uncertain-command state."],
+      },
     },
     async (_payload, _request, worker) => {
       requirePairedMobile(worker);
       let telemetry: unknown;
       let telemetryError: string | undefined;
       try {
-        telemetry = await invoke("watcher_system_snapshot");
+        if (runtime.watcher.getCurrent().length === 0) await runtime.watcher.pollNow();
+        telemetry = {
+          running: runtime.watcher.isRunning(),
+          updatedAt: runtime.watcher.updatedAt(),
+          observations: runtime.watcher.getCurrent(),
+          findings: runtime.watcher.getActiveFindings(),
+        };
       } catch (cause) {
         telemetryError = cause instanceof Error ? cause.message : String(cause);
       }

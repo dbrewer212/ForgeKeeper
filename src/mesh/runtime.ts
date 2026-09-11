@@ -1,3 +1,14 @@
+import { FoundryContextAssembler } from "../intelligence/contextAssembler";
+import { FoundryIntelligenceEngine } from "../intelligence/engine";
+import { FoundryExperienceMemory } from "../intelligence/experienceMemory";
+import { FoundryModelCommissioning } from "../intelligence/modelCommissioning";
+import { FoundryModelRouter } from "../intelligence/modelProvider";
+import { FoundryPlanValidator } from "../intelligence/planValidator";
+import { FoundryIntelligenceRequestAssembler } from "../intelligence/requestAssembler";
+import { FoundrySkillCatalog } from "../intelligence/skillCatalog";
+import { TauriOllamaTransport } from "../intelligence/tauriOllamaTransport";
+import { FoundryWorldModel } from "../intelligence/worldModel";
+import { WatcherRuntime } from "../watcher/runtime";
 import { MeshActionCoordinator } from "./actionCoordinator";
 import { ActionGateway } from "./actionGateway";
 import { InMemoryApprovalStore } from "./approvalStore";
@@ -12,7 +23,9 @@ import { FoundryDomainStateStore } from "./domainState";
 import { registerDomainTools } from "./domainTools";
 import { DurableEventBus } from "./durableEventBus";
 import { InMemoryEventBus } from "./eventBus";
+import { registerExperienceTools } from "./experienceTools";
 import { DefaultHealthAggregator } from "./healthAggregator";
+import { registerIntelligenceTools } from "./intelligenceTools";
 import { registerStagedServiceAdapters } from "./localServiceAdapters";
 import { MeshOperations } from "./operations";
 import { InMemoryPermissionService } from "./permissionService";
@@ -24,10 +37,12 @@ import { ServiceLifecycleManager } from "./serviceLifecycle";
 import { defaultFoundryServices, ServiceRegistry } from "./serviceRegistry";
 import { registerServiceTools } from "./serviceTools";
 import { FoundryToolGateway } from "./toolGateway";
-import { InMemoryWorkerRegistry } from "./workerRegistry";
 import type { SystemHealth } from "./types";
+import { registerWatcherTools } from "./watcherTools";
+import { InMemoryWorkerRegistry } from "./workerRegistry";
 import { registerWorkstationTools } from "./workstationTools";
 import { defaultFoundryWorkers } from "./workers";
+import { registerWorldModelTools } from "./worldModelTools";
 
 export class FoundryMeshRuntime {
   readonly workers = new InMemoryWorkerRegistry();
@@ -40,6 +55,16 @@ export class FoundryMeshRuntime {
   readonly health = new DefaultHealthAggregator(this.workers, this.resources);
   readonly actions = new ActionGateway(this.permissions);
   readonly events: DurableEventBus;
+  readonly watcher: WatcherRuntime;
+  readonly worldModel: FoundryWorldModel;
+  readonly contextAssembler: FoundryContextAssembler;
+  readonly skillCatalog: FoundrySkillCatalog;
+  readonly planValidator: FoundryPlanValidator;
+  readonly experience: FoundryExperienceMemory;
+  readonly requestAssembler: FoundryIntelligenceRequestAssembler;
+  readonly modelRouter: FoundryModelRouter;
+  readonly modelCommissioning: FoundryModelCommissioning;
+  readonly intelligence: FoundryIntelligenceEngine;
   readonly coordinator: MeshActionCoordinator;
   readonly operations: MeshOperations;
   readonly tools: FoundryToolGateway;
@@ -54,15 +79,42 @@ export class FoundryMeshRuntime {
 
   constructor(readonly persistence: MeshPersistence = createDefaultMeshPersistence()) {
     this.events = new DurableEventBus(new InMemoryEventBus(), persistence);
+    this.experience = new FoundryExperienceMemory(persistence);
+    this.watcher = new WatcherRuntime(this.events);
     this.domainState = new FoundryDomainStateStore({
       publish: (event) => this.events.publish(event),
       persist: () => this.save(),
     });
     this.domain.register(this.domainState.services);
+    this.worldModel = new FoundryWorldModel({
+      domain: () => this.domainState.snapshot(),
+      services: () => this.services.list(),
+      workers: () => this.workers.list(),
+      resources: () => this.resources.listStates(),
+      health: () => this.getSystemHealth(),
+      safeMode: () => this.isSafeMode(),
+      watcherObservations: () => this.watcher.getCurrent(),
+      watcherFindings: () => this.watcher.getActiveFindings(),
+    });
+    this.contextAssembler = new FoundryContextAssembler(() => this.worldModel.snapshot());
     this.productionSteward = new ProductionSteward(this);
     this.coordinator = new MeshActionCoordinator(this);
     this.operations = new MeshOperations(this);
     this.tools = new FoundryToolGateway(this);
+    this.skillCatalog = new FoundrySkillCatalog(() => this.tools.list());
+    this.planValidator = new FoundryPlanValidator(this.skillCatalog);
+    this.requestAssembler = new FoundryIntelligenceRequestAssembler(this.contextAssembler, this.experience, this.skillCatalog);
+    this.modelRouter = new FoundryModelRouter();
+    this.modelCommissioning = new FoundryModelCommissioning(
+      this.modelRouter,
+      new TauriOllamaTransport(),
+      {
+        getService: (serviceId) => this.services.get(serviceId),
+        updateService: (serviceId, patch) => this.services.update(serviceId, patch),
+        persist: () => this.save(),
+      },
+    );
+    this.intelligence = new FoundryIntelligenceEngine(this.requestAssembler, this.modelRouter, this.planValidator);
     this.commissioning = new CommissioningController(this);
     this.serviceLifecycle = new ServiceLifecycleManager(this);
     this.diagnostics = new CommissioningDiagnostics(this);
@@ -70,6 +122,10 @@ export class FoundryMeshRuntime {
     registerServiceTools(this);
     registerDiagnosticTools(this);
     registerDomainTools(this);
+    registerWatcherTools(this);
+    registerWorldModelTools(this);
+    registerExperienceTools(this);
+    registerIntelligenceTools(this);
     registerWorkstationTools(this);
   }
 
@@ -81,6 +137,7 @@ export class FoundryMeshRuntime {
 
     this.ensureDefaultWorkers();
     this.ensureDefaultServices();
+    this.modelCommissioning.restoreConfiguredProvider();
     registerStagedServiceAdapters(this);
     this.initialized = true;
   }
@@ -189,12 +246,20 @@ export class FoundryMeshRuntime {
         continue;
       }
 
-      if (service.id === "foundry-domain") {
-        this.services.update(service.id, {
-          ...service,
-          metadata: { ...existing.metadata, ...service.metadata },
-        });
-      }
+      this.services.update(service.id, {
+        name: service.name,
+        kind: service.kind,
+        description: service.description,
+        workerId: service.workerId,
+        endpoint: service.endpoint,
+        dependencies: [...service.dependencies],
+        healthPath: service.healthPath,
+        adapterRequired: service.adapterRequired,
+        metadata: { ...service.metadata, ...existing.metadata },
+        commissioningState: existing.commissioningState,
+        runtimeState: existing.runtimeState,
+        enabled: existing.enabled,
+      });
     }
   }
 }

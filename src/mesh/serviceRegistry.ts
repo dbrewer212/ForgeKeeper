@@ -2,6 +2,7 @@ import type { CommissioningState } from "./types";
 
 export type ServiceKind =
   | "inference"
+  | "intelligence"
   | "automation"
   | "workspace"
   | "supervisory"
@@ -76,15 +77,46 @@ export const defaultFoundryServices: ServiceDescriptor[] = [
     metadata: { executionModel: "foundry-core-internal" },
   },
   {
+    id: "foundry-intelligence-service",
+    name: "Foundry Intelligence",
+    kind: "intelligence",
+    description: "Governed intent interpretation, context assembly, planning, skill selection, experience retrieval, and outcome evaluation. Execution remains behind Mesh tools and policies.",
+    commissioningState: "dormant",
+    runtimeState: "offline",
+    enabled: false,
+    workerId: "foundry-intelligence",
+    dependencies: ["foundry-domain"],
+    adapterRequired: true,
+    metadata: {
+      executionModel: "governed-intelligence",
+      authorityBoundary: "mesh-tool-gateway",
+      modelProviderRequired: true,
+    },
+  },
+  {
     id: "ollama-service",
     name: "Ollama Local Inference",
     kind: "inference",
+    description: "Local Ollama inference provider reached only through the Foundry fixed-loopback native transport.",
     commissioningState: "dormant",
     runtimeState: "offline",
     enabled: false,
     workerId: "ollama",
     endpoint: "http://127.0.0.1:11434",
     dependencies: [],
+    adapterRequired: true,
+    metadata: {
+      executionModel: "external-local-inference",
+      locality: "local",
+      provider: "ollama",
+      structuredOutput: true,
+      selectedModel: null,
+      localControl: {
+        probeUrl: "http://127.0.0.1:11434/api/tags",
+        externallyManaged: true,
+        owner: "Ollama local runtime",
+      },
+    },
   },
   {
     id: "openclaw-service",
