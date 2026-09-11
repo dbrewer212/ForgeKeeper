@@ -4,7 +4,7 @@ import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
 import { Select } from "../../components/ui/Select";
 import { PRINTPAL_CREDIT_COSTS, type PrintPalQuality } from "../../lib/generationBudget";
-import type { GenerationStatus, ProviderKey } from "../../lib/generationProviders";
+import type { GenerationStatus, MeshyPrintTask, MeshyPrintTaskSubmission, ProviderKey } from "../../lib/generationProviders";
 import type { ForgekeeperState } from "../../state/useForgekeeperState";
 import { getWorkbenchProviderGenerationService, type WorkbenchGenerationSubmission } from "../../workbench/providerGeneration";
 import { intakeCompletedProviderAsset, type ProviderIntakeResult } from "../../workbench/providerIntake";
@@ -23,8 +23,12 @@ export function ProviderGenerationStation({ state }: { state: ForgekeeperState }
   const [jobId, setJobId] = useState("");
   const [submission, setSubmission] = useState<WorkbenchGenerationSubmission | null>(null);
   const [status, setStatus] = useState<GenerationStatus | null>(null);
+  const [analysisSubmission, setAnalysisSubmission] = useState<MeshyPrintTaskSubmission | null>(null);
+  const [analysis, setAnalysis] = useState<MeshyPrintTask | null>(null);
+  const [repairSubmission, setRepairSubmission] = useState<MeshyPrintTaskSubmission | null>(null);
+  const [repair, setRepair] = useState<MeshyPrintTask | null>(null);
   const [intakeResult, setIntakeResult] = useState<ProviderIntakeResult | null>(null);
-  const [busy, setBusy] = useState<"submit" | "status" | "intake" | null>(null);
+  const [busy, setBusy] = useState<"submit" | "status" | "analyze" | "analysisStatus" | "repair" | "repairStatus" | "intake" | null>(null);
   const [message, setMessage] = useState("");
 
   const assets = useMemo(() => [...runtime.assets].sort((a, b) => a.name.localeCompare(b.name)), [runtime.assets]);
@@ -33,12 +37,17 @@ export function ProviderGenerationStation({ state }: { state: ForgekeeperState }
   const apiFilePath = state.settings.apiCredentialFilePath ?? "";
   const activeJobId = jobId.trim() || submission?.jobId || "";
   const expectedCredits = provider === "meshy" ? (shouldTexture ? 30 : 20) : PRINTPAL_CREDIT_COSTS[quality];
+  const meshySucceeded = provider === "meshy" && status?.status?.trim().toLowerCase() === "succeeded";
 
   async function submit() {
     if (!selectedAssetId) return setMessage("Select a Workbench asset first.");
     setBusy("submit");
     setMessage("");
     setStatus(null);
+    setAnalysisSubmission(null);
+    setAnalysis(null);
+    setRepairSubmission(null);
+    setRepair(null);
     setIntakeResult(null);
     try {
       const result = await getWorkbenchProviderGenerationService().submit({
@@ -69,6 +78,72 @@ export function ProviderGenerationStation({ state }: { state: ForgekeeperState }
       const result = await getWorkbenchProviderGenerationService().status(apiFilePath, selectedAssetId, provider, activeJobId);
       setStatus(result);
       setMessage(`${provider === "meshy" ? "Meshy" : "PrintPal"} reports ${result.status}${result.progress != null ? ` · ${result.progress}%` : ""}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function analyzePrintability() {
+    if (!meshySucceeded || !activeJobId || !selectedAssetId) return setMessage("A succeeded Meshy generation is required before printability analysis.");
+    setBusy("analyze");
+    setMessage("");
+    setAnalysis(null);
+    setRepairSubmission(null);
+    setRepair(null);
+    try {
+      const result = await getWorkbenchProviderGenerationService().analyzeMeshy(apiFilePath, selectedAssetId, activeJobId);
+      setAnalysisSubmission(result);
+      setMessage(`Meshy printability analysis ${result.taskId} submitted. Analysis is free.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function checkAnalysis() {
+    const taskId = analysisSubmission?.taskId;
+    if (!taskId) return setMessage("Submit Meshy printability analysis first.");
+    setBusy("analysisStatus");
+    setMessage("");
+    try {
+      const result = await getWorkbenchProviderGenerationService().getMeshyAnalysis(apiFilePath, taskId);
+      setAnalysis(result);
+      setMessage(`Meshy printability analysis reports ${result.status}${result.progress != null ? ` · ${result.progress}%` : ""}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function repairPrintability() {
+    if (!meshySucceeded || !activeJobId || !selectedAssetId) return setMessage("A succeeded Meshy generation is required before repair.");
+    setBusy("repair");
+    setMessage("");
+    setRepair(null);
+    try {
+      const result = await getWorkbenchProviderGenerationService().repairMeshy(apiFilePath, selectedAssetId, activeJobId, 10);
+      setRepairSubmission(result);
+      setMessage(`Meshy repair ${result.taskId} submitted with an explicit 10-credit authorization.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function checkRepair() {
+    const taskId = repairSubmission?.taskId;
+    if (!taskId) return setMessage("Submit a Meshy printability repair first.");
+    setBusy("repairStatus");
+    setMessage("");
+    try {
+      const result = await getWorkbenchProviderGenerationService().getMeshyRepair(apiFilePath, taskId);
+      setRepair(result);
+      setMessage(`Meshy repair reports ${result.status}${result.progress != null ? ` · ${result.progress}%` : ""}.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -119,7 +194,7 @@ export function ProviderGenerationStation({ state }: { state: ForgekeeperState }
               </Select>
             </Field>
             <Field label="Provider">
-              <Select value={provider} onChange={(event) => { setProvider(event.target.value as ProviderKey); setStatus(null); setSubmission(null); }}>
+              <Select value={provider} onChange={(event) => { setProvider(event.target.value as ProviderKey); setStatus(null); setSubmission(null); setAnalysisSubmission(null); setAnalysis(null); setRepairSubmission(null); setRepair(null); }}>
                 <option value="meshy">Meshy</option>
                 <option value="printpal">PrintPal</option>
               </Select>
@@ -151,9 +226,9 @@ export function ProviderGenerationStation({ state }: { state: ForgekeeperState }
 
         <Card title="Provider Boundary">
           <div className="space-y-3 text-sm leading-6 text-slate-400">
-            <Info label="Credential file" value={apiFilePath || "Not configured"} />
+            <Info label="Credential file" value={apiFilePath || "MESHY_API_KEY environment fallback available for print checks"} />
             <Info label="Target asset" value={selectedAsset?.name || "No asset"} />
-            <Info label="Provider authority" value="Generate only" />
+            <Info label="Provider authority" value="Generate + analyze/repair only" />
             <Info label="Manufacturing approval" value="Never automatic" />
             <Info label="Canon authority" value="None" />
           </div>
@@ -174,6 +249,30 @@ export function ProviderGenerationStation({ state }: { state: ForgekeeperState }
             <Metric label="Progress" value={status.progress == null ? "Unknown" : `${status.progress}%`} />
             <Metric label="Credits used" value={status.creditsUsed == null ? "Unknown" : String(status.creditsUsed)} />
             <Metric label="Outputs" value={Object.keys(status.outputUrls ?? {}).join(", ") || "Not available"} />
+          </div>
+        ) : null}
+
+        {provider === "meshy" ? (
+          <div className="mt-5 rounded-2xl border border-cyan-500/15 bg-cyan-500/5 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300">Meshy Print Gate</div>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">Analyze FDM topology after generation. Analysis is free. Repair is never automatic and requires a separate 10-credit authorization.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="ghost" onClick={() => void analyzePrintability()} disabled={busy !== null || !meshySucceeded}>{busy === "analyze" ? "Submitting…" : "Analyze · Free"}</Button>
+                <Button variant="ghost" onClick={() => void checkAnalysis()} disabled={busy !== null || !analysisSubmission}>{busy === "analysisStatus" ? "Checking…" : "Check Analysis"}</Button>
+                <Button onClick={() => void repairPrintability()} disabled={busy !== null || !meshySucceeded}>{busy === "repair" ? "Submitting…" : "Authorize Repair · 10"}</Button>
+                <Button variant="ghost" onClick={() => void checkRepair()} disabled={busy !== null || !repairSubmission}>{busy === "repairStatus" ? "Checking…" : "Check Repair"}</Button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Metric label="Analysis task" value={analysisSubmission?.taskId ?? "Not submitted"} />
+              <Metric label="Analysis status" value={analysis?.status ?? analysisSubmission?.status ?? "—"} />
+              <Metric label="Repair task" value={repairSubmission?.taskId ?? "Not submitted"} />
+              <Metric label="Repair status" value={repair?.status ?? repairSubmission?.status ?? "—"} />
+            </div>
           </div>
         ) : null}
 
