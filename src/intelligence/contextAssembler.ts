@@ -29,7 +29,6 @@ export class FoundryContextAssembler {
   assemble(request: FoundryContextRequest): FoundryContextPacket {
     const snapshot = this.getWorldSnapshot();
     const maxEntities = Math.max(5, Math.min(100, request.maxEntities ?? 30));
-    const normalizedRequest = request.text.toLowerCase();
     const tokens = tokenize(request.text);
     const selected = new Map<string, { entity: WorldEntity; score: number }>();
 
@@ -55,11 +54,8 @@ export class FoundryContextAssembler {
       const searchable = `${entity.id} ${entity.label} ${entity.status ?? ""}`.toLowerCase();
       const matches = tokens.filter((token) => searchable.includes(token)).length;
       if (matches > 0) {
-        const label = entity.label.toLowerCase();
-        const idTail = entity.id.split(":").pop()?.toLowerCase() ?? "";
-        const explicitReference =
-          (label.length >= 3 && normalizedRequest.includes(label)) ||
-          (idTail.length >= 3 && normalizedRequest.includes(idTail));
+        const referenceTokens = tokenize(`${entity.label} ${entity.id.replace(/[:_-]+/g, " ")}`);
+        const explicitReference = tokens.some((token) => referenceTokens.includes(token));
         add(entity, explicitReference ? 1100 + matches * 25 : 500 + matches * 25);
       }
     }
