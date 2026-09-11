@@ -1,10 +1,16 @@
 import { expectedGenerationCredits, type PrintPalQuality } from "../lib/generationBudget";
 import {
+  analyzeMeshyPrintability,
   getGenerationStatus,
+  getMeshyPrintabilityAnalysis,
+  getMeshyPrintabilityRepair,
+  repairMeshyPrintability,
   submitMeshyImageGeneration,
   submitPrintPalImageGeneration,
   type GenerationStatus,
   type GenerationSubmission,
+  type MeshyPrintTask,
+  type MeshyPrintTaskSubmission,
   type ProviderKey,
 } from "../lib/generationProviders";
 import { WORKBENCH_EVENT_SCHEMA_VERSION, type WorkbenchEvent } from "./events";
@@ -121,6 +127,72 @@ export class WorkbenchProviderGenerationService {
       }
     }
     return status;
+  }
+
+  async analyzeMeshy(apiFilePath: string, assetId: string, generationJobId: string): Promise<MeshyPrintTaskSubmission> {
+    const asset = await this.requireAsset(assetId);
+    const submission = await analyzeMeshyPrintability({
+      apiFilePath: apiFilePath.trim() || undefined,
+      inputTaskId: generationJobId.trim(),
+    });
+    await this.repository.appendEvent({
+      eventId: id("event"),
+      eventType: "provider.printability.submitted",
+      timestamp: new Date().toISOString(),
+      actorId: this.actorId,
+      correlationId: `meshy-print-analyze:${submission.taskId}`,
+      projectId: asset.owningProjectId,
+      assetId,
+      schemaVersion: WORKBENCH_EVENT_SCHEMA_VERSION,
+      payload: {
+        provider: "meshy",
+        sourceGenerationJobId: generationJobId,
+        analysisTaskId: submission.taskId,
+        expectedCredits: 0,
+      },
+    });
+    return submission;
+  }
+
+  async getMeshyAnalysis(apiFilePath: string, taskId: string): Promise<MeshyPrintTask> {
+    return getMeshyPrintabilityAnalysis(apiFilePath.trim() || undefined, taskId.trim());
+  }
+
+  async repairMeshy(apiFilePath: string, assetId: string, generationJobId: string, authorizedCredits = 10): Promise<MeshyPrintTaskSubmission> {
+    const asset = await this.requireAsset(assetId);
+    const submission = await repairMeshyPrintability({
+      apiFilePath: apiFilePath.trim() || undefined,
+      inputTaskId: generationJobId.trim(),
+      authorizedCredits,
+    });
+    await this.repository.appendEvent({
+      eventId: id("event"),
+      eventType: "provider.printability.repair.submitted",
+      timestamp: new Date().toISOString(),
+      actorId: this.actorId,
+      correlationId: `meshy-print-repair:${submission.taskId}`,
+      projectId: asset.owningProjectId,
+      assetId,
+      schemaVersion: WORKBENCH_EVENT_SCHEMA_VERSION,
+      payload: {
+        provider: "meshy",
+        sourceGenerationJobId: generationJobId,
+        repairTaskId: submission.taskId,
+        authorizedCredits,
+      },
+    });
+    return submission;
+  }
+
+  async getMeshyRepair(apiFilePath: string, taskId: string): Promise<MeshyPrintTask> {
+    return getMeshyPrintabilityRepair(apiFilePath.trim() || undefined, taskId.trim());
+  }
+
+  private async requireAsset(assetId: string) {
+    const state = await this.repository.loadState();
+    const asset = state.assets.find((item) => item.assetId === assetId);
+    if (!asset) throw new Error(`Unknown Workbench asset: ${assetId}`);
+    return asset;
   }
 }
 
