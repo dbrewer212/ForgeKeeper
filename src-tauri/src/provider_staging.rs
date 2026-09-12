@@ -1,4 +1,6 @@
-use crate::provider_download::download_provider_asset_safely;
+mod provider_download;
+
+use provider_download::download_provider_asset_safely;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
