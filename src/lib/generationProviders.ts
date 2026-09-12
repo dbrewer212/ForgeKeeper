@@ -40,6 +40,30 @@ export type DownloadedGenerationAsset = {
   outputPath: string;
 };
 
+export type MeshyPrintTaskSubmission = {
+  taskId: string;
+  taskType: "print-analyze" | "print-repair";
+  status: string;
+  expectedCredits: number;
+};
+
+export type MeshyPrintTask = {
+  id: string;
+  type: string;
+  status: string;
+  progress?: number | null;
+  task_error?: { message?: string } | null;
+  consumed_credits?: number | null;
+  model_urls?: Record<string, string>;
+  [key: string]: unknown;
+};
+
+export type MeshyDownloadedPrintAsset = {
+  taskId: string;
+  format: string;
+  outputPath: string;
+};
+
 type InvokeFn = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
 function isTauriRuntime() {
@@ -88,4 +112,43 @@ export function getGenerationStatus(apiFilePath: string, provider: ProviderKey, 
 
 export function downloadGenerationAsset(apiFilePath: string, provider: ProviderKey, jobId: string, format: string, outputPath: string) {
   return invoke<DownloadedGenerationAsset>("download_generation_asset", { apiFilePath, provider, jobId, format, outputPath });
+}
+
+export function analyzeMeshyPrintability(input: {
+  apiFilePath?: string;
+  inputTaskId?: string;
+  modelUrl?: string;
+}) {
+  return invoke<MeshyPrintTaskSubmission>("meshy_analyze_printability", input);
+}
+
+export function getMeshyPrintabilityAnalysis(apiFilePath: string | undefined, taskId: string) {
+  return invoke<MeshyPrintTask>("meshy_get_printability_analysis", { apiFilePath, taskId });
+}
+
+export function repairMeshyPrintability(input: {
+  apiFilePath?: string;
+  inputTaskId?: string;
+  modelUrl?: string;
+  authorizedCredits: number;
+}) {
+  return invoke<MeshyPrintTaskSubmission>("meshy_repair_printability", input);
+}
+
+export function getMeshyPrintabilityRepair(apiFilePath: string | undefined, taskId: string) {
+  return invoke<MeshyPrintTask>("meshy_get_printability_repair", { apiFilePath, taskId });
+}
+
+export function downloadMeshyRepairedAsset(
+  apiFilePath: string | undefined,
+  taskId: string,
+  format: string,
+  outputPath: string,
+) {
+  return invoke<MeshyDownloadedPrintAsset>("meshy_download_repaired_asset", {
+    apiFilePath,
+    taskId,
+    format,
+    outputPath,
+  });
 }

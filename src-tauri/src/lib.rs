@@ -2,6 +2,7 @@ mod bastion;
 mod forgepack;
 mod managed_files;
 mod managed_services;
+mod meshy_print;
 mod provider_staging;
 mod providers;
 mod three_mf;
@@ -16,6 +17,11 @@ use forgepack::{workbench_export_forgepack, workbench_import_forgepack};
 use managed_files::workbench_store_file;
 use managed_services::{
     managed_service_start, managed_service_status, managed_service_stop, ManagedProcesses,
+};
+use meshy_print::{
+    meshy_analyze_printability, meshy_download_repaired_asset,
+    meshy_get_printability_analysis, meshy_get_printability_repair,
+    meshy_repair_printability,
 };
 use provider_staging::{workbench_clear_provider_staging, workbench_stage_generation_asset};
 use providers::{
@@ -400,6 +406,11 @@ pub fn run() {
             submit_printpal_image_generation,
             get_generation_status,
             download_generation_asset,
+            meshy_analyze_printability,
+            meshy_get_printability_analysis,
+            meshy_repair_printability,
+            meshy_get_printability_repair,
+            meshy_download_repaired_asset,
             bastion_launch_mode,
             bastion_open_window,
             bastion_close_window,
