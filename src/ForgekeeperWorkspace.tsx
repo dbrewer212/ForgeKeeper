@@ -8,6 +8,7 @@ import { ensureWorkbenchBootstrap } from "./workbench/bootstrap";
 const DashboardView = lazy(() => import("./features/dashboard/DashboardView").then((module) => ({ default: module.DashboardView })));
 const WorkbenchDesignLibraryView = lazy(() => import("./features/design-library/WorkbenchDesignLibraryView").then((module) => ({ default: module.WorkbenchDesignLibraryView })));
 const ProductionView = lazy(() => import("./features/production/ProductionView").then((module) => ({ default: module.ProductionView })));
+const ProductionWorkbench = lazy(() => import("./features/production/ProductionWorkbench").then((module) => ({ default: module.ProductionWorkbench })));
 const FilamentView = lazy(() => import("./features/filament/FilamentView").then((module) => ({ default: module.FilamentView })));
 const PrintersView = lazy(() => import("./features/printers/PrintersView").then((module) => ({ default: module.PrintersView })));
 const ReportsView = lazy(() => import("./features/reports/ReportsView").then((module) => ({ default: module.ReportsView })));
@@ -65,7 +66,12 @@ export default function ForgekeeperWorkspace() {
         return <WorkbenchDesignLibraryView state={state} />;
       case "production":
       case "orders":
-        return <ProductionView />;
+        return (
+          <div className="space-y-6">
+            <ProductionWorkbench state={state} />
+            <ProductionView />
+          </div>
+        );
       case "filament":
         return <FilamentView state={state} />;
       case "printers":
