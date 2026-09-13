@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Sidebar } from "./components/layout/Sidebar";
 import { useForgekeeperState } from "./state/useForgekeeperState";
@@ -18,6 +18,11 @@ const CommissioningView = lazy(() => import("./features/commissioning/Commission
 
 export default function ForgekeeperWorkspace() {
   const state = useForgekeeperState();
+  const mainRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [state.view]);
 
   useEffect(() => {
     if (!state.storageReady) return;
@@ -92,7 +97,7 @@ export default function ForgekeeperWorkspace() {
   return (
     <div className="flex h-screen overflow-hidden bg-[linear-gradient(135deg,rgba(8,7,6,0.2),rgba(21,18,15,0.32))] text-slate-100">
       <Sidebar view={state.view as string} setView={state.setView} onBastion={openBastion} />
-      <main className="relative flex-1 overflow-auto">
+      <main ref={mainRef} className="relative flex-1 overflow-auto">
         <div className="pointer-events-none sticky top-0 z-10 h-px bg-[linear-gradient(90deg,rgba(199,148,56,0.35),rgba(169,117,36,0.08),transparent)]" />
         <div className="mx-auto min-h-full w-full max-w-[1920px] p-4 lg:p-5 xl:p-6">
           {state.storageStatus === "Error" ? (
