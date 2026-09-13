@@ -1,4 +1,6 @@
-use crate::providers::download_generation_asset;
+mod provider_download;
+
+use provider_download::download_provider_asset_safely;
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -50,12 +52,12 @@ pub async fn workbench_stage_generation_asset(
         }
     }
 
-    download_generation_asset(
+    download_provider_asset_safely(
         api_file_path,
         provider.clone(),
         job_id.clone(),
         format.clone(),
-        staged.to_string_lossy().to_string(),
+        staged.clone(),
     )
     .await?;
 
@@ -65,6 +67,17 @@ pub async fn workbench_stage_generation_asset(
         return Err("Provider download completed without a regular staged file.".to_string());
     }
     ensure_inside(&canonical, &root)?;
+    let actual_extension = canonical
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if actual_extension != format {
+        return Err(format!(
+            "Provider staging produced .{} instead of requested .{format}; Intake was blocked before registration.",
+            if actual_extension.is_empty() { "unknown" } else { &actual_extension }
+        ));
+    }
 
     Ok(StagedGenerationAsset {
         provider,

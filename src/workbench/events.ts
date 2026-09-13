@@ -22,6 +22,8 @@ export type WorkbenchEventType =
   | "asset.production_evidence.changed"
   | "provider.generation.submitted"
   | "provider.generation.terminal"
+  | "provider.printability.submitted"
+  | "provider.printability.repair.submitted"
   | "forgepack.exported"
   | "forgepack.imported";
 
