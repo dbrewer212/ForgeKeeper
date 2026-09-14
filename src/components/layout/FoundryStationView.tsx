@@ -21,7 +21,7 @@ export function FoundryStationView({ state }: { state: ForgekeeperState }) {
         return <WorkbenchDesignLibraryView state={state} />;
       case "production":
       case "orders":
-        return <ProductionView />;
+        return <ProductionView state={state} />;
       case "filament":
         return <FilamentView state={state} />;
       case "printers":

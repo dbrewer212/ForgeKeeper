@@ -116,7 +116,7 @@ export class ProductionSteward {
 
   async startProductionItem(
     productionItemId: string,
-    context: DomainMutationContext = humanContext(`Start production item ${productionItemId}.`, productionItemId),
+    context: DomainMutationContext = humanContext(`Begin production tracking for ${productionItemId}.`, productionItemId),
   ): Promise<ProductionItemSummary> {
     await this.runtime.initialize();
     const domain = this.runtime.domain.get();
@@ -124,11 +124,9 @@ export class ProductionSteward {
     if (!item) throw new Error(`Production item ${productionItemId} does not exist.`);
     if (item.status === "completed") throw new Error(`Production item ${productionItemId} is already completed.`);
 
+    // A Foundry session represents the operator's current focus/re-entry context. It must not
+    // serialize physical machine work: several printers may execute production items concurrently.
     const active = await domain.sessions.getActive();
-    if (active && active.activeProductionItemId !== productionItemId) {
-      throw new Error(`Production session ${active.id} is already active for ${active.activeProductionItemId ?? "other Foundry work"}. Finish, pause, or recover that work before starting another production item.`);
-    }
-
     if (!active) {
       const now = new Date().toISOString();
       const session: FoundrySession = {
@@ -152,6 +150,16 @@ export class ProductionSteward {
         },
       };
       await domain.sessions.start(session, context);
+    } else if (active.activeProductionItemId === productionItemId) {
+      await domain.sessions.update(active.id, {
+        state: "active",
+        currentStage: "printing",
+        currentAction: item.workbench?.printerId
+          ? `Execute preparation ${item.workbench.preparationId} on ${item.workbench.printerId}.`
+          : `Execute preparation ${item.workbench?.preparationId ?? "approved preparation"}.`,
+        nextAction: "Monitor the print through Bastion and record the physical result when execution finishes.",
+        blockedBy: undefined,
+      }, context);
     }
 
     const next: ProductionItemSummary = {
@@ -181,7 +189,7 @@ export class ProductionSteward {
       stage,
       status: item.blocker ? "attention-required" : "active",
       nextAction: stage === "finishing"
-        ? "Complete finishing/inspection and record the physical print result in the Workbench Production Gate."
+        ? "Complete finishing/inspection and record the physical print result in Production."
         : "Monitor the print through Bastion and record the physical result when execution finishes.",
     };
     await this.runtime.domainState.upsertProductionItem(next, context);
@@ -227,10 +235,11 @@ export class ProductionSteward {
     const item = await domain.production.get(productionItemId);
     if (!item) throw new Error(`Production item ${productionItemId} does not exist.`);
     const active = await domain.sessions.getActive();
-    const isActive = active?.activeProductionItemId === productionItemId;
-    const next = { ...item, blocker: undefined, status: isActive ? "active" : "queued" };
+    const isFocused = active?.activeProductionItemId === productionItemId;
+    const isExecuting = item.stage === "printing" || item.stage === "finishing";
+    const next = { ...item, blocker: undefined, status: isFocused || isExecuting ? "active" : "queued" };
     await this.runtime.domainState.upsertProductionItem(next, context);
-    if (isActive && active) {
+    if (isFocused && active) {
       await domain.sessions.update(active.id, { state: "active", blockedBy: undefined }, context);
     }
     return next;
