@@ -1,64 +1,41 @@
 import { describe, expect, it } from "vitest";
-import type { FoundryAsset, InspectionResult } from "./contracts";
-import { calculateUniformStorefrontScale, recommendStorefrontScale } from "./storefrontScalePolicy";
+import {
+  calculateUniformProfileScale,
+  FOUNDRY_SCALE_PROFILES,
+  getScaleProfile,
+} from "./storefrontScalePolicy";
 
-function asset(overrides: Partial<FoundryAsset> = {}): FoundryAsset {
-  return {
-    assetId: "asset:test",
-    name: "Test Model",
-    assetType: "character",
-    lifecycleStatus: "registered",
-    provenance: { sourceType: "manual" },
-    tags: [],
-    createdAt: "2026-09-14T00:00:00.000Z",
-    updatedAt: "2026-09-14T00:00:00.000Z",
-    ...overrides,
-  };
-}
-
-function inspection(triangleCount: number, shellCount = 1): InspectionResult {
-  return {
-    inspectionResultId: "inspection:test",
-    assetId: "asset:test",
-    revisionId: "revision:test",
-    engineId: "test",
-    engineVersion: "1",
-    geometry: {
-      boundsMm: { x: 400, y: 300, z: 500 },
-      triangleCount,
-      shellCount,
-    },
-    findings: [],
-    machineCompatibility: [],
-    createdAt: "2026-09-14T00:00:00.000Z",
-  };
-}
-
-describe("digital storefront scale policy", () => {
-  it("keeps simple models in the compact 3-inch tier", () => {
-    expect(recommendStorefrontScale(asset(), inspection(45_000)).targetInches).toBe(3);
+describe("Foundry scale profiles", () => {
+  it("defines the Foundry Goblin display profile at 4 inches on Z", () => {
+    const profile = getScaleProfile("foundry-goblin-display");
+    expect(profile.label).toBe("Foundry Goblin — Display");
+    expect(profile.targetAxis).toBe("z");
+    expect(profile.targetInches).toBe(4);
+    expect(profile.targetDimensionMm).toBeCloseTo(101.6);
+    expect(profile.preserveProportions).toBe(true);
   });
 
-  it("moves moderate-detail models to 4 inches", () => {
-    expect(recommendStorefrontScale(asset(), inspection(100_000)).targetInches).toBe(4);
+  it("defines the requested Wyrm display sizes", () => {
+    const wyrmProfiles = FOUNDRY_SCALE_PROFILES.filter((profile) => profile.profileId.startsWith("wyrm-display"));
+    expect(wyrmProfiles.map((profile) => profile.targetInches)).toEqual([2.5, 3, 3.5]);
+    expect(wyrmProfiles.every((profile) => profile.targetAxis === "z" && profile.preserveProportions)).toBe(true);
   });
 
-  it("moves high-detail or heavily multipart models to 5 inches", () => {
-    expect(recommendStorefrontScale(asset(), inspection(260_000, 5)).targetInches).toBe(5);
+  it("calculates Fisher's 1282.64 mm Z height to roughly 7.92 percent for the 4 inch profile", () => {
+    const profile = getScaleProfile("foundry-goblin-display");
+    const projection = calculateUniformProfileScale({ x: 600, y: 750, z: 1282.64 }, profile);
+    expect(projection.scaleFactor).toBeCloseTo(101.6 / 1282.64, 8);
+    expect(projection.scaleFactor * 100).toBeCloseTo(7.92, 2);
+    expect(projection.scaledBoundsMm.x).toBeCloseTo(600 * projection.scaleFactor);
+    expect(projection.scaledBoundsMm.y).toBeCloseTo(750 * projection.scaleFactor);
+    expect(projection.scaledBoundsMm.z).toBeCloseTo(101.6);
   });
 
-  it("honors an explicit storefront tier tag", () => {
-    const result = recommendStorefrontScale(asset({ tags: ["storefront-5in"] }), inspection(20_000));
-    expect(result.targetInches).toBe(5);
-    expect(result.source).toBe("explicit-tag");
-  });
-
-  it("uniformly scales the longest dimension to the requested storefront envelope", () => {
-    const projection = calculateUniformStorefrontScale({ x: 400, y: 300, z: 500 }, 5);
-    expect(projection.targetMaxMm).toBeCloseTo(127);
-    expect(projection.scaleFactor).toBeCloseTo(0.254);
-    expect(projection.scaledBoundsMm.x).toBeCloseTo(101.6);
-    expect(projection.scaledBoundsMm.y).toBeCloseTo(76.2);
-    expect(projection.scaledBoundsMm.z).toBeCloseTo(127);
+  it("targets the profile axis rather than the model's longest dimension", () => {
+    const profile = getScaleProfile("foundry-goblin-display");
+    const projection = calculateUniformProfileScale({ x: 1600, y: 400, z: 800 }, profile);
+    expect(projection.scaleFactor).toBeCloseTo(101.6 / 800);
+    expect(projection.scaledBoundsMm.z).toBeCloseTo(101.6);
+    expect(projection.scaledBoundsMm.x).toBeGreaterThan(101.6);
   });
 });
