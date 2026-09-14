@@ -90,7 +90,7 @@ export function ModelWorkspaceView({
       await runtime.refresh();
       const verified = result.derivedInspection.geometry.boundsMm;
       setMessage(
-        `${result.reusedExisting ? "Reused" : "Created"} ${result.generatedFile.fileName} · ${(result.nativeResult.scaleFactor * 100).toFixed(2)}% scale · verified ${formatBounds(verified)}`,
+        `${result.reusedExisting ? "Reused" : "Created"} ${result.generatedFile.fileName} · ${(result.nativeResult.scaleFactor * 100).toFixed(2)}% uniform XYZ scale · verified ${formatBounds(verified)}`,
       );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -166,7 +166,7 @@ export function ModelWorkspaceView({
               </div>
             </Card>
 
-            <Card title="Foundry Scale Profile" right={<span className="text-xs text-amber-300">Proportions preserved</span>}>
+            <Card title="Foundry Scale Profile" right={<span className="text-xs text-amber-300">Uniform XYZ proportions locked</span>}>
               <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr),300px]">
                 <div className="space-y-4">
                   <label className="block space-y-2">
@@ -176,18 +176,20 @@ export function ModelWorkspaceView({
                     </Select>
                   </label>
                   <div className="rounded-xl border border-white/10 bg-[#0b1119] p-4 text-sm leading-6 text-slate-400">
-                    <div><span className="text-slate-500">Target:</span> {profile.targetAxis.toUpperCase()} = {profile.targetInches.toFixed(2)} in / {profile.targetDimensionMm.toFixed(1)} mm</div>
-                    <div><span className="text-slate-500">Preserve proportions:</span> ON</div>
+                    <div><span className="text-slate-500">Uniform scale based on {profile.targetAxis.toUpperCase()}:</span> {profile.targetAxis.toUpperCase()} = {profile.targetInches.toFixed(2)} in / {profile.targetDimensionMm.toFixed(1)} mm</div>
+                    <div><span className="text-slate-500">Applied equally:</span> X / Y / Z use the same scale percentage</div>
+                    <div><span className="text-slate-500">Proportions:</span> LOCKED</div>
                     <div><span className="text-slate-500">Output:</span> {fileStem(selected.name)}_{profile.fileSuffix}.stl</div>
-                    <div className="mt-2 text-xs text-slate-500">If this model has not been inspected yet, ForgeKeeper will inspect it automatically before scaling, then inspect the generated STL again afterward.</div>
+                    <div className="mt-2 text-xs text-slate-500">ForgeKeeper uses {profile.targetAxis.toUpperCase()} only to calculate the uniform scale factor. That same factor is then applied to X, Y, and Z. If this model has not been inspected yet, ForgeKeeper will inspect it automatically before scaling, then inspect the generated STL again afterward.</div>
                   </div>
                   <Button onClick={() => void prepareScaleProfile()} disabled={!revision || busy !== null}>
                     {busy === "scale" ? "Preparing…" : `Prepare ${profile.label}`}
                   </Button>
                 </div>
                 <div className="space-y-3">
-                  <Metric label="Source axis" value={projection ? `${projection.sourceDimensionMm.toFixed(2)} mm` : latest ? "Unavailable" : "Auto-inspect on prepare"} />
-                  <Metric label="Uniform scale" value={projection ? `${(projection.scaleFactor * 100).toFixed(2)}%` : "—"} />
+                  <Metric label={`${profile.targetAxis.toUpperCase()} reference size`} value={projection ? `${projection.sourceDimensionMm.toFixed(2)} mm` : latest ? "Unavailable" : "Auto-inspect on prepare"} />
+                  <Metric label={`Uniform XYZ scale from ${profile.targetAxis.toUpperCase()}`} value={projection ? `${(projection.scaleFactor * 100).toFixed(2)}%` : "—"} />
+                  <Metric label="Applied to X / Y / Z" value={projection ? `${(projection.scaleFactor * 100).toFixed(2)}% / ${(projection.scaleFactor * 100).toFixed(2)}% / ${(projection.scaleFactor * 100).toFixed(2)}%` : "—"} />
                   <Metric label="Projected result" value={projection ? formatBounds(projection.scaledBoundsMm) : "—"} />
                 </div>
               </div>
