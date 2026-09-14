@@ -1,12 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { PrinterRecord } from "../types/domain";
 import type { FoundryFile, FoundryVariant, InspectionResult, WorkbenchOperation } from "./contracts";
+import { getWorkbenchInspectorService } from "./inspector";
 import { WorkbenchRepository } from "./repository";
 import { getWorkbenchService } from "./service";
 import {
-  calculateUniformStorefrontScale,
-  recommendStorefrontScale,
-  type StorefrontScaleRecommendation,
-  type StorefrontScaleTier,
+  calculateUniformProfileScale,
+  getScaleProfile,
+  type FoundryScaleProfile,
+  type ScaleProfileId,
 } from "./storefrontScalePolicy";
 
 export type NativeStorefrontScaleResult = {
@@ -23,9 +25,9 @@ export type NativeStorefrontScaleResult = {
 export type StorefrontScalePreparation = {
   variant: FoundryVariant;
   generatedFile: FoundryFile;
-  recommendation: StorefrontScaleRecommendation;
-  appliedTier: StorefrontScaleTier;
+  profile: FoundryScaleProfile;
   nativeResult: NativeStorefrontScaleResult;
+  derivedInspection: InspectionResult;
   reusedExisting: boolean;
 };
 
@@ -36,13 +38,12 @@ function id(prefix: string): string {
   return `${prefix}:${random}`;
 }
 
-function slug(value: string): string {
+function fileStem(value: string): string {
   return value
     .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80) || "foundry-model";
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 96) || "Foundry_Model";
 }
 
 function latestInspection(inspections: InspectionResult[], assetId: string, revisionId: string): InspectionResult | undefined {
@@ -51,10 +52,14 @@ function latestInspection(inspections: InspectionResult[], assetId: string, revi
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
 }
 
-function tierFromVariant(variant: FoundryVariant): StorefrontScaleTier | undefined {
+function profileFromVariant(variant: FoundryVariant): ScaleProfileId | undefined {
   const scale = variant.transformationGraph.find((operation) => operation.type === "scale");
-  const value = Number(scale?.parameters.targetInches);
-  return value === 3 || value === 4 || value === 5 ? value : undefined;
+  const value = scale?.parameters.profileId;
+  return typeof value === "string" ? value as ScaleProfileId : undefined;
+}
+
+function targetAxisValue(bounds: { x: number; y: number; z: number }, axis: "x" | "y" | "z"): number {
+  return bounds[axis];
 }
 
 export class WorkbenchStorefrontScaleService {
@@ -63,53 +68,56 @@ export class WorkbenchStorefrontScaleService {
     private readonly service = getWorkbenchService(),
   ) {}
 
-  async prepare(assetId: string, overrideTier?: StorefrontScaleTier): Promise<StorefrontScalePreparation> {
+  async prepare(assetId: string, profileId: ScaleProfileId, printers: PrinterRecord[]): Promise<StorefrontScalePreparation> {
     const state = await this.repository.loadState();
     const asset = state.assets.find((item) => item.assetId === assetId);
     if (!asset) throw new Error(`Unknown Workbench asset: ${assetId}`);
-    if (asset.tags.some((tag) => tag.toLowerCase() === "digital-storefront")) {
-      throw new Error("This asset is already a digital storefront derivative. Select its canonical/master asset instead.");
+    if (asset.tags.some((tag) => tag.toLowerCase() === "derived-scale-profile")) {
+      throw new Error("This asset is already a scaled derivative. Select its canonical/master asset instead.");
     }
-    if (!asset.currentRevisionId) throw new Error("Storefront scaling requires a current registered asset revision.");
+    if (!asset.currentRevisionId) throw new Error("Scale-profile preparation requires a current registered asset revision.");
 
     const revision = state.revisions.find((item) => item.revisionId === asset.currentRevisionId && item.assetId === asset.assetId);
     if (!revision) throw new Error("The current asset revision could not be resolved.");
     const inspection = latestInspection(state.inspections, asset.assetId, revision.revisionId);
     if (!inspection?.geometry.boundsMm) {
-      throw new Error("Run Inspector on the exact current revision before preparing a storefront-scaled model.");
+      throw new Error("Run Inspector on the exact current revision before applying a scale profile.");
     }
 
-    const recommendation = recommendStorefrontScale(asset, inspection);
-    const appliedTier = overrideTier ?? recommendation.targetInches;
-    const projection = calculateUniformStorefrontScale(inspection.geometry.boundsMm, appliedTier);
+    const profile = getScaleProfile(profileId);
+    const projection = calculateUniformProfileScale(inspection.geometry.boundsMm, profile);
 
     const existingVariant = state.variants.find((variant) =>
-      variant.family === "thangs-storefront"
+      variant.family === "foundry-scale-profile"
       && variant.parentAssetId === asset.assetId
       && variant.parentRevisionId === revision.revisionId
-      && tierFromVariant(variant) === appliedTier
+      && profileFromVariant(variant) === profile.profileId
     );
     if (existingVariant?.currentRevisionId) {
       const existingRevision = state.revisions.find((item) => item.assetId === existingVariant.assetId && item.revisionId === existingVariant.currentRevisionId);
       const generatedFile = existingRevision?.outputFileIds
         .map((fileId) => state.files.find((file) => file.fileId === fileId))
         .find((file): file is FoundryFile => Boolean(file && file.role === "geometry"));
-      if (generatedFile) {
+      if (generatedFile && existingRevision) {
+        let derivedInspection = latestInspection(state.inspections, existingVariant.assetId, existingRevision.revisionId);
+        if (!derivedInspection) {
+          derivedInspection = (await getWorkbenchInspectorService().inspectRevision(existingVariant.assetId, existingRevision.revisionId, printers)).inspection;
+        }
         return {
           variant: existingVariant,
           generatedFile,
-          recommendation,
-          appliedTier,
+          profile,
           nativeResult: {
-            sourcePath: "existing-storefront-derivative",
+            sourcePath: "existing-profile-derivative",
             outputPath: generatedFile.storagePath,
             sha256: generatedFile.sha256,
             sizeBytes: generatedFile.sizeBytes,
             scaleFactor: projection.scaleFactor,
             sourceBoundsMm: inspection.geometry.boundsMm,
-            outputBoundsMm: projection.scaledBoundsMm,
+            outputBoundsMm: derivedInspection.geometry.boundsMm ?? projection.scaledBoundsMm,
             format: "stl",
           },
+          derivedInspection,
           reusedExisting: true,
         };
       }
@@ -121,14 +129,19 @@ export class WorkbenchStorefrontScaleService {
     const geometry = sourceFiles.find((file) => file.role === "geometry") ?? sourceFiles[0];
     if (!geometry) throw new Error("The current revision has no registered geometry file to scale.");
 
+    // The native scaler currently accepts a maximum-dimension target. Convert the selected
+    // axis profile into an equivalent maximum-dimension target so the resulting uniform
+    // scale factor is exactly targetAxis/sourceAxis while preserving every proportion.
+    const sourceMaxMm = Math.max(inspection.geometry.boundsMm.x, inspection.geometry.boundsMm.y, inspection.geometry.boundsMm.z);
+    const equivalentTargetMaxMm = sourceMaxMm * projection.scaleFactor;
     const nativeResult = await invoke<NativeStorefrontScaleResult>("workbench_scale_geometry", {
       path: geometry.storagePath,
-      targetMaxMm: projection.targetMaxMm,
+      targetMaxMm: equivalentTargetMaxMm,
     });
 
     const generatedFile = await this.service.registerFile({
       sha256: nativeResult.sha256,
-      fileName: `${slug(asset.name)}-${appliedTier}in-storefront.stl`,
+      fileName: `${fileStem(asset.name)}_${profile.fileSuffix}.stl`,
       storagePath: nativeResult.outputPath,
       format: "stl",
       mimeType: "model/stl",
@@ -136,7 +149,7 @@ export class WorkbenchStorefrontScaleService {
       role: "geometry",
       source: {
         sourceType: "other",
-        sourceLabel: `Forgekeeper digital storefront ${appliedTier}-inch auto-scale`,
+        sourceLabel: `Forgekeeper scale profile: ${profile.label}`,
         creator: "Forgekeeper",
         license: asset.provenance.license,
       },
@@ -145,35 +158,56 @@ export class WorkbenchStorefrontScaleService {
     });
 
     const derivedAsset = await this.service.createAsset({
-      name: `${asset.name} · Storefront ${appliedTier}in`,
+      name: `${asset.name} · ${profile.label}`,
       assetType: asset.assetType,
       owningProjectId: asset.owningProjectId,
       collectionId: asset.collectionId,
-      lifecycleStatus: "registered",
+      lifecycleStatus: "inspection-required",
       canonicalAssetId: asset.canonicalAssetId ?? asset.assetId,
       canonicalRevisionId: revision.revisionId,
       provenance: {
         sourceType: "other",
-        sourceLabel: "Forgekeeper digital storefront derivative",
+        sourceLabel: `Forgekeeper derived scale profile: ${profile.label}`,
         creator: "Forgekeeper",
         license: asset.provenance.license,
         importedAt: new Date().toISOString(),
       },
-      tags: Array.from(new Set([...asset.tags, "digital-storefront", "thangs", `storefront-${appliedTier}in`])),
-      notes: `Derived digital-download geometry. Master geometry remains unchanged. Uniform scale factor ${nativeResult.scaleFactor.toFixed(6)} targets a ${appliedTier}-inch (${projection.targetMaxMm.toFixed(1)} mm) maximum overall dimension. Physical-product sizing is intentionally independent.`,
+      tags: Array.from(new Set([
+        ...asset.tags,
+        "derived-scale-profile",
+        "digital-storefront",
+        "thangs",
+        `scale-profile:${profile.profileId}`,
+      ])),
+      notes: `Derived geometry using ${profile.label}. ${profile.targetAxis.toUpperCase()} targets ${profile.targetInches.toFixed(2)} in / ${profile.targetDimensionMm.toFixed(1)} mm with proportions preserved. Master geometry remains unchanged. Physical-product sizing is intentionally independent.`,
     });
 
     const derivedRevision = await this.service.createRevision({
       assetId: derivedAsset.assetId,
-      revisionLabel: `storefront-${appliedTier}in`,
-      authorActorId: "forgekeeper:storefront-scale",
-      process: "forgekeeper-storefront-autoscale",
-      reason: `Create a non-destructive ${appliedTier}-inch digital storefront release from ${asset.name}.`,
+      revisionLabel: profile.fileSuffix,
+      authorActorId: "forgekeeper:scale-profile",
+      process: "forgekeeper-scale-profile",
+      reason: `Create a non-destructive ${profile.label} derivative from ${asset.name}.`,
       sourceFileIds: [geometry.fileId],
       outputFileIds: [generatedFile.fileId],
       inspectionResultIds: [],
       manufacturingApproval: "not-reviewed",
     });
+
+    const derivedInspection = (await getWorkbenchInspectorService().inspectRevision(
+      derivedAsset.assetId,
+      derivedRevision.revisionId,
+      printers,
+    )).inspection;
+
+    const inspectedBounds = derivedInspection.geometry.boundsMm;
+    if (!inspectedBounds) {
+      throw new Error("Derived geometry inspection did not return physical bounds.");
+    }
+    const inspectedTarget = targetAxisValue(inspectedBounds, profile.targetAxis);
+    if (Math.abs(inspectedTarget - profile.targetDimensionMm) > 0.1) {
+      throw new Error(`Derived geometry failed scale verification: ${profile.targetAxis.toUpperCase()} measured ${inspectedTarget.toFixed(3)} mm instead of ${profile.targetDimensionMm.toFixed(3)} mm.`);
+    }
 
     const scaleOperation: WorkbenchOperation = {
       operationId: id("operation"),
@@ -182,23 +216,26 @@ export class WorkbenchStorefrontScaleService {
         x: nativeResult.scaleFactor,
         y: nativeResult.scaleFactor,
         z: nativeResult.scaleFactor,
-        targetInches: appliedTier,
-        targetMaxMm: projection.targetMaxMm,
-        sourceMaxMm: projection.sourceMaxMm,
-        policy: overrideTier ? "manual-tier-override" : recommendation.source,
+        profileId: profile.profileId,
+        profileLabel: profile.label,
+        targetAxis: profile.targetAxis,
+        targetInches: profile.targetInches,
+        targetDimensionMm: profile.targetDimensionMm,
+        sourceDimensionMm: projection.sourceDimensionMm,
+        preserveProportions: true,
       },
       inputRevisionId: revision.revisionId,
       outputRevisionId: derivedRevision.revisionId,
       createdAt: new Date().toISOString(),
     };
 
-    const blockingFindings = inspection.findings.some((finding) => finding.severity === "critical" || finding.severity === "error");
+    const blockingFindings = derivedInspection.findings.some((finding) => finding.severity === "critical" || finding.severity === "error");
     const variant = await this.service.createVariant({
       assetId: derivedAsset.assetId,
       parentAssetId: asset.assetId,
       parentRevisionId: revision.revisionId,
-      name: `${asset.name} · ${appliedTier}in Digital Storefront`,
-      family: "thangs-storefront",
+      name: `${asset.name} · ${profile.label}`,
+      family: "foundry-scale-profile",
       transformationGraph: [scaleOperation],
       currentRevisionId: derivedRevision.revisionId,
       reviewRequired: blockingFindings,
@@ -211,18 +248,23 @@ export class WorkbenchStorefrontScaleService {
       toAssetId: asset.assetId,
       toRevisionId: revision.revisionId,
       metadata: {
-        purpose: "digital-storefront",
+        purpose: profile.purpose,
         marketplace: "Thangs",
-        targetInches: appliedTier,
-        targetMaxMm: projection.targetMaxMm,
+        profileId: profile.profileId,
+        profileLabel: profile.label,
+        targetAxis: profile.targetAxis,
+        targetInches: profile.targetInches,
+        targetDimensionMm: profile.targetDimensionMm,
         scaleFactor: nativeResult.scaleFactor,
+        preserveProportions: true,
+        derivedInspectionResultId: derivedInspection.inspectionResultId,
         masterGeometryPreserved: true,
         physicalProductSizingIndependent: true,
       },
-      createdBy: "forgekeeper:storefront-scale",
+      createdBy: "forgekeeper:scale-profile",
     });
 
-    return { variant, generatedFile, recommendation, appliedTier, nativeResult, reusedExisting: false };
+    return { variant, generatedFile, profile, nativeResult, derivedInspection, reusedExisting: false };
   }
 }
 
