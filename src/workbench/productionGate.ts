@@ -2,6 +2,7 @@ import { HumanAuthority } from "../mesh/domainServices";
 import { ProductionSteward } from "../mesh/productionSteward";
 import { getFoundryMeshRuntime, type FoundryMeshRuntime } from "../mesh/runtime";
 import type { ManufacturingSpec, PrintOutcome, PrintRecord } from "./contracts";
+import { WORKBENCH_EVENT_SCHEMA_VERSION } from "./events";
 import { WorkbenchRepository } from "./repository";
 import { getWorkbenchService, type WorkbenchService } from "./service";
 
@@ -20,6 +21,10 @@ export type PrintEvidenceInput = {
   measuredMaterialGrams?: number;
   materialAllocations?: PrintMaterialAllocation[];
 };
+
+function workbenchEventId(prefix: string): string {
+  return `event:${prefix}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export class WorkbenchProductionGate {
   constructor(
@@ -40,6 +45,60 @@ export class WorkbenchProductionGate {
     });
   }
 
+  async assignPrinter(preparationId: string, printerId: string): Promise<void> {
+    const selectedPrinterId = printerId.trim();
+    if (!selectedPrinterId) throw new Error("Select an execution printer first.");
+    const state = await this.repository.loadState();
+    const preparation = state.preparations.find((item) => item.preparationId === preparationId);
+    if (!preparation) throw new Error(`Unknown preparation: ${preparationId}`);
+    if (preparation.printerId === selectedPrinterId) return;
+    if (preparation.printerId && preparation.printerId !== selectedPrinterId) {
+      throw new Error(`Preparation ${preparationId} is already assigned to ${preparation.printerId}. Return to Build Bench if that validated manufacturing assignment must change.`);
+    }
+
+    const updated = { ...preparation, printerId: selectedPrinterId };
+    await this.repository.upsertPreparation(updated);
+    await this.repository.appendEvent({
+      eventId: workbenchEventId("preparation-printer"),
+      eventType: "preparation.execution_printer.assigned",
+      timestamp: new Date().toISOString(),
+      actorId: "foundry-owner",
+      correlationId: preparation.productionJobId ?? preparation.preparationId,
+      assetId: preparation.assetId,
+      revisionId: preparation.revisionId,
+      schemaVersion: WORKBENCH_EVENT_SCHEMA_VERSION,
+      payload: {
+        preparationId: preparation.preparationId,
+        printerId: selectedPrinterId,
+        productionJobId: preparation.productionJobId ?? null,
+      },
+    });
+
+    if (preparation.productionJobId) {
+      await this.mesh.initialize();
+      const item = await this.mesh.domain.get().production.get(preparation.productionJobId);
+      if (item) {
+        await this.mesh.domainState.upsertProductionItem({
+          ...item,
+          workbench: {
+            assetId: item.workbench?.assetId ?? preparation.assetId,
+            revisionId: item.workbench?.revisionId ?? preparation.revisionId,
+            preparationId: item.workbench?.preparationId ?? preparation.preparationId,
+            printerId: selectedPrinterId,
+          },
+          nextAction: item.stage === "ready-for-production"
+            ? `Begin the approved preparation on ${selectedPrinterId} and mark the print as started when physical execution begins.`
+            : item.nextAction,
+        }, {
+          requestedBy: HumanAuthority,
+          authorizedBy: HumanAuthority,
+          correlationId: preparation.productionJobId,
+          reason: `Assigned execution printer ${selectedPrinterId} to production preparation ${preparation.preparationId}.`,
+        });
+      }
+    }
+  }
+
   async release(preparationId: string, printerId?: string): Promise<{ productionJobId: string }> {
     const state = await this.repository.loadState();
     const preparation = state.preparations.find((item) => item.preparationId === preparationId);
@@ -50,11 +109,9 @@ export class WorkbenchProductionGate {
 
     const selectedPrinterId = printerId?.trim() || preparation.printerId?.trim() || "";
     if (!selectedPrinterId) throw new Error("Select a production printer before releasing this preparation.");
-    if (preparation.printerId && preparation.printerId !== selectedPrinterId) {
+    if (!preparation.printerId) await this.assignPrinter(preparationId, selectedPrinterId);
+    else if (preparation.printerId !== selectedPrinterId) {
       throw new Error(`Preparation ${preparationId} is already assigned to ${preparation.printerId}. Return to Build Bench if that manufacturing assignment must change.`);
-    }
-    if (!preparation.printerId) {
-      await this.repository.upsertPreparation({ ...preparation, printerId: selectedPrinterId });
     }
 
     return this.workbench.submitProductionCandidate(preparationId);
@@ -133,8 +190,8 @@ export class WorkbenchProductionGate {
       evidenceFileIds: [],
     });
 
-    // The Workbench write owns physical evidence. This gate owns the one cross-domain interpretation
-    // that updates focus/session state; it must never apply a second contradictory meaning to the same outcome.
+    // Workbench owns physical evidence. This gate owns the one cross-domain interpretation that
+    // updates human focus/session state; the same outcome must never be interpreted twice differently.
     const steward = new ProductionSteward(this.mesh);
     const context = {
       requestedBy: HumanAuthority,

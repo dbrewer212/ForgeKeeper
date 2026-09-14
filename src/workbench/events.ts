@@ -14,6 +14,7 @@ export type WorkbenchEventType =
   | "assembly.changed"
   | "manufacturing_spec.approved"
   | "preparation.completed"
+  | "preparation.execution_printer.assigned"
   | "production_candidate.approved"
   | "production.job.started"
   | "production.job.completed"

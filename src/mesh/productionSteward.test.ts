@@ -26,7 +26,7 @@ async function addJob(runtime: FoundryMeshRuntime, id: string, printerId: string
 }
 
 describe("ProductionSteward machine concurrency", () => {
-  it("allows multiple running production items while keeping only one human focus session", async () => {
+  it("allows multiple running production items on different printers while keeping one human focus session", async () => {
     const runtime = new FoundryMeshRuntime(new InMemoryMeshPersistence());
     await runtime.initialize();
     const steward = new ProductionSteward(runtime);
@@ -40,6 +40,19 @@ describe("ProductionSteward machine concurrency", () => {
     await expect(runtime.domain.get().production.get("job-a")).resolves.toMatchObject({ stage: "printing", status: "active" });
     await expect(runtime.domain.get().production.get("job-b")).resolves.toMatchObject({ stage: "printing", status: "active" });
     await expect(runtime.domain.get().sessions.getActive()).resolves.toMatchObject({ activeProductionItemId: "job-a" });
+  });
+
+  it("prevents two executing jobs from claiming the same physical printer", async () => {
+    const runtime = new FoundryMeshRuntime(new InMemoryMeshPersistence());
+    await runtime.initialize();
+    const steward = new ProductionSteward(runtime);
+
+    await addJob(runtime, "job-a", "printer-a");
+    await addJob(runtime, "job-b", "printer-a");
+    await steward.startProductionItem("job-a");
+
+    await expect(steward.startProductionItem("job-b")).rejects.toThrow(/already running/i);
+    await expect(runtime.domain.get().production.get("job-b")).resolves.toMatchObject({ stage: "ready-for-production", status: "queued" });
   });
 
   it("restores a non-focused executing job to active after its blocker is cleared", async () => {
@@ -58,6 +71,32 @@ describe("ProductionSteward machine concurrency", () => {
       stage: "printing",
       status: "active",
       blocker: undefined,
+    });
+  });
+
+  it("returns a stopped focused job to queued retry state instead of pretending the printer is running", async () => {
+    const runtime = new FoundryMeshRuntime(new InMemoryMeshPersistence());
+    await runtime.initialize();
+    const steward = new ProductionSteward(runtime);
+
+    await addJob(runtime, "job-a", "printer-a");
+    await steward.startProductionItem("job-a");
+    await runtime.domainState.upsertProductionItem({
+      ...(await runtime.domain.get().production.get("job-a"))!,
+      stage: "stopped",
+      status: "attention-required",
+      blocker: "Print failed",
+    }, context);
+    await steward.clearAttention("job-a");
+
+    await expect(runtime.domain.get().production.get("job-a")).resolves.toMatchObject({
+      stage: "stopped",
+      status: "queued",
+      blocker: undefined,
+    });
+    await expect(runtime.domain.get().sessions.getActive()).resolves.toMatchObject({
+      state: "paused",
+      activeProductionItemId: "job-a",
     });
   });
 });

@@ -44,6 +44,10 @@ function humanContext(reason: string, correlationId?: string): DomainMutationCon
   };
 }
 
+function machineIsExecuting(item: ProductionItemSummary): boolean {
+  return item.status !== "completed" && (item.stage === "printing" || item.stage === "finishing");
+}
+
 export class ProductionSteward {
   constructor(private readonly runtime: FoundryMeshRuntime) {}
 
@@ -96,8 +100,8 @@ export class ProductionSteward {
       stage: "ready-for-production",
       status: "queued",
       nextAction: candidate.printerId
-        ? `Review preparation ${candidate.preparationId} on Bastion and schedule ${candidate.printerId}.`
-        : `Assign a printer, review preparation ${candidate.preparationId} on Bastion, and schedule execution.`,
+        ? `Begin the approved preparation on ${candidate.printerId} and mark the print as started when physical execution begins.`
+        : `Assign an execution printer before starting preparation ${candidate.preparationId}.`,
       workbench: {
         assetId: candidate.assetId,
         revisionId: candidate.revisionId,
@@ -123,9 +127,23 @@ export class ProductionSteward {
     const item = await domain.production.get(productionItemId);
     if (!item) throw new Error(`Production item ${productionItemId} does not exist.`);
     if (item.status === "completed") throw new Error(`Production item ${productionItemId} is already completed.`);
+    if (item.blocker) throw new Error(`Production item ${productionItemId} still has blocker: ${item.blocker}`);
 
-    // A Foundry session represents the operator's current focus/re-entry context. It must not
-    // serialize physical machine work: several printers may execute production items concurrently.
+    const printerId = item.workbench?.printerId;
+    if (item.workbench && !printerId) {
+      throw new Error(`Assign an execution printer before starting ${item.name}.`);
+    }
+    if (printerId) {
+      const conflict = (await domain.production.list()).find((candidate) =>
+        candidate.id !== item.id && candidate.workbench?.printerId === printerId && machineIsExecuting(candidate)
+      );
+      if (conflict) {
+        throw new Error(`${printerId} is already running ${conflict.name}. Finish or stop that job before starting ${item.name} on the same printer.`);
+      }
+    }
+
+    // A Foundry session represents the operator's focus/re-entry context, not a mutex on machine work.
+    // Multiple printers may execute concurrently while one (or none) is the focused human session.
     const active = await domain.sessions.getActive();
     if (!active) {
       const now = new Date().toISOString();
@@ -138,9 +156,9 @@ export class ProductionSteward {
         activeProductionItemId: item.id,
         currentObjective: `Produce ${item.name}`,
         currentStage: "printing",
-        currentAction: item.workbench?.printerId
-          ? `Execute preparation ${item.workbench.preparationId} on ${item.workbench.printerId}.`
-          : `Assign a printer and execute preparation ${item.workbench?.preparationId ?? "approved preparation"}.`,
+        currentAction: printerId
+          ? `Execute preparation ${item.workbench?.preparationId ?? "approved preparation"} on ${printerId}.`
+          : `Execute preparation ${item.workbench?.preparationId ?? "approved preparation"}.`,
         nextAction: "Monitor the print through Bastion and record the physical result when execution finishes.",
         parkedThoughtIds: [],
         participatingWorkerIds: [],
@@ -154,8 +172,8 @@ export class ProductionSteward {
       await domain.sessions.update(active.id, {
         state: "active",
         currentStage: "printing",
-        currentAction: item.workbench?.printerId
-          ? `Execute preparation ${item.workbench.preparationId} on ${item.workbench.printerId}.`
+        currentAction: printerId
+          ? `Execute preparation ${item.workbench?.preparationId ?? "approved preparation"} on ${printerId}.`
           : `Execute preparation ${item.workbench?.preparationId ?? "approved preparation"}.`,
         nextAction: "Monitor the print through Bastion and record the physical result when execution finishes.",
         blockedBy: undefined,
@@ -236,11 +254,26 @@ export class ProductionSteward {
     if (!item) throw new Error(`Production item ${productionItemId} does not exist.`);
     const active = await domain.sessions.getActive();
     const isFocused = active?.activeProductionItemId === productionItemId;
-    const isExecuting = item.stage === "printing" || item.stage === "finishing";
-    const next = { ...item, blocker: undefined, status: isFocused || isExecuting ? "active" : "queued" };
+    const isExecuting = machineIsExecuting(item);
+    const nextAction = isExecuting
+      ? item.nextAction
+      : item.workbench?.printerId
+        ? `Prepare the corrective retry on ${item.workbench.printerId}; mark the print as started only when physical execution actually begins.`
+        : "Assign an execution printer, prepare the corrective retry, and mark the print as started only when physical execution actually begins.";
+    const next: ProductionItemSummary = {
+      ...item,
+      blocker: undefined,
+      status: isExecuting ? "active" : "queued",
+      nextAction,
+    };
     await this.runtime.domainState.upsertProductionItem(next, context);
     if (isFocused && active) {
-      await domain.sessions.update(active.id, { state: "active", blockedBy: undefined }, context);
+      await domain.sessions.update(active.id, {
+        state: isExecuting ? "active" : "paused",
+        blockedBy: undefined,
+        currentAction: nextAction,
+        nextAction,
+      }, context);
     }
     return next;
   }
