@@ -32,7 +32,7 @@ const world: FoundryWorldModelSnapshot = {
       status: "online",
       attributes: {},
       relations: [],
-      provenance: { source: "mesh-service-registry", authority: "authoritative", freshness: "fresh" },
+      provenance: { source: "mesh", authority: "authoritative", freshness: "fresh" },
     },
   ],
 };

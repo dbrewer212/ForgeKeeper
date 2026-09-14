@@ -40,7 +40,23 @@ export class WorkbenchProductionGate {
     });
   }
 
-  async release(preparationId: string): Promise<{ productionJobId: string }> {
+  async release(preparationId: string, printerId?: string): Promise<{ productionJobId: string }> {
+    const state = await this.repository.loadState();
+    const preparation = state.preparations.find((item) => item.preparationId === preparationId);
+    if (!preparation) throw new Error(`Unknown preparation: ${preparationId}`);
+    if (preparation.status === "submitted" && preparation.productionJobId) {
+      return { productionJobId: preparation.productionJobId };
+    }
+
+    const selectedPrinterId = printerId?.trim() || preparation.printerId?.trim() || "";
+    if (!selectedPrinterId) throw new Error("Select a production printer before releasing this preparation.");
+    if (preparation.printerId && preparation.printerId !== selectedPrinterId) {
+      throw new Error(`Preparation ${preparationId} is already assigned to ${preparation.printerId}. Return to Build Bench if that manufacturing assignment must change.`);
+    }
+    if (!preparation.printerId) {
+      await this.repository.upsertPreparation({ ...preparation, printerId: selectedPrinterId });
+    }
+
     return this.workbench.submitProductionCandidate(preparationId);
   }
 
@@ -54,6 +70,16 @@ export class WorkbenchProductionGate {
     if (!input.printerId.trim()) throw new Error("A printer is required for physical print evidence.");
     if (preparation.printerId && input.printerId !== preparation.printerId) {
       throw new Error(`Returned evidence names printer ${input.printerId}, but the preparation was released for ${preparation.printerId}.`);
+    }
+
+    await this.mesh.initialize();
+    const currentProduction = await this.mesh.domain.get().production.get(preparation.productionJobId);
+    if (!currentProduction) throw new Error(`Production item ${preparation.productionJobId} no longer exists.`);
+    if (currentProduction.stage !== "printing" && currentProduction.stage !== "finishing") {
+      throw new Error("Record a physical result only while the job is in Printing or Finishing. Clear any blocker and mark the retry as started before recording another result.");
+    }
+    if (currentProduction.blocker) {
+      throw new Error(`Resolve the current blocker before recording another physical result: ${currentProduction.blocker}`);
     }
 
     const allocations = (input.materialAllocations ?? [])
@@ -109,7 +135,6 @@ export class WorkbenchProductionGate {
 
     // The Workbench write owns physical evidence. This gate owns the one cross-domain interpretation
     // that updates focus/session state; it must never apply a second contradictory meaning to the same outcome.
-    await this.mesh.initialize();
     const steward = new ProductionSteward(this.mesh);
     const context = {
       requestedBy: HumanAuthority,

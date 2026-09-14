@@ -19,6 +19,8 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
   const asset = runtime.workbench.assets.find((item) => item.assetId === preparation?.assetId);
   const spec = runtime.workbench.manufacturingSpecs.find((item) => item.manufacturingSpecId === preparation?.manufacturingSpecId);
   const evidence = preparation ? runtime.workbench.printRecords.filter((item) => item.preparationId === preparation.preparationId) : [];
+  const [printerDraft, setPrinterDraft] = useState("");
+  const selectedPrinterId = preparation?.printerId || printerDraft;
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -42,7 +44,7 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
       <div className="rounded-2xl border border-amber-500/15 bg-[#0d131c] p-4">
         <div className="text-xs uppercase tracking-[0.24em] text-amber-400">Foundry Workbench</div>
         <h1 className="mt-1 text-2xl font-semibold text-slate-100">Production Release Gate</h1>
-        <p className="mt-1 max-w-4xl text-sm text-slate-400">Approve the manufacturing authority and release a validated preparation into Production Steward. Once released, normal execution and returned physical results are handled in the Production station so you do not have to bounce back into Workbench.</p>
+        <p className="mt-1 max-w-4xl text-sm text-slate-400">Approve the manufacturing authority, confirm the execution printer, and release a validated preparation into Production Steward. Once released, normal execution and returned physical results stay in Production.</p>
       </div>
 
       {preparations.length === 0 ? (
@@ -52,7 +54,7 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
           <div className="space-y-5">
             <Card title="Candidate">
               <label className="block text-xs text-slate-500">Preparation</label>
-              <Select value={preparation?.preparationId ?? ""} onChange={(event) => setPreparationId(event.target.value)}>
+              <Select value={preparation?.preparationId ?? ""} onChange={(event) => { setPreparationId(event.target.value); setPrinterDraft(""); }}>
                 {preparations.map((item) => {
                   const itemAsset = runtime.workbench.assets.find((candidate) => candidate.assetId === item.assetId);
                   return <option key={item.preparationId} value={item.preparationId}>{itemAsset?.name ?? item.assetId} · {item.status}</option>;
@@ -62,9 +64,23 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
                 <Readout label="Asset" value={asset?.name ?? preparation?.assetId ?? "Unknown"} />
                 <Readout label="Revision" value={preparation?.revisionId ?? "Unknown"} />
                 <Readout label="Preparation" value={preparation?.preparationId ?? "Unknown"} />
-                <Readout label="Assigned printer" value={preparation?.printerId ?? "Not assigned"} />
                 <Readout label="Assigned spools" value={preparation?.physicalSpoolIds?.length ? preparation.physicalSpoolIds.join(", ") : "None fixed at preparation time"} />
               </div>
+            </Card>
+
+            <Card title="Execution Printer">
+              <div className="text-sm leading-6 text-slate-400">A released job must have a real execution printer. If Build Bench already fixed one, it remains authoritative. Otherwise choose it here instead of navigating backward.</div>
+              <label className="mt-3 block text-xs text-slate-500">Printer</label>
+              <Select
+                className="mt-1"
+                value={selectedPrinterId}
+                disabled={Boolean(preparation?.printerId) || preparation?.status === "submitted"}
+                onChange={(event) => setPrinterDraft(event.target.value)}
+              >
+                <option value="">Select printer</option>
+                {state.printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name} · {printer.status}</option>)}
+              </Select>
+              {preparation?.printerId ? <div className="mt-2 text-xs text-slate-500">This preparation was validated for the selected printer. Change the manufacturing assignment in Build Bench only if the preparation itself must change.</div> : null}
             </Card>
 
             <Card title="Manufacturing Authority">
@@ -84,22 +100,23 @@ export function ProductionGateStation({ state }: { state: ForgekeeperState }) {
             <Card title="Release to Production">
               <div className="rounded-xl border border-white/10 bg-[#0b1119] p-4 text-sm leading-6 text-slate-400">
                 <div className="font-medium text-slate-200">{asset?.name ?? "Selected preparation"}</div>
-                <div className="mt-2">Release creates the durable Production Steward job. After handoff, Production becomes the operator workspace for start tracking, finishing, blockers, print outcome, evidence, and material reconciliation.</div>
+                <div className="mt-2">Release creates the durable Production Steward job. After handoff, Production becomes the operator workspace for tracking execution, finishing, blockers, print outcome, evidence, and material reconciliation.</div>
               </div>
               {preparation?.status === "submitted" ? (
                 <Button className="mt-4 w-full" onClick={() => state.setView("production")}>Open Production</Button>
               ) : (
-                <Button className="mt-4 w-full" disabled={busy || !preparation || !spec || spec.approvalState !== "approved"} onClick={() => void run(async () => {
+                <Button className="mt-4 w-full" disabled={busy || !preparation || !spec || spec.approvalState !== "approved" || !selectedPrinterId} onClick={() => void run(async () => {
                   if (!preparation) return;
-                  await getWorkbenchProductionGate().release(preparation.preparationId);
+                  await getWorkbenchProductionGate().release(preparation.preparationId, selectedPrinterId);
                   setMessage("Released to Production Steward. Opening Production…");
                   state.setView("production");
                 })}>{busy ? "Releasing…" : "Release & Open Production"}</Button>
               )}
+              {!selectedPrinterId && preparation?.status !== "submitted" ? <div className="mt-3 text-xs text-amber-300">Choose the execution printer before release.</div> : null}
             </Card>
 
             <Card title="Returned Evidence" right={<span className="text-xs text-slate-500">{evidence.length} record{evidence.length === 1 ? "" : "s"}</span>}>
-              <div className="text-sm leading-6 text-slate-400">Evidence is now entered during execution in Production. This Workbench view remains a read-only lineage check for the selected preparation.</div>
+              <div className="text-sm leading-6 text-slate-400">Evidence is entered during execution in Production. This Workbench view remains a read-only lineage check for the selected preparation.</div>
               <div className="mt-4 space-y-3">
                 {evidence.slice().reverse().map((record) => (
                   <div key={record.printRecordId} className="rounded-xl border border-white/10 bg-[#0b1119] p-3">
