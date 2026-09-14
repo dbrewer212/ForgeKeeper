@@ -1,9 +1,9 @@
 import { HumanAuthority } from "../mesh/domainServices";
 import { ProductionSteward } from "../mesh/productionSteward";
-import { getFoundryMeshRuntime } from "../mesh/runtime";
+import { getFoundryMeshRuntime, type FoundryMeshRuntime } from "../mesh/runtime";
 import type { ManufacturingSpec, PrintOutcome, PrintRecord } from "./contracts";
 import { WorkbenchRepository } from "./repository";
-import { getWorkbenchService } from "./service";
+import { getWorkbenchService, type WorkbenchService } from "./service";
 
 export type PrintMaterialAllocation = {
   spoolId: string;
@@ -24,7 +24,8 @@ export type PrintEvidenceInput = {
 export class WorkbenchProductionGate {
   constructor(
     private readonly repository = new WorkbenchRepository(),
-    private readonly workbench = getWorkbenchService(),
+    private readonly workbench: WorkbenchService = getWorkbenchService(),
+    private readonly mesh: FoundryMeshRuntime = getFoundryMeshRuntime(),
   ) {}
 
   async approveManufacturingSpec(manufacturingSpecId: string): Promise<ManufacturingSpec> {
@@ -106,43 +107,25 @@ export class WorkbenchProductionGate {
       evidenceFileIds: [],
     });
 
-    const runtime = getFoundryMeshRuntime();
-    await runtime.initialize();
-    const steward = new ProductionSteward(runtime);
-    const successful = input.outcome === "success" || input.outcome === "partial-success";
-    const current = await runtime.domain.get().production.get(preparation.productionJobId);
-    if (current) {
-      const context = {
-        requestedBy: HumanAuthority,
-        authorizedBy: HumanAuthority,
-        correlationId: preparation.productionJobId,
-        reason: `Recorded ${input.outcome} print evidence for Workbench preparation ${preparation.preparationId}.`,
-      };
-      if (successful) {
-        await steward.completeProductionItem(preparation.productionJobId, context);
-        const completed = await runtime.domain.get().production.get(preparation.productionJobId);
-        if (completed) {
-          await runtime.domainState.upsertProductionItem({
-            ...completed,
-            stage: "evidence-recorded",
-            nextAction: "Review returned print evidence and determine whether the manufacturing specification should remain approved.",
-          }, context);
-        }
-      } else {
-        await steward.markAttention(
-          preparation.productionJobId,
-          input.failureMode?.trim() || `Returned print outcome: ${input.outcome}. Review evidence and determine corrective action.`,
-          context,
-        );
-        const attention = await runtime.domain.get().production.get(preparation.productionJobId);
-        if (attention) {
-          await runtime.domainState.upsertProductionItem({
-            ...attention,
-            stage: "evidence-recorded",
-            nextAction: "Review failure evidence, identify corrective action, and return the asset to preparation or inspection as required.",
-          }, context);
-        }
-      }
+    // The Workbench write owns physical evidence. This gate owns the one cross-domain interpretation
+    // that updates focus/session state; it must never apply a second contradictory meaning to the same outcome.
+    await this.mesh.initialize();
+    const steward = new ProductionSteward(this.mesh);
+    const context = {
+      requestedBy: HumanAuthority,
+      authorizedBy: HumanAuthority,
+      correlationId: preparation.productionJobId,
+      reason: `Recorded ${input.outcome} print evidence for Workbench preparation ${preparation.preparationId}.`,
+    };
+
+    if (input.outcome === "success") {
+      await steward.completeProductionItem(preparation.productionJobId, context);
+    } else {
+      const blocker = input.failureMode?.trim()
+        || (input.outcome === "partial-success"
+          ? "Print returned partial-success; review physical evidence before further production."
+          : `Returned print outcome: ${input.outcome}. Review evidence and determine corrective action.`);
+      await steward.markAttention(preparation.productionJobId, blocker, context);
     }
 
     return record;
