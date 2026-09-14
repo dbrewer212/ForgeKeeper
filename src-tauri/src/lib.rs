@@ -33,7 +33,9 @@ use providers::{
     download_generation_asset, get_generation_status, submit_meshy_image_generation,
     submit_printpal_image_generation, test_provider_connections,
 };
-use workbench_files::{inspect_geometry as inspect_legacy_geometry, inspect_local_paths};
+use workbench_files::{
+    inspect_geometry as inspect_legacy_geometry, inspect_local_paths, workbench_scale_geometry,
+};
 use serde::Serialize;
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -453,6 +455,7 @@ pub fn run() {
             watcher_system_snapshot,
             inspect_local_paths,
             inspect_geometry,
+            workbench_scale_geometry,
             workbench_store_file,
             workbench_export_forgepack,
             workbench_import_forgepack,

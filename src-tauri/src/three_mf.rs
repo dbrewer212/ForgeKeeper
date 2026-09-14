@@ -73,6 +73,11 @@ struct BuildItem {
 }
 
 pub fn inspect_3mf(path: &Path) -> Result<NativeGeometryInspection, String> {
+    let (triangles, warnings) = load_3mf_triangles_mm(path)?;
+    summarize(path, triangles, warnings)
+}
+
+pub fn load_3mf_triangles_mm(path: &Path) -> Result<(Vec<[[f64; 3]; 3]>, Vec<String>), String> {
     let file = File::open(path).map_err(|error| format!("Failed to open 3MF: {error}"))?;
     let mut archive = ZipArchive::new(file).map_err(|error| format!("3MF is not a valid ZIP package: {error}"))?;
     let model_index = find_model_entry(&mut archive)?;
@@ -84,6 +89,7 @@ pub fn inspect_3mf(path: &Path) -> Result<NativeGeometryInspection, String> {
     model_file.read_to_string(&mut xml).map_err(|error| format!("Failed to read 3MF model XML as UTF-8: {error}"))?;
 
     let parsed = parse_model(&xml)?;
+    let unit_scale_mm = parsed.unit_scale_mm;
     let mut warnings = parsed.warnings;
     let roots = if parsed.build_items.is_empty() {
         warnings.push("3MF contains no build items; Inspector analyzed every standalone mesh object as a fallback.".to_string());
@@ -111,12 +117,12 @@ pub fn inspect_3mf(path: &Path) -> Result<NativeGeometryInspection, String> {
     for triangle in &mut triangles {
         for point in triangle {
             for coordinate in point {
-                *coordinate *= parsed.unit_scale_mm;
+                *coordinate *= unit_scale_mm;
             }
         }
     }
 
-    summarize(path, triangles, warnings)
+    Ok((triangles, warnings))
 }
 
 fn find_model_entry(archive: &mut ZipArchive<File>) -> Result<usize, String> {
