@@ -42,7 +42,7 @@ async function runtimeWithRunningJob() {
   return runtime;
 }
 
-function gateFor(runtime: FoundryMeshRuntime) {
+function evidenceGate(runtime: FoundryMeshRuntime) {
   const repository = {
     loadState: async () => ({ preparations: [preparation] }),
   } as unknown as WorkbenchRepository;
@@ -56,10 +56,45 @@ function gateFor(runtime: FoundryMeshRuntime) {
   return new WorkbenchProductionGate(repository, workbench, runtime);
 }
 
-describe("WorkbenchProductionGate outcome transitions", () => {
+describe("WorkbenchProductionGate", () => {
+  it("persists an execution-printer assignment before releasing an unassigned preparation", async () => {
+    const runtime = new FoundryMeshRuntime(new InMemoryMeshPersistence());
+    await runtime.initialize();
+    let currentPreparation = {
+      ...preparation,
+      status: "validated",
+      productionJobId: undefined,
+      printerId: undefined,
+    };
+    const events: Array<{ eventType: string; payload: Record<string, unknown> }> = [];
+    const repository = {
+      loadState: async () => ({ preparations: [currentPreparation] }),
+      upsertPreparation: async (value: typeof currentPreparation & { printerId?: string }) => {
+        currentPreparation = { ...currentPreparation, ...value };
+      },
+      appendEvent: async (event: { eventType: string; payload: Record<string, unknown> }) => {
+        events.push(event);
+      },
+    } as unknown as WorkbenchRepository;
+    const workbench = {
+      submitProductionCandidate: async () => {
+        expect(currentPreparation.printerId).toBe("printer:test");
+        return { productionJobId };
+      },
+    } as unknown as WorkbenchService;
+    const gate = new WorkbenchProductionGate(repository, workbench, runtime);
+
+    await expect(gate.release(preparationId, "printer:test")).resolves.toEqual({ productionJobId });
+    expect(currentPreparation.printerId).toBe("printer:test");
+    expect(events).toContainEqual(expect.objectContaining({
+      eventType: "preparation.execution_printer.assigned",
+      payload: expect.objectContaining({ printerId: "printer:test" }),
+    }));
+  });
+
   it("keeps partial-success in operator review instead of treating it as completion", async () => {
     const runtime = await runtimeWithRunningJob();
-    const gate = gateFor(runtime);
+    const gate = evidenceGate(runtime);
 
     await gate.recordEvidence({
       preparationId,
@@ -77,9 +112,27 @@ describe("WorkbenchProductionGate outcome transitions", () => {
     });
   });
 
+  it("blocks duplicate returned evidence until the job deliberately enters a retry execution", async () => {
+    const runtime = await runtimeWithRunningJob();
+    const gate = evidenceGate(runtime);
+
+    await gate.recordEvidence({
+      preparationId,
+      printerId: preparation.printerId,
+      outcome: "failed",
+      failureMode: "Adhesion failure",
+    });
+
+    await expect(gate.recordEvidence({
+      preparationId,
+      printerId: preparation.printerId,
+      outcome: "failed",
+    })).rejects.toThrow(/resolve the current blocker|printing or finishing/i);
+  });
+
   it("closes focused production only for a successful returned result", async () => {
     const runtime = await runtimeWithRunningJob();
-    const gate = gateFor(runtime);
+    const gate = evidenceGate(runtime);
 
     await gate.recordEvidence({
       preparationId,
