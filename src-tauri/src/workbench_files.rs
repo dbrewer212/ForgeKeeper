@@ -190,7 +190,7 @@ fn inspect_path(path: String) -> LocalPathInspection {
 fn sha256_file(path: &Path) -> Result<String, String> {
     let mut file = fs::File::open(path).map_err(|error| format!("Failed to open file for hashing: {error}"))?;
     let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 1024 * 1024];
+    let mut buffer = vec![0_u8; 1024 * 1024];
     loop {
         let read = file.read(&mut buffer).map_err(|error| format!("Failed while hashing file: {error}"))?;
         if read == 0 { break; }
