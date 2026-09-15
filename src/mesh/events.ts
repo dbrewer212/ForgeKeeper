@@ -26,6 +26,8 @@ export const MeshEvents = {
   watcherFindingPublished: "watcher.finding.published",
   watcherAnomalyDetected: "watcher.anomaly.detected",
   watcherDegradationDetected: "watcher.degradation.detected",
+  watcherProviderUnavailable: "watcher.provider.unavailable",
+  watcherProviderRecovered: "watcher.provider.recovered",
   ollamaModelLoaded: "ollama.model.loaded",
   ollamaModelUnloaded: "ollama.model.unloaded",
   actionApprovalRequested: "action.approval.requested",

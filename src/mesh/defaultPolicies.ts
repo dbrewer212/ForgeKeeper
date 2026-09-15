@@ -13,6 +13,31 @@ export const defaultPermissionRules: PermissionRule[] = [
   { id: "global-enter-safe-mode", capabilityId: MeshCapabilities.meshEnterSafeMode, effect: "approval-required", reason: "Safe Mode changes system-wide behavior and defaults to human approval." },
   { id: "global-exit-safe-mode", capabilityId: MeshCapabilities.meshExitSafeMode, effect: "approval-required", reason: "Returning autonomous execution after Safe Mode requires explicit human authority." },
 
+  { id: "foundry-core-world-model-read", workerKind: "foundry-core", capabilityId: MeshCapabilities.worldModelRead, effect: "allow", reason: "Foundry Core may inspect the derived World Model it supplies authority data to." },
+  { id: "foundry-intelligence-world-model-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.worldModelRead, effect: "allow", reason: "Commissioned Foundry Intelligence may read the derived situational World Model for context assembly and planning." },
+  { id: "forgekeeper-world-model-read", workerKind: "forgekeeper", capabilityId: MeshCapabilities.worldModelRead, effect: "allow", reason: "Forgekeeper surfaces may read the World Model for human coordination and mobile situational awareness." },
+  { id: "production-steward-world-model-read", workerKind: "production-steward", capabilityId: MeshCapabilities.worldModelRead, effect: "allow", reason: "Production Steward may read situational context while preserving deterministic production authority boundaries." },
+  { id: "bastion-world-model-read", workerKind: "bastion", capabilityId: MeshCapabilities.worldModelRead, effect: "allow", reason: "Bastion may display the derived World Model to the human supervisory surface." },
+  { id: "odysseus-world-model-read", workerKind: "odysseus", capabilityId: MeshCapabilities.worldModelRead, effect: "allow", reason: "Commissioned Odysseus may read situational context for conversational continuity." },
+
+  { id: "foundry-core-skill-catalog-read", workerKind: "foundry-core", capabilityId: MeshCapabilities.skillCatalogRead, effect: "allow", reason: "Foundry Core may inspect the governed capability catalog it hosts." },
+  { id: "foundry-intelligence-skill-catalog-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.skillCatalogRead, effect: "allow", reason: "Commissioned Foundry Intelligence may inspect governed skills for planning; execution remains separately permissioned." },
+  { id: "bastion-skill-catalog-read", workerKind: "bastion", capabilityId: MeshCapabilities.skillCatalogRead, effect: "allow", reason: "Bastion may show the human operator what capabilities exist and their risk metadata." },
+  { id: "mobile-console-skill-catalog-read", workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.skillCatalogRead, effect: "allow", reason: "A paired human-operated Mobile Foundry console may inspect available governed skills without gaining new execution authority." },
+
+  { id: "foundry-core-experience-read", workerKind: "foundry-core", capabilityId: MeshCapabilities.experienceRead, effect: "allow", reason: "Foundry Core may inspect the derived projection of its durable event journal." },
+  { id: "foundry-intelligence-experience-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.experienceRead, effect: "allow", reason: "Commissioned Foundry Intelligence may retrieve bounded operational experience for reasoning without mutating historical events." },
+  { id: "forgekeeper-experience-read", workerKind: "forgekeeper", capabilityId: MeshCapabilities.experienceRead, effect: "allow", reason: "Forgekeeper human surfaces may inspect operational history and recovery context." },
+  { id: "bastion-experience-read", workerKind: "bastion", capabilityId: MeshCapabilities.experienceRead, effect: "allow", reason: "Bastion may surface relevant operational history to the human supervisor." },
+  { id: "odysseus-experience-read", workerKind: "odysseus", capabilityId: MeshCapabilities.experienceRead, effect: "allow", reason: "Commissioned Odysseus may retrieve bounded experience for conversational continuity." },
+
+  { id: "foundry-intelligence-project-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.foundryProjectRead, effect: "allow", reason: "Commissioned Foundry Intelligence may read project context for reasoning and planning." },
+  { id: "foundry-intelligence-canon-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.foundryCanonRead, effect: "allow", reason: "Commissioned Foundry Intelligence may read canon but receives no canon-write capability." },
+  { id: "foundry-intelligence-production-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.productionRead, effect: "allow", reason: "Commissioned Foundry Intelligence may inspect production state without directly mutating it." },
+  { id: "foundry-intelligence-session-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.foundrySessionRead, effect: "allow", reason: "Commissioned Foundry Intelligence may read continuity/re-entry context." },
+  { id: "foundry-intelligence-decision-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.foundryDecisionRead, effect: "allow", reason: "Commissioned Foundry Intelligence may retrieve durable decisions as context." },
+  { id: "foundry-intelligence-watcher-read", workerKind: "foundry-intelligence", capabilityId: MeshCapabilities.watcherReadTelemetry, effect: "allow", reason: "Commissioned Foundry Intelligence may consume Watcher observations; Watcher remains the sensing authority." },
+
   { id: "production-steward-read-production", workerKind: "production-steward", capabilityId: MeshCapabilities.productionRead, effect: "allow" },
   { id: "production-steward-write-production", workerKind: "production-steward", capabilityId: MeshCapabilities.productionWrite, effect: "allow", reason: "The Production Steward may maintain next-action and blocker state inside an active governed production workflow." },
   { id: "production-steward-session-read", workerKind: "production-steward", capabilityId: MeshCapabilities.foundrySessionRead, effect: "allow" },

@@ -109,11 +109,11 @@ export class WorkbenchInspectorService {
     const revision = state.revisions.find((item) => item.revisionId === revisionId && item.assetId === assetId);
     if (!revision) throw new Error(`Revision ${revisionId} does not belong to ${assetId}.`);
 
-    const sourceFiles = revision.sourceFileIds
+    const revisionFiles = [...revision.outputFileIds, ...revision.sourceFileIds]
       .map((fileId) => state.files.find((file) => file.fileId === fileId))
       .filter((file): file is NonNullable<typeof file> => Boolean(file));
-    const geometry = sourceFiles.find((file) => file.role === "geometry") ?? sourceFiles[0];
-    if (!geometry) throw new Error("This revision has no registered source geometry. Run controlled Intake first.");
+    const geometry = revisionFiles.find((file) => file.role === "geometry") ?? revisionFiles[0];
+    if (!geometry) throw new Error("This revision has no registered geometry. Run controlled Intake or generate the derived geometry first.");
 
     const native = await invoke<NativeGeometryInspection>("inspect_geometry", { path: geometry.storagePath });
     const bounds = native.boundsMm;

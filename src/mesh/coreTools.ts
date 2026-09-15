@@ -10,6 +10,11 @@ export function registerCoreMeshTools(runtime: FoundryMeshRuntime): void {
       description: "Read the current health, worker status, service state, resource pressure, and pending approval count for the Foundry mesh.",
       risk: "read",
       audit: false,
+      operational: {
+        owner: "foundry-core",
+        reversibility: "reversible",
+        verification: ["Read-only state projection; no mutation occurs."],
+      },
       inputSchema: { type: "object", additionalProperties: false },
     },
     () => ({
@@ -29,9 +34,14 @@ export function registerCoreMeshTools(runtime: FoundryMeshRuntime): void {
       description: "List the governed Foundry tools currently exposed to mesh workers.",
       risk: "read",
       audit: false,
+      operational: {
+        owner: "foundry-core",
+        reversibility: "reversible",
+        verification: ["Read-only tool catalog projection; no mutation occurs."],
+      },
       inputSchema: { type: "object", additionalProperties: false },
     },
-    () => runtime.tools.list().map(({ name, capabilityId, description, risk, inputSchema, outputSchema, enabled }) => ({
+    () => runtime.tools.list().map(({ name, capabilityId, description, risk, inputSchema, outputSchema, enabled, operational }) => ({
       name,
       capabilityId,
       description,
@@ -39,6 +49,7 @@ export function registerCoreMeshTools(runtime: FoundryMeshRuntime): void {
       inputSchema,
       outputSchema,
       enabled,
+      operational,
     })),
   );
 
@@ -48,6 +59,13 @@ export function registerCoreMeshTools(runtime: FoundryMeshRuntime): void {
       capabilityId: MeshCapabilities.meshEnterSafeMode,
       description: "Request that the Foundry mesh enter Safe Mode. This is governed and requires human approval by default.",
       risk: "critical",
+      operational: {
+        owner: "foundry-core",
+        reversibility: "conditionally-reversible",
+        sideEffects: ["Disables managed resource admission and cancels pending resource requests."],
+        verification: ["Mesh reports safeMode=true after transition."],
+        notes: ["Leaving Safe Mode is a separate governed action."],
+      },
       inputSchema: {
         type: "object",
         properties: { reason: { type: "string", description: "Reason Safe Mode is being requested." } },
@@ -67,6 +85,12 @@ export function registerCoreMeshTools(runtime: FoundryMeshRuntime): void {
       capabilityId: MeshCapabilities.meshExitSafeMode,
       description: "Request that the Foundry mesh leave Safe Mode. This is governed and requires human approval by default.",
       risk: "critical",
+      operational: {
+        owner: "foundry-core",
+        reversibility: "conditionally-reversible",
+        sideEffects: ["Re-enables managed resource admission."],
+        verification: ["Mesh reports safeMode=false after transition."],
+      },
       inputSchema: { type: "object", additionalProperties: false },
     },
     async (_payload, _request, worker) => {
@@ -84,6 +108,13 @@ export function registerCoreMeshTools(runtime: FoundryMeshRuntime): void {
       capabilityId: MeshCapabilities.meshRequestResource,
       description: "Request a lease on a managed compute or machine resource through the Foundry Resource Broker.",
       risk: "low",
+      operational: {
+        owner: "foundry-core",
+        reversibility: "conditionally-reversible",
+        preconditions: ["Requested resource must be registered and admission must be enabled."],
+        sideEffects: ["May create a temporary managed resource lease."],
+        verification: ["Returned lease, when granted, identifies the managed resource and requester."],
+      },
       inputSchema: {
         type: "object",
         properties: {

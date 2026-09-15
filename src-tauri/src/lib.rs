@@ -3,6 +3,7 @@ mod forgepack;
 mod foundry_link;
 mod managed_files;
 mod managed_services;
+mod ollama;
 mod provider_staging;
 mod providers;
 mod three_mf;
@@ -26,12 +27,15 @@ use managed_files::workbench_store_file;
 use managed_services::{
     managed_service_start, managed_service_status, managed_service_stop, ManagedProcesses,
 };
+use ollama::{ollama_generate_structured, ollama_list_models, ollama_probe};
 use provider_staging::{workbench_clear_provider_staging, workbench_stage_generation_asset};
 use providers::{
     download_generation_asset, get_generation_status, submit_meshy_image_generation,
     submit_printpal_image_generation, test_provider_connections,
 };
-use workbench_files::{inspect_geometry as inspect_legacy_geometry, inspect_local_paths};
+use workbench_files::{
+    inspect_geometry as inspect_legacy_geometry, inspect_local_paths, workbench_scale_geometry,
+};
 use serde::Serialize;
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -445,9 +449,13 @@ pub fn run() {
             launch_external_tool,
             launch_trusted_tool,
             local_http_get,
+            ollama_probe,
+            ollama_list_models,
+            ollama_generate_structured,
             watcher_system_snapshot,
             inspect_local_paths,
             inspect_geometry,
+            workbench_scale_geometry,
             workbench_store_file,
             workbench_export_forgepack,
             workbench_import_forgepack,

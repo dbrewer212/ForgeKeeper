@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { WatcherSystemSnapshot } from "../watcher/contracts";
+export type { WatcherSystemSnapshot } from "../watcher/contracts";
 import { isTauriRuntime } from "./persistence";
 import type { FoundryMeshRuntime } from "./runtime";
 import type { ManagedServiceAdapter } from "./serviceLifecycle";
@@ -13,24 +15,6 @@ interface ManagedProcessStatus {
   service_id: string;
   running: boolean;
   pid?: number;
-}
-
-export interface WatcherSystemSnapshot {
-  sampledAt: string;
-  cpuUsagePercent?: number;
-  totalMemoryBytes?: number;
-  availableMemoryBytes?: number;
-  usedMemoryBytes?: number;
-  processCount?: number;
-  disks: Array<{ name: string; totalBytes: number; freeBytes: number }>;
-  gpu?: {
-    name?: string;
-    adapterRamBytes?: number;
-    utilizationPercent?: number;
-    temperatureC?: number;
-    provider: string;
-    detail?: string;
-  };
 }
 
 export interface LocalServiceControlConfig {
@@ -87,6 +71,8 @@ export class ProductionStewardNativeAdapter implements ManagedServiceAdapter {
 }
 
 export class WatcherNativeAdapter implements ManagedServiceAdapter {
+  constructor(private readonly runtime: FoundryMeshRuntime) {}
+
   validate(): string[] {
     return isTauriRuntime()
       ? []
@@ -96,14 +82,15 @@ export class WatcherNativeAdapter implements ManagedServiceAdapter {
   async start(_service: ServiceDescriptor): Promise<void> {
     const result = await this.probe();
     if (!result.online) throw new Error(result.detail ?? "Watcher host telemetry probe failed.");
+    await this.runtime.watcher.start();
   }
 
   async stop(): Promise<void> {
-    // Watcher is an in-process Foundry telemetry provider. Lifecycle state controls polling/consumption,
-    // not a separately spawned process.
+    this.runtime.watcher.stop();
   }
 
   async restart(service: ServiceDescriptor): Promise<void> {
+    await this.stop();
     await this.start(service);
   }
 
@@ -112,16 +99,75 @@ export class WatcherNativeAdapter implements ManagedServiceAdapter {
       return { online: false, detail: "Tauri desktop runtime is unavailable." };
     }
 
+    const providerResult = await this.runtime.watcher.collectHostSnapshot();
+    const snapshot: WatcherSystemSnapshot | undefined = providerResult.snapshot;
+    if (!snapshot) {
+      return {
+        online: false,
+        detail: providerResult.error ?? "Windows host Watcher provider returned no snapshot.",
+      };
+    }
+
+    const cpu = typeof snapshot.cpuUsagePercent === "number" ? `${snapshot.cpuUsagePercent.toFixed(1)}% CPU` : "CPU sampled";
+    const memory = snapshot.usedMemoryBytes && snapshot.totalMemoryBytes
+      ? `${(snapshot.usedMemoryBytes / 1073741824).toFixed(1)}/${(snapshot.totalMemoryBytes / 1073741824).toFixed(1)} GiB RAM`
+      : "memory sampled";
+    const gpu = snapshot.gpu?.name
+      ? `${snapshot.gpu.name} (${snapshot.gpu.provider})`
+      : "GPU provider pending";
+    return {
+      online: true,
+      detail: `Watcher provider ${providerResult.providerId} online: ${cpu}, ${memory}; ${gpu}.`,
+    };
+  }
+}
+
+export class FoundryIntelligenceNativeAdapter implements ManagedServiceAdapter {
+  constructor(private readonly runtime: FoundryMeshRuntime) {}
+
+  validate(): string[] {
+    const issues: string[] = [];
+    const domain = this.runtime.services.get("foundry-domain");
+    if (!domain || domain.commissioningState !== "active" || domain.runtimeState !== "online") {
+      issues.push("Foundry Intelligence requires active Foundry Domain Services.");
+    }
+
+    const eligibleProviders = this.runtime.modelRouter.list().filter(
+      (provider) => provider.enabled && provider.supportsStructuredOutput,
+    );
+    if (eligibleProviders.length === 0) {
+      issues.push("Foundry Intelligence has no enabled structured-output model provider registered.");
+    }
+    return issues;
+  }
+
+  async start(_service: ServiceDescriptor): Promise<void> {
+    const result = await this.probe();
+    if (!result.online) throw new Error(result.detail ?? "Foundry Intelligence readiness probe failed.");
+  }
+
+  async stop(): Promise<void> {
+    // Intelligence orchestration is in-process. The Mesh service lifecycle controls whether requests may be admitted.
+  }
+
+  async restart(service: ServiceDescriptor): Promise<void> {
+    await this.start(service);
+  }
+
+  async probe(): Promise<{ online: boolean; detail?: string }> {
+    const issues = this.validate();
+    if (issues.length > 0) return { online: false, detail: issues.join(" ") };
+
     try {
-      const snapshot = await invoke<WatcherSystemSnapshot>("watcher_system_snapshot");
-      const cpu = typeof snapshot.cpuUsagePercent === "number" ? `${snapshot.cpuUsagePercent.toFixed(1)}% CPU` : "CPU sampled";
-      const memory = snapshot.usedMemoryBytes && snapshot.totalMemoryBytes
-        ? `${(snapshot.usedMemoryBytes / 1073741824).toFixed(1)}/${(snapshot.totalMemoryBytes / 1073741824).toFixed(1)} GiB RAM`
-        : "memory sampled";
-      const gpu = snapshot.gpu?.name
-        ? `${snapshot.gpu.name} (${snapshot.gpu.provider})`
-        : "GPU provider pending";
-      return { online: true, detail: `Host telemetry online: ${cpu}, ${memory}; ${gpu}.` };
+      const provider = await this.runtime.modelRouter.select({
+        taskClass: "conversation",
+        privacyMode: "local-preferred",
+      });
+      const descriptor = provider.descriptor();
+      return {
+        online: true,
+        detail: `Foundry Intelligence ready with ${descriptor.name}${descriptor.model ? ` (${descriptor.model})` : ""}; execution remains governed by the Mesh tool gateway.`,
+      };
     } catch (error) {
       return { online: false, detail: error instanceof Error ? error.message : String(error) };
     }
@@ -258,7 +304,12 @@ export function registerStagedServiceAdapters(runtime: FoundryMeshRuntime): void
     if (service.adapterRequired === false || service.id === "foundry-domain") continue;
 
     if (service.id === "watcher-service") {
-      runtime.serviceLifecycle.registerAdapter(service.id, new WatcherNativeAdapter());
+      runtime.serviceLifecycle.registerAdapter(service.id, new WatcherNativeAdapter(runtime));
+      continue;
+    }
+
+    if (service.id === "foundry-intelligence-service") {
+      runtime.serviceLifecycle.registerAdapter(service.id, new FoundryIntelligenceNativeAdapter(runtime));
       continue;
     }
 

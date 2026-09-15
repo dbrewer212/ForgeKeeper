@@ -4,6 +4,9 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::io::Read;
 use std::path::Path;
+use tauri::Manager;
+
+const GENERATED_STOREFRONT_DIR: &str = "workbench/generated/storefront";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -38,12 +41,118 @@ pub struct NativeGeometryInspection {
     pub warnings: Vec<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeometryScaleResult {
+    pub source_path: String,
+    pub output_path: String,
+    pub sha256: String,
+    pub size_bytes: u64,
+    pub scale_factor: f64,
+    pub source_bounds_mm: GeometryBounds,
+    pub output_bounds_mm: GeometryBounds,
+    pub format: String,
+}
+
 #[derive(Clone, Copy)]
 struct Vertex([f64; 3]);
+
+struct ObjGeometry {
+    vertices: Vec<Vertex>,
+    triangles: Vec<[Vertex; 3]>,
+    warnings: Vec<String>,
+}
 
 #[tauri::command]
 pub fn inspect_local_paths(paths: Vec<String>) -> Vec<LocalPathInspection> {
     paths.into_iter().map(inspect_path).collect()
+}
+
+#[tauri::command]
+pub fn workbench_scale_geometry(
+    app: tauri::AppHandle,
+    path: String,
+    target_max_mm: f64,
+) -> Result<GeometryScaleResult, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("No geometry path was provided for storefront scaling.".to_string());
+    }
+    if !target_max_mm.is_finite() || !(25.4..=500.0).contains(&target_max_mm) {
+        return Err("Storefront target size must be a finite value between 25.4 mm and 500 mm.".to_string());
+    }
+    let candidate = Path::new(trimmed);
+    if !candidate.is_file() {
+        return Err(format!("Geometry file does not exist: {trimmed}"));
+    }
+
+    let triangles = load_scalable_triangles(candidate)?;
+    let source_bounds = triangle_bounds(&triangles)?;
+    let source_max = source_bounds.x.max(source_bounds.y).max(source_bounds.z);
+    if !source_max.is_finite() || source_max <= f64::EPSILON {
+        return Err("Geometry has no usable physical extent for storefront scaling.".to_string());
+    }
+    let scale_factor = target_max_mm / source_max;
+    if !scale_factor.is_finite() || scale_factor <= 0.0 {
+        return Err("Calculated storefront scale factor is invalid.".to_string());
+    }
+
+    let scaled = triangles
+        .iter()
+        .map(|triangle| triangle.map(|vertex| Vertex([
+            vertex.0[0] * scale_factor,
+            vertex.0[1] * scale_factor,
+            vertex.0[2] * scale_factor,
+        ])))
+        .collect::<Vec<_>>();
+    let output_bounds = triangle_bounds(&scaled)?;
+    let bytes = binary_stl(&scaled)?;
+    let sha256 = sha256_bytes(&bytes);
+
+    let directory = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not resolve Foundry application data directory: {error}"))?
+        .join(GENERATED_STOREFRONT_DIR);
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("Could not create storefront geometry directory: {error}"))?;
+    let destination = directory.join(format!("{sha256}.stl"));
+
+    if destination.exists() {
+        if !destination.is_file() {
+            return Err("Storefront content-addressed destination exists but is not a regular file.".to_string());
+        }
+        let existing_hash = sha256_file(&destination)?;
+        if existing_hash != sha256 {
+            return Err("Storefront content-addressed geometry contains a checksum conflict.".to_string());
+        }
+    } else {
+        let temporary = directory.join(format!("{sha256}.stl.tmp"));
+        if temporary.exists() {
+            fs::remove_file(&temporary)
+                .map_err(|error| format!("Could not clear incomplete storefront geometry staging file: {error}"))?;
+        }
+        fs::write(&temporary, &bytes)
+            .map_err(|error| format!("Could not write scaled storefront geometry: {error}"))?;
+        let staged_hash = sha256_file(&temporary)?;
+        if staged_hash != sha256 {
+            let _ = fs::remove_file(&temporary);
+            return Err("Scaled storefront geometry failed checksum verification before commit.".to_string());
+        }
+        fs::rename(&temporary, &destination)
+            .map_err(|error| format!("Could not commit scaled storefront geometry: {error}"))?;
+    }
+
+    Ok(GeometryScaleResult {
+        source_path: candidate.to_string_lossy().to_string(),
+        output_path: destination.to_string_lossy().to_string(),
+        sha256,
+        size_bytes: bytes.len() as u64,
+        scale_factor,
+        source_bounds_mm: source_bounds,
+        output_bounds_mm: output_bounds,
+        format: "stl".to_string(),
+    })
 }
 
 pub fn inspect_geometry(path: String) -> Result<NativeGeometryInspection, String> {
@@ -81,7 +190,7 @@ fn inspect_path(path: String) -> LocalPathInspection {
 fn sha256_file(path: &Path) -> Result<String, String> {
     let mut file = fs::File::open(path).map_err(|error| format!("Failed to open file for hashing: {error}"))?;
     let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; 1024 * 1024];
+    let mut buffer = vec![0_u8; 1024 * 1024];
     loop {
         let read = file.read(&mut buffer).map_err(|error| format!("Failed while hashing file: {error}"))?;
         if read == 0 { break; }
@@ -90,10 +199,20 @@ fn sha256_file(path: &Path) -> Result<String, String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
+fn sha256_bytes(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
+}
+
 fn inspect_stl(path: &Path) -> Result<NativeGeometryInspection, String> {
-    let bytes = fs::read(path).map_err(|error| format!("Failed to read STL: {error}"))?;
-    let triangles = if looks_like_binary_stl(&bytes) { parse_binary_stl(&bytes)? } else { parse_ascii_stl(&bytes)? };
+    let triangles = load_stl_triangles(path)?;
     summarize_triangles(path, "stl", triangles)
+}
+
+fn load_stl_triangles(path: &Path) -> Result<Vec<[Vertex; 3]>, String> {
+    let bytes = fs::read(path).map_err(|error| format!("Failed to read STL: {error}"))?;
+    if looks_like_binary_stl(&bytes) { parse_binary_stl(&bytes) } else { parse_ascii_stl(&bytes) }
 }
 
 fn looks_like_binary_stl(bytes: &[u8]) -> bool {
@@ -139,6 +258,14 @@ fn parse_ascii_stl(bytes: &[u8]) -> Result<Vec<[Vertex; 3]>, String> {
 }
 
 fn inspect_obj(path: &Path) -> Result<NativeGeometryInspection, String> {
+    let geometry = parse_obj(path)?;
+    let mut summary = summarize_triangles(path, "obj", geometry.triangles)?;
+    summary.vertex_count = Some(geometry.vertices.len() as u64);
+    summary.warnings.extend(geometry.warnings);
+    Ok(summary)
+}
+
+fn parse_obj(path: &Path) -> Result<ObjGeometry, String> {
     let text = fs::read_to_string(path).map_err(|error| format!("Failed to read OBJ: {error}"))?;
     let mut vertices: Vec<Vertex> = Vec::new();
     let mut triangles: Vec<[Vertex; 3]> = Vec::new();
@@ -159,10 +286,7 @@ fn inspect_obj(path: &Path) -> Result<NativeGeometryInspection, String> {
         }
     }
     if triangles.is_empty() { return Err("OBJ does not contain any faces that could be inspected.".to_string()); }
-    let mut summary = summarize_triangles(path, "obj", triangles)?;
-    summary.vertex_count = Some(vertices.len() as u64);
-    summary.warnings.extend(warnings);
-    Ok(summary)
+    Ok(ObjGeometry { vertices, triangles, warnings })
 }
 
 fn resolve_obj_index(index: isize, len: usize) -> Result<usize, String> {
@@ -170,6 +294,79 @@ fn resolve_obj_index(index: isize, len: usize) -> Result<usize, String> {
     let resolved = if index > 0 { index - 1 } else { len as isize + index };
     if resolved < 0 || resolved as usize >= len { return Err("OBJ face index points outside the vertex table.".to_string()); }
     Ok(resolved as usize)
+}
+
+fn load_scalable_triangles(path: &Path) -> Result<Vec<[Vertex; 3]>, String> {
+    let extension = path.extension().and_then(|value| value.to_str()).unwrap_or("").to_ascii_lowercase();
+    match extension.as_str() {
+        "stl" => load_stl_triangles(path),
+        "obj" => Ok(parse_obj(path)?.triangles),
+        "3mf" => {
+            let (triangles, _) = crate::three_mf::load_3mf_triangles_mm(path)?;
+            Ok(triangles.into_iter().map(|triangle| triangle.map(Vertex)).collect())
+        }
+        other => Err(format!("Storefront auto-scale supports STL, OBJ, and 3MF geometry. Unsupported format: .{other}")),
+    }
+}
+
+fn triangle_bounds(triangles: &[[Vertex; 3]]) -> Result<GeometryBounds, String> {
+    if triangles.is_empty() { return Err("Geometry contains no triangles.".to_string()); }
+    let mut min = [f64::INFINITY; 3];
+    let mut max = [f64::NEG_INFINITY; 3];
+    for triangle in triangles {
+        for vertex in triangle {
+            for axis in 0..3 {
+                min[axis] = min[axis].min(vertex.0[axis]);
+                max[axis] = max[axis].max(vertex.0[axis]);
+            }
+        }
+    }
+    let bounds = GeometryBounds { x: max[0] - min[0], y: max[1] - min[1], z: max[2] - min[2] };
+    if [bounds.x, bounds.y, bounds.z].iter().any(|value| !value.is_finite() || *value <= 0.0) {
+        return Err("Geometry bounds are degenerate and cannot be scaled safely.".to_string());
+    }
+    Ok(bounds)
+}
+
+fn binary_stl(triangles: &[[Vertex; 3]]) -> Result<Vec<u8>, String> {
+    let triangle_count = u32::try_from(triangles.len()).map_err(|_| "Geometry contains too many triangles for binary STL output.".to_string())?;
+    let mut bytes = Vec::with_capacity(84usize.saturating_add(triangles.len().saturating_mul(50)));
+    let mut header = [0_u8; 80];
+    let label = b"Fenrir Forgeworks Storefront Scale";
+    header[..label.len()].copy_from_slice(label);
+    bytes.extend_from_slice(&header);
+    bytes.extend_from_slice(&triangle_count.to_le_bytes());
+    for triangle in triangles {
+        let normal = triangle_normal(triangle);
+        for value in normal { bytes.extend_from_slice(&value.to_le_bytes()); }
+        for vertex in triangle {
+            for coordinate in vertex.0 { bytes.extend_from_slice(&(coordinate as f32).to_le_bytes()); }
+        }
+        bytes.extend_from_slice(&0_u16.to_le_bytes());
+    }
+    Ok(bytes)
+}
+
+fn triangle_normal(triangle: &[Vertex; 3]) -> [f32; 3] {
+    let a = triangle[0].0;
+    let b = triangle[1].0;
+    let c = triangle[2].0;
+    let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    let cross = [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+    ];
+    let length = (cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]).sqrt();
+    if !length.is_finite() || length <= f64::EPSILON {
+        return [0.0, 0.0, 0.0];
+    }
+    [
+        (cross[0] / length) as f32,
+        (cross[1] / length) as f32,
+        (cross[2] / length) as f32,
+    ]
 }
 
 fn summarize_triangles(path: &Path, format: &str, triangles: Vec<[Vertex; 3]>) -> Result<NativeGeometryInspection, String> {

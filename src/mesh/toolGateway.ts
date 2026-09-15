@@ -14,6 +14,17 @@ export interface JsonSchema {
   [key: string]: unknown;
 }
 
+export type ToolReversibility = "reversible" | "conditionally-reversible" | "not-reversible" | "unknown";
+
+export interface FoundryToolOperationalMetadata {
+  owner: string;
+  reversibility?: ToolReversibility;
+  preconditions?: string[];
+  sideEffects?: string[];
+  verification?: string[];
+  notes?: string[];
+}
+
 export interface FoundryToolDefinition {
   name: string;
   capabilityId: string;
@@ -23,6 +34,7 @@ export interface FoundryToolDefinition {
   outputSchema?: JsonSchema;
   enabled?: boolean;
   audit?: boolean;
+  operational?: FoundryToolOperationalMetadata;
 }
 
 export interface ToolInvocation<TPayload = unknown> {
@@ -51,7 +63,21 @@ export class FoundryToolGateway {
       throw new Error(`Foundry tool ${definition.name} is already registered.`);
     }
 
-    this.tools.set(definition.name, { ...definition, enabled: definition.enabled ?? true, audit: definition.audit ?? true });
+    this.tools.set(definition.name, {
+      ...definition,
+      enabled: definition.enabled ?? true,
+      audit: definition.audit ?? true,
+      operational: definition.operational
+        ? {
+            ...definition.operational,
+            reversibility: definition.operational.reversibility ?? "unknown",
+            preconditions: [...(definition.operational.preconditions ?? [])],
+            sideEffects: [...(definition.operational.sideEffects ?? [])],
+            verification: [...(definition.operational.verification ?? [])],
+            notes: [...(definition.operational.notes ?? [])],
+          }
+        : undefined,
+    });
     this.runtime.coordinator.registerHandler(definition.name, handler);
   }
 
@@ -62,11 +88,12 @@ export class FoundryToolGateway {
   }
 
   get(toolName: string): FoundryToolDefinition | undefined {
-    return this.tools.get(toolName);
+    const tool = this.tools.get(toolName);
+    return tool ? structuredClone(tool) : undefined;
   }
 
   list(): FoundryToolDefinition[] {
-    return [...this.tools.values()];
+    return [...this.tools.values()].map((tool) => structuredClone(tool));
   }
 
   async invoke<TPayload>(invocation: ToolInvocation<TPayload>): Promise<ToolInvocationResult<TPayload>> {
@@ -90,7 +117,7 @@ export class FoundryToolGateway {
 
     const coordinated = await this.runtime.coordinator.submit(request);
     return {
-      tool,
+      tool: structuredClone(tool),
       ...coordinated,
       approvalId: coordinated.evaluation.approval?.id,
     };
