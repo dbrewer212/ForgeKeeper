@@ -1,16 +1,17 @@
 # Foundry Mobile · Pixel 8a
 
-Foundry Mobile 0.3 adds a native Android companion for this Python Foundry Core.
+Foundry Mobile 0.3.1 adds a native Android companion for this Python Foundry Core.
 The ForgeKeeper source is in `dbrewer212/ForgeKeeper`, branch
 `codex/mobile-core-spool-scanner`. Its Android build workflow produces an arm64
-debug APK, source commit, SHA-256 checksum and signing certificate report.
+release APK, source commit and SHA-256 checksum. The delivered APK is then aligned,
+signed locally with the persistent Foundry Mobile Release key and verified.
 
 ## Install and pair
 
 1. Copy the APK to your Pixel 8a, open it and allow that file source to install
    the application when Android asks. The new Foundry icon launches **Foundry Mobile**.
-   This is a development APK, with a distinct application ID; your old Forgekeeper
-   installation and its private data remain in that app. Export/import your old
+   This release uses `com.fenrirforgeworks.foundrymobile`; your old Forgekeeper
+   installation and the earlier `.debug` APK keep their private data in those apps. Export/import your old
    workspace using its existing backup tools if you want to migrate it.
 2. Run the updated portable desktop `Foundry.exe` with its entire companion folder.
    Keep desktop and phone on the same trusted LAN or configured private overlay.
@@ -68,7 +69,8 @@ permission prompts, OEM WebView photo capture and your actual private network.
 
 The preserved Tailwind 3 development toolchain has inherited npm advisories.
 No forced framework migration or content-security policy relaxation is included.
-The development signing key is generated on the build runner; a stable release key
-and release distribution process are needed before publishing or relying on in-place
-updates. An incompatible development signature may require exporting drafts and
-uninstalling the prior development build before installation.
+The release signing identity stays in the access-restricted `.private-signing`
+folder in the Foundry Engine workspace. Keep it privately backed up: future
+updates need that same identity and a higher version code. The release APK installs
+separately from the previous development APK. See `MOBILE_RELEASE_INSTALL.md` for
+the complete release installation steps.
