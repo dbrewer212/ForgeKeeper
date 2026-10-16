@@ -89,7 +89,7 @@ export default function CoreFoundry({onLegacy}:{onLegacy:()=>void}) {
     if(!file)return;
     await run(async()=>{
       if(!connection.paired)throw Error('Pair with your desktop to read a label photo.');
-      const text=await readLabel(file,setStatus);setSourceText(text);setFields(current=>({...current,...extractLabel(text)}));
+      const text=await readLabel(file,setStatus);setSourceText(text);setFields({...blankFields(),...extractLabel(text)});
       setStatus('Label read locally on your desktop. Confirm detected fields; retake the photo if anything is unclear.');
     });
   }
