@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Forgekeeper",
-  "version": "0.2.0",
-  "identifier": "com.fenrirforgeworks.forgekeeper",
+  "productName": "Foundry Mobile",
+  "version": "0.3.0",
+  "identifier": "com.fenrirforgeworks.foundrymobile",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Forgekeeper",
+        "title": "Foundry Mobile",
         "width": 800,
         "height": 600,
         "resizable": true,

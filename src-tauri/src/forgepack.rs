@@ -5,7 +5,7 @@ use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use tauri::Manager;
-use zip::write::FileOptions;
+use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 const MAX_ENTRIES: usize = 500;
@@ -152,7 +152,7 @@ pub fn workbench_export_forgepack(
         let output = File::create(&temp_path)
             .map_err(|error| format!("Could not create Forgepack staging file: {error}"))?;
         let mut writer = ZipWriter::new(output);
-        let options = FileOptions::default()
+        let options = SimpleFileOptions::default()
             .compression_method(CompressionMethod::Deflated)
             .unix_permissions(0o644);
         writer
@@ -231,14 +231,14 @@ pub fn workbench_import_forgepack(
         let entry = archive
             .by_index(index)
             .map_err(|error| format!("Could not inspect Forgepack entry: {error}"))?;
-        let name = normalize_archive_path(entry.name());
+        let name = normalize_archive_path(&entry.name().map_err(|error| format!("Invalid ZIP entry name: {error}"))?);
         if !seen_entry_names.insert(name.clone()) {
             return Err(format!("Forgepack contains duplicate ZIP entry: {name}"));
         }
         if entry.enclosed_name().is_none() || entry.is_dir() || zip_entry_is_symlink(&entry) {
             return Err(format!(
                 "Forgepack contains an unsafe or unsupported ZIP entry: {}",
-                entry.name()
+                name
             ));
         }
         total_uncompressed_bytes = total_uncompressed_bytes.saturating_add(entry.size());
@@ -276,7 +276,7 @@ pub fn workbench_import_forgepack(
         let entry = archive
             .by_index(index)
             .map_err(|error| format!("Could not inspect Forgepack entry: {error}"))?;
-        let name = normalize_archive_path(entry.name());
+        let name = normalize_archive_path(&entry.name().map_err(|error| format!("Invalid ZIP entry name: {error}"))?);
         if name != "manifest.json" && !declared_paths.contains(&name) {
             return Err(format!("Forgepack contains undeclared file: {name}"));
         }
@@ -447,7 +447,7 @@ fn validate_digest(value: &str) -> Result<String, String> {
     Ok(digest)
 }
 
-fn zip_entry_is_symlink(entry: &zip::read::ZipFile<'_>) -> bool {
+fn zip_entry_is_symlink(entry: &zip::read::ZipFile<'_, impl std::io::Read>) -> bool {
     entry
         .unix_mode()
         .is_some_and(|mode| (mode & 0o170000) == 0o120000)
@@ -504,3 +504,4 @@ fn extract_entry_with_hash<R: Read>(
         .map_err(|error| format!("Could not finish Forgepack extraction: {error}"))?;
     Ok((format!("{:x}", hasher.finalize()), total))
 }
+

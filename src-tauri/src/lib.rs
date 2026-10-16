@@ -1,4 +1,5 @@
 mod bastion;
+mod core_mobile;
 mod forgepack;
 mod foundry_link;
 mod managed_files;
@@ -408,6 +409,8 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
+            #[cfg(mobile)]
+            app.handle().plugin(tauri_plugin_barcode_scanner::init())?;
             if bastion_launch_mode() {
                 if let Some(main_window) = app.get_webview_window("main") {
                     main_window
@@ -441,6 +444,10 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            core_mobile::core_pair,
+            core_mobile::core_connection_status,
+            core_mobile::core_forget,
+            core_mobile::core_request,
             open_path,
             launch_external_tool,
             launch_trusted_tool,

@@ -7,7 +7,7 @@ import { BastionMobileOverlay } from "./mobile/BastionMobileOverlay";
 import { isFoundryMobileRuntime } from "./platform/runtime";
 
 const ForgekeeperWorkspace = lazy(() => import("./ForgekeeperWorkspace"));
-const MobileFoundryWorkspace = lazy(() => import("./mobile/MobileFoundryWorkspace"));
+const MobileFoundryWorkspace = lazy(() => import("./mobile/MobileFoundryRoot"));
 const bastionLauncherDefaults = { settings: {} };
 
 export default function App() {
@@ -15,7 +15,6 @@ export default function App() {
     return (
       <Suspense fallback={<WorkspaceLoading mobile />}>
         <MobileFoundryWorkspace />
-        <BastionMobileOverlay />
       </Suspense>
     );
   }
