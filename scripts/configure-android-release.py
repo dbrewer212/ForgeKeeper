@@ -1,9 +1,26 @@
 """Configure the generated Android host without weakening network protections."""
 from pathlib import Path
 import re
+import shutil
 import xml.etree.ElementTree as ET
 
 root=Path('src-tauri/gen/android/app/src/main')
+icons=Path('src-tauri/icons/android')
+assert (icons/'mipmap-xxxhdpi/ic_launcher.png').is_file(), 'Foundry launcher artwork is missing'
+shutil.copytree(icons,root/'res',dirs_exist_ok=True)
+for theme in [root/'res/values/themes.xml',root/'res/values-night/themes.xml']:
+    if not theme.exists(): continue
+    tree=ET.parse(theme)
+    for style in tree.getroot().findall('style'):
+        colors={'android:windowBackground':'#15191F','colorPrimary':'#E8874E',
+                'colorOnPrimary':'#15191F','colorSurface':'#20262E','colorOnSurface':'#EEE9DF',
+                'android:statusBarColor':'#15191F','android:navigationBarColor':'#15191F',
+                'android:windowLightStatusBar':'false'}
+        for name,value in colors.items():
+            item=next((item for item in style.findall('item') if item.get('name')==name),None)
+            if item is None: item=ET.SubElement(style,'item',{'name':name})
+            item.text=value
+    tree.write(theme,encoding='utf-8',xml_declaration=True)
 manifest=root/'AndroidManifest.xml'
 text=manifest.read_text()
 text=text.replace('android:allowBackup="true"','android:allowBackup="false"')
@@ -33,4 +50,4 @@ if permission not in source:
     }
 ''')
     activity.write_text(source)
-print('Android private backup policy and local-network permission configured.')
+print('Foundry Android launcher/theme, private backup policy and local-network permission configured.')
