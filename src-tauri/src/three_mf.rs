@@ -122,7 +122,8 @@ pub fn inspect_3mf(path: &Path) -> Result<NativeGeometryInspection, String> {
 fn find_model_entry(archive: &mut ZipArchive<File>) -> Result<usize, String> {
     let mut candidates = Vec::new();
     for index in 0..archive.len() {
-        let name = archive.by_index(index).map_err(|error| format!("Failed to inspect 3MF entry: {error}"))?.name().replace('\\', "/");
+        let entry = archive.by_index(index).map_err(|error| format!("Failed to inspect 3MF entry: {error}"))?;
+        let name = entry.name().map_err(|error| format!("Invalid 3MF entry name: {error}"))?.replace('\\', "/");
         if name.to_ascii_lowercase().ends_with(".model") {
             let preferred = name.eq_ignore_ascii_case("3D/3dmodel.model");
             candidates.push((preferred, index));

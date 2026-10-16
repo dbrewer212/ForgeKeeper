@@ -1,7 +1,7 @@
 import fs from "node:fs";
 
 function read(path) {
-  return fs.readFileSync(path, "utf8");
+  return fs.readFileSync(path, "utf8").replace(/\r\n/g, "\n");
 }
 
 const files = {
@@ -17,6 +17,7 @@ const files = {
   printerExpectations: read("src/bastion/printerExpectations.ts"),
   actionGateway: read("src/mesh/actionGateway.ts"),
   app: read("src/App.tsx"),
+  mobileRoot: read("src/mobile/MobileFoundryRoot.tsx"),
   workstationTools: read("src/mesh/workstationTools.ts"),
   workstationLocations: read("src/mesh/workstationLocations.ts"),
   policies: read("src/mesh/defaultPolicies.ts"),
@@ -65,7 +66,7 @@ const checks = [
   ["protective-safe-mode-mobile-allow", files.policies.includes('id: "mobile-console-enter-safe-mode"') && files.policies.includes("effect: \"allow\"")],
   ["safe-mode-exit-still-governed", !files.policies.includes('workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.meshExitSafeMode, effect: "allow"')],
   ["service-lifecycle-not-unconditionally-allowed", !files.policies.includes('workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.systemServiceStart, effect: "allow"') && !files.policies.includes('workerId: "forgekeeper-mobile", capabilityId: MeshCapabilities.systemServiceStop, effect: "allow"')],
-  ["bastion-mobile-mounted", files.app.includes("<BastionMobileOverlay />")],
+  ["bastion-mobile-mounted", files.app.includes("./mobile/MobileFoundryRoot") && files.mobileRoot.includes("<BastionMobileOverlay/>")],
   ["mobile-bastion-controls-use-queue", files.mobileBastion.includes("queueRemoteTool") && files.mobileBastion.includes("queueRemoteApproval")],
   ["shared-mobile-launchers-never-send-raw-path", files.launchpad.includes("isFoundryMobileRuntime()") && files.launchpad.includes('"workstation.launch_tool"') && files.launchpad.includes("will not execute or transmit raw filesystem paths")],
   ["alert-bus-lifecycle-contract", files.alertBus.includes("BastionAlertState") && files.alertBus.includes("dedupeKey") && files.alertBus.includes("allowedActions") && files.alertBus.includes("recommendedAction") && files.alertBus.includes('seed.state ?? "active"')],
