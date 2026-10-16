@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.3.0"
+version = "0.3.1"
 description = "Forgekeeper host for the Fenrir Forgeworks Foundry ecosystem"
 authors = ["Fenrir Forgeworks"]
 license = ""
@@ -30,4 +30,7 @@ tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 tauri-plugin-barcode-scanner = "2"
+
+[profile.release]
+strip = "debuginfo"
 

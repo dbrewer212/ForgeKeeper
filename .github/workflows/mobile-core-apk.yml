@@ -1,4 +1,4 @@
-name: Foundry Mobile Core APK
+name: Foundry Mobile Release APK
 on:
   push:
     branches: [codex/mobile-core-spool-scanner]
@@ -52,17 +52,17 @@ jobs:
           p.write_text(s)
           PY
       - name: Build Pixel 8a APK
-        run: npm run android:build -- --debug --target aarch64
+        run: npm run android:build -- --target aarch64
       - name: APK provenance
         run: |
           mkdir -p apk-delivery
           find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -exec cp {} apk-delivery/ \;
           sha256sum apk-delivery/*.apk > apk-delivery/SHA256SUMS.txt
           echo '${{ github.sha }}' > apk-delivery/SOURCE-COMMIT.txt
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs apk-delivery/*.apk > apk-delivery/SIGNATURE.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging apk-delivery/*.apk > apk-delivery/APK-METADATA.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: Foundry-Mobile-Pixel8a
+          name: Foundry-Mobile-Pixel8a-unsigned-release
           path: apk-delivery/*
           if-no-files-found: error
           retention-days: 30
