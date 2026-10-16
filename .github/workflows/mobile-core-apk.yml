@@ -52,6 +52,8 @@ jobs:
           p.write_text(s)
           PY
       - name: Build Pixel 8a APK
+        env:
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS: -C link-arg=-Wl,-z,max-page-size=16384
         run: npm run android:build -- --target aarch64
       - name: APK provenance
         run: |
@@ -60,6 +62,24 @@ jobs:
           sha256sum apk-delivery/*.apk > apk-delivery/SHA256SUMS.txt
           echo '${{ github.sha }}' > apk-delivery/SOURCE-COMMIT.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging apk-delivery/*.apk > apk-delivery/APK-METADATA.txt
+          if grep -q application-debuggable apk-delivery/APK-METADATA.txt; then echo 'Release APK must not be debuggable'; exit 1; fi
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import struct
+          for apk in Path('apk-delivery').glob('*.apk'):
+              with ZipFile(apk) as archive:
+                  libraries=[name for name in archive.namelist() if name.startswith('lib/arm64-v8a/') and name.endswith('.so')]
+                  assert libraries, 'Missing Pixel arm64 libraries'
+                  for name in libraries:
+                      data=archive.read(name)
+                      assert data[:5]==b'\x7fELF\x02', 'Expected ELF64'
+                      offset=struct.unpack_from('<Q',data,32)[0]
+                      stride,count=struct.unpack_from('<HH',data,54)
+                      alignments=[struct.unpack_from('<Q',data,offset+i*stride+48)[0] for i in range(count) if struct.unpack_from('<I',data,offset+i*stride)[0]==1]
+                      assert alignments and min(alignments)>=16384, f'{name} must support 16 KB Android pages'
+                      print(name, '16 KB compatible')
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: Foundry-Mobile-Pixel8a-unsigned-release
