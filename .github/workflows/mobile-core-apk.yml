@@ -43,14 +43,7 @@ jobs:
       - name: Initialize Android project
         run: npm run android:init -- --ci
       - name: Preserve app-private pairing data
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p=Path('src-tauri/gen/android/app/src/main/AndroidManifest.xml')
-          s=p.read_text().replace('android:allowBackup="true"','android:allowBackup="false"')
-          if 'android:allowBackup=' not in s: s=s.replace('<application','<application android:allowBackup="false"',1)
-          p.write_text(s)
-          PY
+        run: python scripts/configure-android-release.py
       - name: Build Pixel 8a APK
         env:
           CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS: -C link-arg=-Wl,-z,max-page-size=16384

@@ -59,7 +59,7 @@ async fn request(connection: &CoreConnection, path: &str, body: Option<Value>) -
     let url = format!("{}{}", connection.endpoint.trim_end_matches('/'), path);
     let builder = if let Some(value) = body { client.post(url).json(&value) } else { client.get(url) };
     let mut response = builder.bearer_auth(&connection.token).send().await
-        .map_err(|_| "Desktop unavailable or certificate verification failed. Check the private connection or pair again.")?;
+        .map_err(|_| "Desktop unavailable or certificate verification failed. Check your private connection and Android Nearby devices/local-network permission, or pair again.")?;
     let status = response.status(); let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| "Could not read desktop response")? {
         if bytes.len() + chunk.len() > 4 * 1024 * 1024 { return Err("Desktop response exceeds size limit.".into()); }
