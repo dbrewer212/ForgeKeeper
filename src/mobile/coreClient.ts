@@ -1,12 +1,18 @@
 import { invoke } from '@tauri-apps/api/core';
-import { scan, Format, requestPermissions } from '@tauri-apps/plugin-barcode-scanner';
+import { scan, Format, checkPermissions, requestPermissions } from '@tauri-apps/plugin-barcode-scanner';
 
-export async function scanCode() {
+let scanning = false;
+
+export async function scanCode(pairing = false) {
   if (!('__TAURI_INTERNALS__' in window)) throw Error('Camera scanning is available in the installed Android app.');
-  const permission = await requestPermissions();
-  if (permission !== 'granted') throw Error('Camera permission is required. Enable it in Android app settings, then retry.');
-  return (await scan({ cameraDirection: 'back', windowed: false,
-    formats: [Format.QRCode, Format.EAN13, Format.EAN8, Format.UPC_A, Format.UPC_E, Format.Code128, Format.DataMatrix] })).content;
+  if (scanning) throw Error('A camera scan is already open.');
+  scanning = true;
+  try {
+    const permission = await checkPermissions() === 'granted' ? 'granted' : await requestPermissions();
+    if (permission !== 'granted') throw Error('Camera permission is required. Enable it in Android app settings, then retry.');
+    return (await scan({ cameraDirection: 'back', windowed: false,
+      formats: pairing ? [Format.QRCode] : [Format.QRCode, Format.EAN13, Format.EAN8, Format.UPC_A, Format.UPC_E, Format.Code128, Format.DataMatrix] })).content;
+  } finally { scanning = false; }
 }
 
 export async function pairCore(text: string) {

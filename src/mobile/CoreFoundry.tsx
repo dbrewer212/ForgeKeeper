@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { coreRequest, coreStatus, forgetCore, pairCore, readLabel, scanCode } from './coreClient';
 import { blankFields, complete, extractLabel, materials, scanIdentity, type ScanFields } from './spoolScan';
 import './coreFoundry.css';
+import { readQrPhoto } from './qrPhoto';
 
 type Row = Record<string, any>;
 type Receipt = ScanFields & {request_id:string; spool_id:string; barcode:string; condition:string; confidence:string; remaining_grams:number|null; location:string; source_text:string};
@@ -39,6 +40,7 @@ export default function CoreFoundry({onLegacy}:{onLegacy:()=>void}) {
   const [proposalReason,setProposalReason] = useState('');
   const [spoolLabel,setSpoolLabel] = useState<{code:string;image:string}|null>(null);
   const photo = useRef<HTMLInputElement>(null);
+  const pairingPhoto = useRef<HTMLInputElement>(null);
   const serial = useRef(0);
 
   useEffect(()=>{ void coreStatus().then(setConnection).catch(()=>setStatus('Android app preview · local drafts are available.')); },[]);
@@ -62,7 +64,7 @@ export default function CoreFoundry({onLegacy}:{onLegacy:()=>void}) {
   }
   async function captureCode(pairing=false) {
     await run(async()=>{
-      const text=await scanCode();
+      const text=await scanCode(pairing);
       if(pairing){await connect(text);return;}
       const identity=scanIdentity(text);
       if(identity.kind==='spool') {
@@ -149,7 +151,7 @@ export default function CoreFoundry({onLegacy}:{onLegacy:()=>void}) {
       {page==='Alerts'&&<section><h3>Watcher conditions</h3>{rows.map(alert=><article key={alert.id} className={alert.severity==='critical'?'critical':''}><h3>{alert.message}</h3><p>{alert.severity} · {alert.resolved_at?'Resolved':alert.acknowledged_at?'Acknowledged':'Active'}</p><div className="actions">{!alert.resolved_at&&!alert.acknowledged_at&&scopes.includes('alerts.acknowledge')&&button('Acknowledge',()=>ask('/v1/alerts/'+alert.id+'/acknowledge','Acknowledge alert',alert.message))}{!alert.resolved_at&&scopes.includes('alerts.resolve')&&button('Resolve',()=>ask('/v1/alerts/'+alert.id+'/resolve','Resolve alert',alert.message))}</div></article>)}</section>}
       {page==='OpenClaw'&&<section><h3>Reviewed Core actions</h3>{scopes.includes('proposals.create')&&button('Propose a project note',()=>{setProposal(true);setProposalTarget(projects[0]?.id||'');},true)}{rows.map(item=><article key={item.id}><h3>{item.action}</h3><p>{item.state} · {item.target.name||item.target.message||item.target_id}</p><p>{item.arguments.note}</p><p className="muted">{item.reason}</p><p>Review: {item.review_note||'Awaiting review'}</p><div className="actions">{item.state==='pending'&&scopes.includes('proposals.review')&&button('Approve',()=>ask('/v1/proposals/'+item.id+'/approve','Approve proposal',item.arguments.note))}{['pending','approved'].includes(item.state)&&scopes.includes('proposals.review')&&button('Reject',()=>ask('/v1/proposals/'+item.id+'/reject','Reject proposal',item.arguments.note))}{item.state==='approved'&&scopes.includes('proposals.execute')&&button('Execute approved change',()=>ask('/v1/proposals/'+item.id+'/execute','Execute approved change',item.arguments.note),true)}</div></article>)}</section>}
       {page==='Assets'&&<section><h3>Retained design assets</h3>{rows.map(asset=><article key={asset.id}><h3>{asset.name}</h3><p>{asset.type.toUpperCase()} · Revision {asset.latest_revision}</p><p>{asset.active?'Active':'Archived'}</p></article>)}<p className="muted">Full CAD editing and native file operations remain in the desktop Engine.</p></section>}
-      {page==='Connect'&&<><section><h3>Pair your Foundry desktop</h3><p>On the updated desktop, open Bastion → Connect Pixel / Mobile Foundry. Scan its pairing code here.</p>{button('Scan desktop pairing code',()=>void captureCode(true),true)}<details><summary>Paste a pairing code instead</summary><textarea value={pairText} onChange={e=>setPairText(e.target.value)} maxLength={12000} autoComplete="off"/><div>{button('Pair desktop',()=>void run(async()=>connect(pairText)))}</div></details>{connection.paired&&<><p className="muted">{connection.endpoint}</p>{button('Forget this desktop',()=>void run(async()=>{await forgetCore();setConnection({paired:false});setOnline(false);setState(null);setRows([]);setScopes([]);} ))}</>}<p className="muted">The code includes the desktop’s certificate and a scoped credential. Photos are read on your own desktop and are not retained by the scanner.</p></section><section><h3>Existing Forgekeeper workspace</h3><p>Keep using the original local workspace, material ledger, Foundry Link pairing and Bastion controls.</p>{button('Open legacy workspace',onLegacy)}</section></>}
+      {page==='Connect'&&<><section><h3>Pair your Foundry desktop</h3><p>On the updated desktop, open Bastion → Connect Pixel / Mobile Foundry. Scan its pairing code here.</p>{button('Scan desktop pairing code',()=>void captureCode(true),true)}{button('Photograph / import pairing QR',()=>pairingPhoto.current?.click())}<input ref={pairingPhoto} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden onChange={event=>{const file=event.target.files?.[0];event.target.value='';if(file)void run(async()=>{setStatus('Reading pairing QR on this phone�');await connect(await readQrPhoto(file));});}}/><p className="muted">If the live camera cannot start, photograph the whole QR or choose a saved image. The pairing photo is decoded on this phone.</p><details><summary>Paste a pairing code instead</summary><textarea value={pairText} onChange={e=>setPairText(e.target.value)} maxLength={12000} autoComplete="off"/><div>{button('Pair desktop',()=>void run(async()=>connect(pairText)))}</div></details>{connection.paired&&<><p className="muted">{connection.endpoint}</p>{button('Forget this desktop',()=>void run(async()=>{await forgetCore();setConnection({paired:false});setOnline(false);setState(null);setRows([]);setScopes([]);} ))}</>}<p className="muted">The code includes the desktop’s certificate and a scoped credential. Photos are read on your own desktop and are not retained by the scanner.</p></section><section><h3>Existing Forgekeeper workspace</h3><p>Keep using the original local workspace, material ledger, Foundry Link pairing and Bastion controls.</p>{button('Open legacy workspace',onLegacy)}</section></>}
       {connection.paired&&rows.length===0&&['Production','Alerts','OpenClaw','Assets'].includes(page)&&<p className="muted">No matching records received.</p>}
     </main>
     <footer>{button('Forgekeeper',()=>setPage('Forgekeeper'))}{button('Bastion',()=>setPage('Bastion'))}{button('Scan',()=>void captureCode(),true)}{button('Materials',()=>setPage('Materials'))}</footer>

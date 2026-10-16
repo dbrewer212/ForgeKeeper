@@ -72,7 +72,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "app"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "base64 0.22.1",
  "log",
@@ -4426,8 +4426,6 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-barcode-scanner"
 version = "2.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b57ad7e6ed3e8927205dade785400d9829b8208f59cfe24324fcb324f61482b2"
 dependencies = [
  "log",
  "serde",
