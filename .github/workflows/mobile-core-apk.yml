@@ -3,6 +3,8 @@ on:
   push:
     branches: [codex/mobile-core-spool-scanner]
   workflow_dispatch:
+  pull_request:
+    branches: [codex/mobile-core-spool-scanner]
 permissions:
   contents: read
 concurrency:
