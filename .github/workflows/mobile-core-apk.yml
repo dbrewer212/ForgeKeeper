@@ -1,7 +1,7 @@
 name: Foundry Mobile Release APK
 on:
   push:
-    branches: [codex/mobile-core-spool-scanner]
+    branches: [codex/mobile-core-spool-scanner, codex/mobile-pairing-diagnostics]
   workflow_dispatch:
   pull_request:
     branches: [codex/mobile-core-spool-scanner]
