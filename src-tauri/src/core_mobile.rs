@@ -81,7 +81,7 @@ async fn request(connection: &CoreConnection, path: &str, body: Option<Value>) -
     let limit = if path == "/v1/inventory/read-label" { 2800100 } else { 16384 };
     if body.as_ref().is_some_and(|v| v.to_string().len() > limit) { return Err("Request exceeds size limit.".into()); }
     let certificate = reqwest::Certificate::from_pem(connection.certificate.as_bytes()).map_err(|_| "Invalid desktop certificate")?;
-    let client = reqwest::Client::builder().add_root_certificate(certificate)
+    let client = reqwest::Client::builder().tls_certs_only([certificate])
         .https_only(true).redirect(reqwest::redirect::Policy::none()).timeout(Duration::from_secs(40))
         .build().map_err(|_| "Could not initialize the verified HTTPS connection")?;
     let url = format!("{}{}", connection.endpoint.trim_end_matches('/'), path);
