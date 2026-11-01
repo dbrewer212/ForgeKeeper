@@ -47,6 +47,34 @@ fn identifier(value: &str) -> bool {
     value.len() == 36 && value.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
 }
 
+fn transport_failure(error: &reqwest::Error) -> &'static str {
+    use std::error::Error;
+    if error.is_timeout() {
+        return "Connection timed out. Check the workstation address, private network and Windows listener/firewall.";
+    }
+    let mut details = error.to_string();
+    let mut cause = error.source();
+    while let Some(next) = cause {
+        details.push_str(&next.to_string());
+        cause = next.source();
+    }
+    let details = details.to_ascii_lowercase();
+    // Classify locally; do not return arbitrary request/credential-bearing error objects.
+    if details.contains("causedasendentity") {
+        return "TLS rejected the desktop certificate: a CA certificate is being used as the server certificate.";
+    }
+    if details.contains("certificate") || details.contains("tls") || details.contains("ssl") {
+        return "TLS certificate or handshake verification failed. Check desktop trust, certificate validity and device time; do not disable verification.";
+    }
+    if details.contains("dns") || details.contains("resolve") {
+        return "The workstation hostname could not be resolved. Check its address.";
+    }
+    if error.is_connect() {
+        return "Could not reach the workstation listener. Check its address, local-network permission and Windows firewall.";
+    }
+    "The verified desktop request failed before a response was received."
+}
+
 async fn request(connection: &CoreConnection, path: &str, body: Option<Value>) -> Result<Value, String> {
     validate(connection)?;
     if !allowed(path, body.is_some()) { return Err("Unsupported Core route.".into()); }
@@ -59,7 +87,7 @@ async fn request(connection: &CoreConnection, path: &str, body: Option<Value>) -
     let url = format!("{}{}", connection.endpoint.trim_end_matches('/'), path);
     let builder = if let Some(value) = body { client.post(url).json(&value) } else { client.get(url) };
     let mut response = builder.bearer_auth(&connection.token).send().await
-        .map_err(|_| "Desktop unavailable or certificate verification failed. Check your private connection and Android Nearby devices/local-network permission, or pair again.")?;
+        .map_err(|error| transport_failure(&error))?;
     let status = response.status(); let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| "Could not read desktop response")? {
         if bytes.len() + chunk.len() > 4 * 1024 * 1024 { return Err("Desktop response exceeds size limit.".into()); }
