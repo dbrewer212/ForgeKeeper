@@ -170,13 +170,12 @@ export class FoundryMeshRuntime {
         continue;
       }
 
-      const hasCommissioningState = Boolean(existing.identity.commissioningState);
+      const preservedState = existing.identity.commissioningState ??
+        (existing.identity.enabled ? "active" : "disabled");
       this.workers.updateIdentity({
         ...defaultIdentity,
-        enabled: hasCommissioningState ? existing.identity.enabled : defaultIdentity.enabled,
-        commissioningState: hasCommissioningState
-          ? existing.identity.commissioningState
-          : defaultIdentity.commissioningState,
+        enabled: existing.identity.enabled,
+        commissioningState: preservedState,
       });
     }
   }

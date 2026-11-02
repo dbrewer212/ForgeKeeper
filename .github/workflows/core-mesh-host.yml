@@ -1,0 +1,30 @@
+name: Foundry Mesh Core runtime
+on:
+  push:
+    branches: [codex/core-mesh-worker]
+  pull_request:
+    branches: [codex/mobile-pairing-diagnostics]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run build
+      - name: Restore generated build outputs
+        run: git restore dist tsconfig.node.tsbuildinfo tsconfig.tsbuildinfo vite.config.js
+      - run: node scripts/build-core-mesh.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Foundry-Mesh-Core-runtime
+          path: mesh-delivery/
+          if-no-files-found: error
+          retention-days: 30

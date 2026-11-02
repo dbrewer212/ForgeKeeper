@@ -55,3 +55,30 @@ it('shows the authenticated public client identity for targeted revocation',asyn
  await navigate('Connect');
  expect(JSON.stringify(view!.toJSON())).toContain('client-fixture');
 });
+
+it('disables remote execution against a legacy server that does not enforce Mesh',async()=>{
+ const previous=mocks.request.getMockImplementation()!;
+ mocks.request.mockImplementation(async(path:string)=>{
+  if(path==='/v1/me')return {id:'client-fixture',scopes:['read.proposals','proposals.execute']};
+  if(path==='/v1/proposals')return [{id:'proposal',action:'project.annotate',state:'approved',target:{name:'Fixture'},arguments:{note:'Reviewed note'}}];
+  return previous(path);
+ });
+ await act(async()=>{view=create(<CoreFoundry onLegacy={()=>{}}/>);});
+ await navigate('OpenClaw');
+ const execute=view!.root.findAllByType('button').find(b=>b.props.children==='Execute approved change');
+ expect(execute?.props.disabled).toBe(true);
+ expect(JSON.stringify(view!.toJSON())).toContain('Update Windows Foundry');
+});
+it('shows a Mesh verification receipt only when the server recorded a verified completion',async()=>{
+ const previous=mocks.request.getMockImplementation()!;
+ mocks.request.mockImplementation(async(path:string)=>{
+  if(path==='/v1/state')return {resources:{},jobs:[],governance:{reviewed_actions:'mesh-required'}};
+  if(path==='/v1/proposals')return [{id:'proposal',action:'project.annotate',state:'executed',target:{name:'Fixture'},arguments:{note:'Reviewed note'},mesh:{verified:true,state:'completed',tool:'core.reviewed.project.annotate'}}];
+  return previous(path);
+ });
+ await act(async()=>{view=create(<CoreFoundry onLegacy={()=>{}}/>);});
+ await navigate('OpenClaw');
+ expect(JSON.stringify(view!.toJSON())).toContain('Mesh verified: ');
+ expect(JSON.stringify(view!.toJSON())).toContain('core.reviewed.project.annotate');
+ expect(JSON.stringify(view!.toJSON())).not.toContain('Legacy Core result');
+});
