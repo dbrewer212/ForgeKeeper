@@ -1,7 +1,7 @@
 {
   "name": "forgekeeper",
   "private": true,
-  "version": "0.3.3",
+  "version": "0.3.6",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -35,8 +35,10 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
+    "@types/react-test-renderer": "18.3.1",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47",
+    "react-test-renderer": "18.3.1",
     "tailwindcss": "^3.4.13",
     "vitest": "^5.0.5"
   }

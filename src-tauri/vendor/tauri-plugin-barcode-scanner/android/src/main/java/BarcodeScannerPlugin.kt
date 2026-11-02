@@ -20,6 +20,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.Settings
 import android.util.Size
+import android.util.Log
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
@@ -167,6 +168,7 @@ class BarcodeScannerPlugin(private val activity: Activity) : Plugin(activity),
                             )
                             this.cameraProvider = cameraProvider
                         } catch (e: Exception) {
+                            Log.e("FoundryScanner", "Camera provider initialization failed", e)
                             failScan("Could not open the camera. Close other camera apps and retry.")
                         }
                     },
@@ -201,6 +203,7 @@ class BarcodeScannerPlugin(private val activity: Activity) : Plugin(activity),
                         imageAnalysis
                     )
                 } catch (e: Exception) {
+                    Log.e("FoundryScanner", "Camera lifecycle binding failed", e)
                     failScan("Could not bind the camera. Close other camera apps and retry.")
                 }
             }
@@ -318,7 +321,10 @@ class BarcodeScannerPlugin(private val activity: Activity) : Plugin(activity),
                         }
                     }
                 }
-                .addOnFailureListener { failed = true }
+                .addOnFailureListener { error ->
+                    Log.e("FoundryScanner", "Barcode decoder rejected the camera frame", error)
+                    failed = true
+                }
                 .addOnCompleteListener {
                     // Release the frame before unbinding the camera or resolving JS.
                     closeFrame(image)
@@ -381,7 +387,8 @@ class BarcodeScannerPlugin(private val activity: Activity) : Plugin(activity),
                         override fun handleOnBackPressed() { failScan("Scan cancelled.") }
                     }.also { host.onBackPressedDispatcher.addCallback(host, it) }
                 }
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                Log.e("FoundryScanner", "Scanner startup failed", error)
                 failScan("Could not start the scanner. Retry or photograph the QR instead.")
             }
         }

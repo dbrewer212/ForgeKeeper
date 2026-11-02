@@ -47,19 +47,47 @@ fn identifier(value: &str) -> bool {
     value.len() == 36 && value.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
 }
 
+fn transport_failure(error: &reqwest::Error) -> &'static str {
+    use std::error::Error;
+    if error.is_timeout() {
+        return "Connection timed out. Check the workstation address, private network and Windows listener/firewall.";
+    }
+    let mut details = error.to_string();
+    let mut cause = error.source();
+    while let Some(next) = cause {
+        details.push_str(&next.to_string());
+        cause = next.source();
+    }
+    let details = details.to_ascii_lowercase();
+    // Classify locally; do not return arbitrary request/credential-bearing error objects.
+    if details.contains("causedasendentity") {
+        return "TLS rejected the desktop certificate: a CA certificate is being used as the server certificate.";
+    }
+    if details.contains("certificate") || details.contains("tls") || details.contains("ssl") {
+        return "TLS certificate or handshake verification failed. Check desktop trust, certificate validity and device time; do not disable verification.";
+    }
+    if details.contains("dns") || details.contains("resolve") {
+        return "The workstation hostname could not be resolved. Check its address.";
+    }
+    if error.is_connect() {
+        return "Could not reach the workstation listener. Check its address, local-network permission and Windows firewall.";
+    }
+    "The verified desktop request failed before a response was received."
+}
+
 async fn request(connection: &CoreConnection, path: &str, body: Option<Value>) -> Result<Value, String> {
     validate(connection)?;
     if !allowed(path, body.is_some()) { return Err("Unsupported Core route.".into()); }
     let limit = if path == "/v1/inventory/read-label" { 2800100 } else { 16384 };
     if body.as_ref().is_some_and(|v| v.to_string().len() > limit) { return Err("Request exceeds size limit.".into()); }
     let certificate = reqwest::Certificate::from_pem(connection.certificate.as_bytes()).map_err(|_| "Invalid desktop certificate")?;
-    let client = reqwest::Client::builder().add_root_certificate(certificate)
+    let client = reqwest::Client::builder().tls_certs_only([certificate])
         .https_only(true).redirect(reqwest::redirect::Policy::none()).timeout(Duration::from_secs(40))
         .build().map_err(|_| "Could not initialize the verified HTTPS connection")?;
     let url = format!("{}{}", connection.endpoint.trim_end_matches('/'), path);
     let builder = if let Some(value) = body { client.post(url).json(&value) } else { client.get(url) };
     let mut response = builder.bearer_auth(&connection.token).send().await
-        .map_err(|_| "Desktop unavailable or certificate verification failed. Check your private connection and Android Nearby devices/local-network permission, or pair again.")?;
+        .map_err(|error| transport_failure(&error))?;
     let status = response.status(); let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| "Could not read desktop response")? {
         if bytes.len() + chunk.len() > 4 * 1024 * 1024 { return Err("Desktop response exceeds size limit.".into()); }
@@ -77,9 +105,21 @@ fn config_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     Ok(folder.join("foundry-core-connection.json"))
 }
 
+fn verify_identity(connection: &CoreConnection, identity: &Value) -> Result<(), String> {
+    if identity.get("id").and_then(Value::as_str) != Some(connection.client_id.as_str()) {
+        return Err("The desktop authenticated a different client identity. Generate a fresh pairing code.".into());
+    }
+    Ok(())
+}
+
+fn public_status(connection: &CoreConnection) -> Value {
+    serde_json::json!({"paired":true,"endpoint":connection.endpoint,"client_id":connection.client_id})
+}
+
 #[tauri::command]
 pub async fn core_pair(app: tauri::AppHandle, connection: CoreConnection) -> Result<Value, String> {
     let identity = request(&connection,"/v1/me",None).await?;
+    verify_identity(&connection, &identity)?;
     fs::write(config_path(&app)?,serde_json::to_vec(&connection).map_err(|_| "Cannot encode connection")?)
         .map_err(|_| "Could not save the private connection")?;
     Ok(identity)
@@ -91,7 +131,7 @@ pub fn core_connection_status(app: tauri::AppHandle) -> Result<Value, String> {
     if !path.exists() { return Ok(serde_json::json!({"paired":false})); }
     let connection: CoreConnection = serde_json::from_slice(&fs::read(path).map_err(|_| "Cannot read private connection")?)
         .map_err(|_| "Connection is damaged; pair again")?;
-    Ok(serde_json::json!({"paired":true,"endpoint":connection.endpoint}))
+    Ok(public_status(&connection))
 }
 
 #[tauri::command]
@@ -111,6 +151,19 @@ pub async fn core_request(app: tauri::AppHandle, path: String, body: Option<Valu
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn public_identity_never_exposes_pairing_credentials() {
+        let connection = CoreConnection { schema:"foundry-mobile/1".into(), endpoint:"https://desktop.invalid:8765".into(),
+            token:"private-token-fixture".into(), certificate:"private-certificate-fixture".into(), client_id:"client-fixture".into() };
+        let status = public_status(&connection);
+        assert_eq!(status["client_id"], "client-fixture");
+        assert!(status.get("token").is_none());
+        assert!(status.get("certificate").is_none());
+        assert!(verify_identity(&connection, &serde_json::json!({"id":"client-fixture"})).is_ok());
+        assert!(verify_identity(&connection, &serde_json::json!({"id":"different-client"})).is_err());
+        assert!(verify_identity(&connection, &serde_json::json!({})).is_err());
+    }
+
     #[test]
     fn routes_are_bounded() {
         assert!(allowed("/v1/state",false)); assert!(allowed("/v1/inventory/receive",true));

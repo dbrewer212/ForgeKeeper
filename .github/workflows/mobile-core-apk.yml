@@ -1,7 +1,7 @@
 name: Foundry Mobile Release APK
 on:
   push:
-    branches: [codex/mobile-core-spool-scanner]
+    branches: [codex/mobile-core-spool-scanner, codex/mobile-pairing-diagnostics]
   workflow_dispatch:
   pull_request:
     branches: [codex/mobile-core-spool-scanner]
@@ -54,6 +54,8 @@ jobs:
         run: |
           mkdir -p apk-delivery
           find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -exec cp {} apk-delivery/ \;
+          find src-tauri/gen/android/app/build/outputs/mapping -name mapping.txt -exec cp {} apk-delivery/R8-MAPPING.txt \;
+          test -s apk-delivery/R8-MAPPING.txt
           sha256sum apk-delivery/*.apk > apk-delivery/SHA256SUMS.txt
           echo '${{ github.sha }}' > apk-delivery/SOURCE-COMMIT.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging apk-delivery/*.apk > apk-delivery/APK-METADATA.txt

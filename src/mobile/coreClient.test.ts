@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const camera = vi.hoisted(()=>({checkPermissions:vi.fn(),requestPermissions:vi.fn(),scan:vi.fn()}));
 vi.mock('@tauri-apps/plugin-barcode-scanner',()=>({...camera,Format:{QRCode:'QR_CODE'}}));
-import { scanCode } from './coreClient';
+const native = vi.hoisted(()=>({invoke:vi.fn()}));
+vi.mock('@tauri-apps/api/core',()=>native);
+import { scanCode, pairCore } from './coreClient';
 
 describe('camera scan lifecycle',()=>{
   beforeEach(()=>{
@@ -14,6 +16,19 @@ describe('camera scan lifecycle',()=>{
     await expect(scanCode(true)).resolves.toBe('pairing');
     expect(camera.requestPermissions).not.toHaveBeenCalled();
     expect(camera.scan).toHaveBeenCalledWith({cameraDirection:'back',windowed:false,formats:['QR_CODE']});
+  });
+  it('retains the native rejection message and scan phase',async()=>{
+    camera.scan.mockRejectedValueOnce({message:'Could not bind the camera.'});
+    await expect(scanCode(true)).rejects.toThrow('Camera scanner: Could not bind the camera.');
+  });
+  it('identifies the permission phase without opening a camera',async()=>{
+    camera.checkPermissions.mockRejectedValueOnce({message:'Permission bridge unavailable'});
+    await expect(scanCode(true)).rejects.toThrow('Camera permission check: Permission bridge unavailable');
+    expect(camera.scan).not.toHaveBeenCalled();
+  });
+  it('identifies HTTPS pairing rejection separately from the scanner',async()=>{
+    native.invoke.mockRejectedValueOnce({message:'TLS trust check failed'});
+    await expect(pairCore('{"schema":"foundry-mobile/1"}')).rejects.toThrow('Verified HTTPS pairing: TLS trust check failed');
   });
   it('does not open a camera after permission denial',async()=>{
     camera.checkPermissions.mockResolvedValue('prompt'); camera.requestPermissions.mockResolvedValue('denied');

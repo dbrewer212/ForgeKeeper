@@ -23,3 +23,11 @@
 -keep class app.tauri.barcodescanner.BarcodeScannerPlugin {
     public static androidx.camera.core.Camera getActiveCamera();
 }
+
+# ML Kit discovers these registrars by manifest name and invokes their public
+# no-argument constructors reflectively. R8 full mode otherwise removes those
+# constructors: physical Pixel release logs show NoSuchMethodException followed
+# by BarcodeScanning.getClient() failing with a NullPointerException.
+-keep class com.google.mlkit.common.internal.CommonComponentRegistrar { public <init>(); }
+-keep class com.google.mlkit.vision.barcode.internal.BarcodeRegistrar { public <init>(); }
+-keep class com.google.mlkit.vision.common.internal.VisionCommonRegistrar { public <init>(); }

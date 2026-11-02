@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { scan, Format, checkPermissions, requestPermissions } from '@tauri-apps/plugin-barcode-scanner';
 
+import { mobileFailure } from './mobileErrors';
+
 let scanning = false;
 
 export async function scanCode(pairing = false) {
@@ -8,10 +10,15 @@ export async function scanCode(pairing = false) {
   if (scanning) throw Error('A camera scan is already open.');
   scanning = true;
   try {
-    const permission = await checkPermissions() === 'granted' ? 'granted' : await requestPermissions();
+    let permission;
+    try {
+      permission = await checkPermissions() === 'granted' ? 'granted' : await requestPermissions();
+    } catch (error) { throw mobileFailure('Camera permission check', error); }
     if (permission !== 'granted') throw Error('Camera permission is required. Enable it in Android app settings, then retry.');
-    return (await scan({ cameraDirection: 'back', windowed: false,
-      formats: pairing ? [Format.QRCode] : [Format.QRCode, Format.EAN13, Format.EAN8, Format.UPC_A, Format.UPC_E, Format.Code128, Format.DataMatrix] })).content;
+    try {
+      return (await scan({ cameraDirection: 'back', windowed: false,
+        formats: pairing ? [Format.QRCode] : [Format.QRCode, Format.EAN13, Format.EAN8, Format.UPC_A, Format.UPC_E, Format.Code128, Format.DataMatrix] })).content;
+    } catch (error) { throw mobileFailure('Camera scanner', error); }
   } finally { scanning = false; }
 }
 
@@ -19,11 +26,15 @@ export async function pairCore(text: string) {
   if (text.length > 12000) throw Error('Pairing code exceeds its size limit.');
   const connection = JSON.parse(text);
   if (connection.schema !== 'foundry-mobile/1') throw Error('This is not a Foundry desktop pairing code.');
-  return invoke<{ scopes: string[] }>('core_pair', { connection });
+  try { return await invoke<{ scopes: string[] }>('core_pair', { connection }); }
+  catch (error) { throw mobileFailure('Verified HTTPS pairing', error); }
 }
 
-export const coreRequest = <T,>(path: string, body?: object) => invoke<T>('core_request', { path, body: body ?? null });
-export const coreStatus = () => invoke<{ paired: boolean; endpoint?: string }>('core_connection_status');
+export const coreRequest = async <T,>(path: string, body?: object): Promise<T> => {
+  try { return await invoke<T>('core_request', { path, body: body ?? null }); }
+  catch (error) { throw mobileFailure('Desktop request', error); }
+};
+export const coreStatus = () => invoke<{ paired: boolean; endpoint?: string; client_id?: string }>('core_connection_status');
 export const forgetCore = () => invoke('core_forget');
 
 export async function readLabel(file: File, progress: (value: string) => void) {
