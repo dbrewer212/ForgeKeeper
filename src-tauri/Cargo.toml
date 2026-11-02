@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "0.3.4"
+version = "0.3.5"
 description = "Forgekeeper host for the Fenrir Forgeworks Foundry ecosystem"
 authors = ["Fenrir Forgeworks"]
 license = ""

@@ -54,6 +54,7 @@ jobs:
         run: |
           mkdir -p apk-delivery
           find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -exec cp {} apk-delivery/ \;
+          cp src-tauri/gen/android/app/build/outputs/mapping/release/mapping.txt apk-delivery/R8-MAPPING.txt
           sha256sum apk-delivery/*.apk > apk-delivery/SHA256SUMS.txt
           echo '${{ github.sha }}' > apk-delivery/SOURCE-COMMIT.txt
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging apk-delivery/*.apk > apk-delivery/APK-METADATA.txt
