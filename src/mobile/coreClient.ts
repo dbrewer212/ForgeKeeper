@@ -34,7 +34,7 @@ export const coreRequest = async <T,>(path: string, body?: object): Promise<T> =
   try { return await invoke<T>('core_request', { path, body: body ?? null }); }
   catch (error) { throw mobileFailure('Desktop request', error); }
 };
-export const coreStatus = () => invoke<{ paired: boolean; endpoint?: string }>('core_connection_status');
+export const coreStatus = () => invoke<{ paired: boolean; endpoint?: string; client_id?: string }>('core_connection_status');
 export const forgetCore = () => invoke('core_forget');
 
 export async function readLabel(file: File, progress: (value: string) => void) {

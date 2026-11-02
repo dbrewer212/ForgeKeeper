@@ -13,7 +13,7 @@ beforeEach(()=>{
  mocks.status.mockResolvedValue({paired:true,endpoint:'https://desktop.invalid:8765'});
  mocks.request.mockImplementation(async(path:string)=>{
   if(path==='/v1/state')return {resources:{},jobs:[]};
-  if(path==='/v1/me')return {scopes:['read.proposals','proposals.create']};
+  if(path==='/v1/me')return {id:'client-fixture',scopes:['read.proposals','proposals.create']};
   if(path==='/v1/projects')return [{id:'project',name:'Fixture project',latest_revision:1}];
   if(path==='/v1/machines')return [{id:'printer',name:'Fixture printer',expected_state:'AVAILABLE',observed_state:'unknown'}];
   if(path==='/v1/production')return [{job:{id:'job',state:'queued',material:'PLA',profile:'Fixture profile',machine_id:'printer'},checks:[]}];
@@ -48,4 +48,10 @@ it('explains intentional gaming pause instead of suggesting a broken telemetry c
  expect(rendered).toContain('Desktop gaming mode has paused host monitoring.');
  expect(rendered).toContain('Paused');
  expect(rendered).not.toContain('stale');
+});
+
+it('shows the authenticated public client identity for targeted revocation',async()=>{
+ await act(async()=>{view=create(<CoreFoundry onLegacy={()=>{}}/>);});
+ await navigate('Connect');
+ expect(JSON.stringify(view!.toJSON())).toContain('client-fixture');
 });

@@ -105,9 +105,21 @@ fn config_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
     Ok(folder.join("foundry-core-connection.json"))
 }
 
+fn verify_identity(connection: &CoreConnection, identity: &Value) -> Result<(), String> {
+    if identity.get("id").and_then(Value::as_str) != Some(connection.client_id.as_str()) {
+        return Err("The desktop authenticated a different client identity. Generate a fresh pairing code.".into());
+    }
+    Ok(())
+}
+
+fn public_status(connection: &CoreConnection) -> Value {
+    serde_json::json!({"paired":true,"endpoint":connection.endpoint,"client_id":connection.client_id})
+}
+
 #[tauri::command]
 pub async fn core_pair(app: tauri::AppHandle, connection: CoreConnection) -> Result<Value, String> {
     let identity = request(&connection,"/v1/me",None).await?;
+    verify_identity(&connection, &identity)?;
     fs::write(config_path(&app)?,serde_json::to_vec(&connection).map_err(|_| "Cannot encode connection")?)
         .map_err(|_| "Could not save the private connection")?;
     Ok(identity)
@@ -119,7 +131,7 @@ pub fn core_connection_status(app: tauri::AppHandle) -> Result<Value, String> {
     if !path.exists() { return Ok(serde_json::json!({"paired":false})); }
     let connection: CoreConnection = serde_json::from_slice(&fs::read(path).map_err(|_| "Cannot read private connection")?)
         .map_err(|_| "Connection is damaged; pair again")?;
-    Ok(serde_json::json!({"paired":true,"endpoint":connection.endpoint}))
+    Ok(public_status(&connection))
 }
 
 #[tauri::command]
@@ -139,6 +151,19 @@ pub async fn core_request(app: tauri::AppHandle, path: String, body: Option<Valu
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn public_identity_never_exposes_pairing_credentials() {
+        let connection = CoreConnection { schema:"foundry-mobile/1".into(), endpoint:"https://desktop.invalid:8765".into(),
+            token:"private-token-fixture".into(), certificate:"private-certificate-fixture".into(), client_id:"client-fixture".into() };
+        let status = public_status(&connection);
+        assert_eq!(status["client_id"], "client-fixture");
+        assert!(status.get("token").is_none());
+        assert!(status.get("certificate").is_none());
+        assert!(verify_identity(&connection, &serde_json::json!({"id":"client-fixture"})).is_ok());
+        assert!(verify_identity(&connection, &serde_json::json!({"id":"different-client"})).is_err());
+        assert!(verify_identity(&connection, &serde_json::json!({})).is_err());
+    }
+
     #[test]
     fn routes_are_bounded() {
         assert!(allowed("/v1/state",false)); assert!(allowed("/v1/inventory/receive",true));
