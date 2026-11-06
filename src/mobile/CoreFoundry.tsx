@@ -29,6 +29,9 @@ export default function CoreFoundry({onLegacy}:{onLegacy:()=>void}) {
   const rows=pageRows.page===page ? pageRows.rows : [];
   const [projects,setProjects] = useState<Row[]>([]);
   const [brief,setBrief] = useState<Row|null>(null);
+  const [aiRequest,setAiRequest] = useState('');
+  const [aiAnswer,setAiAnswer] = useState('');
+  const [aiRuntime,setAiRuntime] = useState('ollama');
   const [fields,setFields] = useState<ScanFields>(blankFields);
   const [barcode,setBarcode] = useState('');
   const [sourceText,setSourceText] = useState('');
@@ -137,7 +140,13 @@ export default function CoreFoundry({onLegacy}:{onLegacy:()=>void}) {
         <section><h3>Project briefing</h3><p className="muted">Select a registered project to read its saved context and operator notes.</p>{projects.map(project=><button className="project" key={project.id} onClick={()=>void run(async()=>setBrief(await coreRequest<Row>('/v1/context?project_id='+project.id)))}>{project.name}<span>Revision {project.latest_revision}</span></button>)}
           {brief&&<article><h3>{brief.project.name}</h3><p>{brief.project.notes||'No project notes recorded.'}</p><p>{brief.assets.length} retained assets Â· {brief.jobs.length} job records</p>{brief.annotations.slice(-5).map((item:Row)=><p key={item.id}>{item.note}</p>)}</article>}
           {!connection.paired&&<p>Pair with your desktop to view retained projects. Local spool drafts remain on this phone.</p>}</section>
-        <p className="muted">Grounded project context Â· conversational AI is not connected.</p>
+        <section><h3>Ask Forgekeeper</h3><p className="muted">Uses your desktop's local model and registered project state. Proposed changes require review in OpenClaw.</p>
+          <label>Runtime<select value={aiRuntime} onChange={e=>setAiRuntime(e.target.value)}><option value="ollama">Ollama · advice</option><option value="openclaw">OpenClaw · governed tools</option></select></label>
+          <label>Request<textarea value={aiRequest} maxLength={8000} onChange={e=>setAiRequest(e.target.value)}/></label>
+          {button('Ask local Forgekeeper',()=>void run(async()=>{setAiAnswer('Consulting desktop intelligence...');try{const result=await coreRequest<Row>('/v1/ai/chat',{request:aiRequest,runtime:aiRuntime,...(brief?{project_id:brief.project.id}:{})});setAiAnswer(result.answer+'\n\nAdvisory · observed '+result.observed_at);}catch(error){setAiAnswer(String(error));}}),true,!online||!scopes.includes('ai.chat')||!aiRequest.trim())}
+          {!scopes.includes('ai.chat')&&<p className="muted">Pair again with the updated desktop to grant local AI access.</p>}
+          {aiAnswer&&<p style={{whiteSpace:'pre-wrap'}}>{aiAnswer}</p>}
+        </section>
       </>}
       {page==='Bastion'&&<>{online&&state?.monitoring_paused&&<p className="warning" role="status">Desktop gaming mode has paused host monitoring. Live readings resume when gaming mode ends.</p>}<div className="metrics"><article><span>CPU</span><strong>{!online||state?.resources?.cpu===undefined?'â':Math.round(state.resources.cpu)+'%'}</strong></article><article><span>Memory</span><strong>{!online||state?.resources?.ram===undefined?'â':Math.round(state.resources.ram)+'%'}</strong></article><article><span>Telemetry</span><strong className="small-value">{!online?'Offline':state?.monitoring_paused?'Paused':state?.telemetry_state||'Unknown'}</strong></article></div><section><h3>Printer fleet</h3>{rows.map(machine=><article key={machine.id}><h3>{machine.name}</h3><p>Expected: {machine.expected_state.replaceAll('_',' ')}</p><p>Observed: {machine.observed_state} Â· {machine.observed_at||'No telemetry received'}</p><p className="muted">{machine.notes}</p></article>)}</section><section><h3>Workshop actions</h3><div className="actions">{button('Scan filament',()=>void captureCode(),true)}{button('Review alerts',()=>setPage('Alerts'))}{button('Review production',()=>setPage('Production'))}</div></section></>}
       {page==='Materials'&&<>

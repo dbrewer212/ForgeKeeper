@@ -28,11 +28,11 @@ fn validate(connection: &CoreConnection) -> Result<(), String> {
 pub fn allowed(path: &str, post: bool) -> bool {
     if !post && ["/v1/me","/v1/health","/v1/state","/v1/projects","/v1/assets","/v1/machines",
         "/v1/production","/v1/persistent-alerts","/v1/service-runs","/v1/materials","/v1/spools",
-        "/v1/proposals","/v1/events"].contains(&path) { return true; }
+        "/v1/proposals","/v1/events","/v1/ai/status"].contains(&path) { return true; }
     if !post && path.starts_with("/v1/context?project_id=") {
         return identifier(&path[23..]);
     }
-    if post && ["/v1/inventory/receive","/v1/inventory/read-label","/v1/proposals"].contains(&path) { return true; }
+    if post && ["/v1/inventory/receive","/v1/inventory/read-label","/v1/proposals","/v1/ai/chat"].contains(&path) { return true; }
     let parts: Vec<_> = path.split('/').collect();
     post && parts.len() == 5 && parts[1] == "v1" && identifier(parts[3]) &&
         match parts[2] {
@@ -82,7 +82,7 @@ async fn request(connection: &CoreConnection, path: &str, body: Option<Value>) -
     if body.as_ref().is_some_and(|v| v.to_string().len() > limit) { return Err("Request exceeds size limit.".into()); }
     let certificate = reqwest::Certificate::from_pem(connection.certificate.as_bytes()).map_err(|_| "Invalid desktop certificate")?;
     let client = reqwest::Client::builder().tls_certs_only([certificate])
-        .https_only(true).redirect(reqwest::redirect::Policy::none()).timeout(Duration::from_secs(40))
+        .https_only(true).redirect(reqwest::redirect::Policy::none()).timeout(Duration::from_secs(if path == "/v1/ai/chat" { 130 } else { 40 }))
         .build().map_err(|_| "Could not initialize the verified HTTPS connection")?;
     let url = format!("{}{}", connection.endpoint.trim_end_matches('/'), path);
     let builder = if let Some(value) = body { client.post(url).json(&value) } else { client.get(url) };
