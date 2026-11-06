@@ -50,6 +50,8 @@ export default function CoreFoundry({onLegacy}:{onLegacy:()=>void}) {
   const photo = useRef<HTMLInputElement>(null);
   const pairingPhoto = useRef<HTMLInputElement>(null);
   const serial = useRef(0);
+  const aiSerial = useRef(0);
+  useEffect(()=>{aiSerial.current++;setAiAnswer('');setAiRequest('');},[connection.client_id,connection.endpoint]);
 
   useEffect(()=>{ void coreStatus().then(setConnection).catch(()=>setStatus('Android app preview Â· local drafts are available.')); },[]);
   const refresh = useCallback(async()=>{
@@ -143,7 +145,7 @@ export default function CoreFoundry({onLegacy}:{onLegacy:()=>void}) {
         <section><h3>Ask Forgekeeper</h3><p className="muted">Uses your desktop's local model and registered project state. Proposed changes require review in OpenClaw.</p>
           <label>Runtime<select value={aiRuntime} onChange={e=>setAiRuntime(e.target.value)}><option value="ollama">Ollama · advice</option><option value="openclaw">OpenClaw · governed tools</option></select></label>
           <label>Request<textarea value={aiRequest} maxLength={8000} onChange={e=>setAiRequest(e.target.value)}/></label>
-          {button('Ask local Forgekeeper',()=>void run(async()=>{setAiAnswer('Consulting desktop intelligence...');try{const result=await coreRequest<Row>('/v1/ai/chat',{request:aiRequest,runtime:aiRuntime,...(brief?{project_id:brief.project.id}:{})});setAiAnswer(result.answer+'\n\nAdvisory · observed '+result.observed_at);}catch(error){setAiAnswer(String(error));}}),true,!online||!scopes.includes('ai.chat')||!aiRequest.trim())}
+          {button('Ask local Forgekeeper',()=>void run(async()=>{const generation=++aiSerial.current;setAiAnswer('Consulting desktop intelligence...');try{const result=await coreRequest<Row>('/v1/ai/chat',{request:aiRequest,runtime:aiRuntime,...(brief?{project_id:brief.project.id}:{})});if(generation===aiSerial.current)setAiAnswer(result.answer+'\n\nAdvisory · proposed changes require review · observed '+result.observed_at);}catch(error){if(generation===aiSerial.current)setAiAnswer(String(error));}}),true,!online||!scopes.includes('ai.chat')||!aiRequest.trim())}
           {!scopes.includes('ai.chat')&&<p className="muted">Pair again with the updated desktop to grant local AI access.</p>}
           {aiAnswer&&<p style={{whiteSpace:'pre-wrap'}}>{aiAnswer}</p>}
         </section>
