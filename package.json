@@ -1,7 +1,7 @@
 {
   "name": "forgekeeper",
   "private": true,
-  "version": "0.3.8",
+  "version": "0.3.9",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -21,12 +21,15 @@
   "dependencies": {
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-barcode-scanner": "^2.5.3",
+    "@tauri-apps/plugin-dialog": "2.8.4",
+    "@tauri-apps/plugin-fs": "2.7.1",
     "@tauri-apps/plugin-sql": "^2.4.0",
     "@vitejs/plugin-react": "^4.3.1",
     "@zxing/library": "^0.21.3",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "three": "0.187.0",
     "typescript": "^5.6.3",
     "vite": "^7.3.7"
   },
@@ -36,8 +39,10 @@
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
     "@types/react-test-renderer": "18.3.1",
+    "@types/three": "0.187.0",
     "autoprefixer": "^10.4.20",
     "esbuild": "0.28.2",
+    "fake-indexeddb": "6.2.7",
     "postcss": "^8.4.47",
     "react-test-renderer": "18.3.1",
     "tailwindcss": "^3.4.13",

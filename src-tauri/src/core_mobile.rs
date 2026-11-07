@@ -26,6 +26,30 @@ fn validate(connection: &CoreConnection) -> Result<(), String> {
 }
 
 pub fn allowed(path: &str, post: bool) -> bool {
+    if !post && (path.starts_with("/v1/discovery?") || path.starts_with("/v1/asset-content?")) {
+        if path.len()>1200 {return false;}
+        let Ok(url)=reqwest::Url::parse(&format!("https://foundry.invalid{}",path)) else {return false;};
+        if url.fragment().is_some() {return false;}
+        let download=url.path()=="/v1/asset-content";
+        let mut seen=std::collections::HashSet::new();
+        for (key,value) in url.query_pairs() {
+            if !seen.insert(key.to_string()) {return false;}
+            let valid=match key.as_ref() {
+                "asset_id"|"project_id"=>identifier(&value),
+                "revision"=>download&&value.parse::<u32>().is_ok_and(|n|n>0&&n<=1000000),
+                "offset"=>value.parse::<u64>().is_ok_and(|n|n<=if download {1_u64<<40}else{1000000}),
+                "limit"=>value.parse::<u32>().is_ok_and(|n|n>0&&n<=if download {262144}else{60}),
+                "record_id"=>!download&&!value.is_empty()&&value.len()<=200&&value.chars().all(|c|c.is_ascii_alphanumeric()||c=='-'||c=='_'),
+                "sha256"=>!download&&value.len()==64&&value.chars().all(|c|c.is_ascii_hexdigit()),
+                "query"=>!download&&value.chars().count()<=160,
+                "resource"=>!download&&["projects","assets","asset_revisions","project_revisions","knowledge","reference","visual_matches","canon"].contains(&value.as_ref()),
+                _=>false,
+            };
+            if !valid {return false;}
+        }
+        return if download {seen.contains("asset_id")&&seen.contains("revision")&&!seen.contains("project_id")}
+            else {seen.contains("resource")};
+    }
     if !post && ["/v1/me","/v1/health","/v1/state","/v1/projects","/v1/assets","/v1/machines",
         "/v1/production","/v1/persistent-alerts","/v1/service-runs","/v1/materials","/v1/spools",
         "/v1/proposals","/v1/events","/v1/ai/status"].contains(&path) { return true; }
@@ -170,6 +194,14 @@ mod tests {
         assert!(allowed("/v1/context?project_id=12345678-1234-1234-1234-123456789abc",false));
         assert!(!allowed("https://example.com",false)); assert!(!allowed("/v1/../state",false));
         assert!(!allowed("/v1/context?project_id=x&token=secret",false));
+        assert!(allowed("/v1/discovery?resource=assets&query=goblin&limit=30",false));
+        assert!(allowed("/v1/discovery?resource=canon&record_id=CANON-EMBERWHELP",false));
+        assert!(!allowed("/v1/discovery?resource=canon&record_id=../private",false));
+        assert!(allowed("/v1/asset-content?asset_id=12345678-1234-1234-1234-123456789abc&revision=1&offset=262144",false));
+        assert!(!allowed("/v1/discovery?resource=assets&path=C:/private",false));
+        assert!(!allowed("/v1/discovery?resource=assets&limit=99",false));
+        assert!(!allowed("/v1/discovery?resource=assets&limit=1&limit=2",false));
+        assert!(!allowed("/v1/asset-content?asset_id=../private&revision=1",false));
         assert!(!allowed("/v1/jobs/12345678-1234-1234-1234-123456789abc/start",true));
     }
 }
